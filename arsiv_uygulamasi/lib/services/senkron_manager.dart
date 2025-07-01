@@ -211,8 +211,60 @@ class SenkronManager {
         final dosya = File(yeniDosyaYolu);
         await dosya.writeAsBytes(response.bodyBytes);
 
-        // Veritabanına ekle
+        // Veritabanına ekle - KİŞİ EŞLEŞTİRMESİ İLE
         final veriTabani = VeriTabaniServisi();
+
+        // Kişi ID'sini eşleştir (ad-soyad kombinasyonuna göre)
+        int? eslestirilenKisiId;
+        if (belgeData['kisiId'] != null) {
+          try {
+            // Uzak cihazdan gelen kişi listesinden bu ID'ye sahip kişiyi bul
+            final uzakKisiler = await _getRemotePeople(ip);
+            final uzakKisi = uzakKisiler.firstWhere(
+              (k) => k['id'] == belgeData['kisiId'],
+              orElse: () => <String, dynamic>{},
+            );
+
+            if (uzakKisi.isNotEmpty) {
+              // Yerel veritabanında aynı ad-soyad kombinasyonuna sahip kişiyi ara
+              final yerelKisiler = await veriTabani.kisileriGetir();
+              final eslestirilenKisi = yerelKisiler.firstWhere(
+                (k) => k.ad == uzakKisi['ad'] && k.soyad == uzakKisi['soyad'],
+                orElse:
+                    () => KisiModeli(
+                      ad: '',
+                      soyad: '',
+                      olusturmaTarihi: DateTime.now(),
+                      guncellemeTarihi: DateTime.now(),
+                    ),
+              );
+
+              if (eslestirilenKisi.ad.isNotEmpty) {
+                eslestirilenKisiId = eslestirilenKisi.id;
+                _addLog('👤 Kişi eşleştirildi: ${eslestirilenKisi.tamAd}');
+              } else {
+                // Kişi yoksa ekle
+                final yeniKisi = KisiModeli(
+                  ad: uzakKisi['ad'],
+                  soyad: uzakKisi['soyad'],
+                  olusturmaTarihi: DateTime.parse(uzakKisi['olusturmaTarihi']),
+                  guncellemeTarihi: DateTime.parse(
+                    uzakKisi['guncellemeTarihi'],
+                  ),
+                  aktif: uzakKisi['aktif'] ?? true,
+                );
+
+                final kisiId = await veriTabani.kisiEkle(yeniKisi);
+                eslestirilenKisiId = kisiId;
+                _addLog('👤 Yeni kişi eklendi: ${yeniKisi.tamAd}');
+              }
+            }
+          } catch (e) {
+            _addLog('⚠️ Kişi eşleştirme hatası: $e');
+            eslestirilenKisiId = null;
+          }
+        }
+
         final yeniBelge = BelgeModeli(
           dosyaAdi: dosyaAdi,
           orijinalDosyaAdi: belgeData['dosyaAdi'] ?? dosyaAdi,
@@ -225,7 +277,7 @@ class SenkronManager {
           kategoriId: belgeData['kategoriId'] ?? 1,
           baslik: belgeData['baslik'],
           aciklama: belgeData['aciklama'],
-          kisiId: belgeData['kisiId'],
+          kisiId: eslestirilenKisiId, // Eşleştirilen kişi ID'si
           etiketler:
               belgeData['etiketler'] != null
                   ? List<String>.from(belgeData['etiketler'])
@@ -285,13 +337,31 @@ class SenkronManager {
         ),
       );
 
-      // Belge metadata'sını ekle
+      // Kişi bilgilerini al
+      String? kisiAd;
+      String? kisiSoyad;
+      if (belge.kisiId != null) {
+        try {
+          final veriTabani = VeriTabaniServisi();
+          final kisi = await veriTabani.kisiGetir(belge.kisiId!);
+          if (kisi != null) {
+            kisiAd = kisi.ad;
+            kisiSoyad = kisi.soyad;
+          }
+        } catch (e) {
+          _addLog('⚠️ Kişi bilgisi alınamadı: $e');
+        }
+      }
+
+      // Belge metadata'sını ekle (kişi ad-soyad ile)
       request.fields['metadata'] = json.encode({
         'dosyaAdi': belge.dosyaAdi,
         'kategoriId': belge.kategoriId,
         'baslik': belge.baslik,
         'aciklama': belge.aciklama,
         'kisiId': belge.kisiId,
+        'kisiAd': kisiAd, // Kişi adı
+        'kisiSoyad': kisiSoyad, // Kişi soyadı
         'etiketler': belge.etiketler,
         'olusturmaTarihi': belge.olusturmaTarihi.toIso8601String(),
       });

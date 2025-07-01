@@ -545,6 +545,21 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                             setState(() {
                               _secilenDosyalar.removeAt(index);
                             });
+
+                            // Dosya silindikten sonra otomatik algılamayı tetikle
+                            if (_secilenDosyalar.isNotEmpty) {
+                              Future.delayed(
+                                const Duration(milliseconds: 100),
+                                () {
+                                  _otomatikDosyaTuruAlgila();
+                                },
+                              );
+                            } else {
+                              // Tüm dosyalar silinirse dosya türü seçimini sıfırla
+                              setState(() {
+                                _secilenDosyaTuru = null;
+                              });
+                            }
                           },
                         ),
                       ),
@@ -560,6 +575,16 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   }
 
   Widget _buildDosyaTuruSecimi() {
+    // Otomatik dosya türü algılama
+    if (_secilenDosyalar.isNotEmpty && _secilenDosyaTuru == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _otomatikDosyaTuruAlgila();
+      });
+    }
+
+    final secilenTur =
+        _secilenDosyaTuru != null ? _dosyaTurleri[_secilenDosyaTuru!] : null;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.9),
@@ -592,113 +617,367 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Dosya Türü',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const Expanded(
+                  child: Text(
+                    'Dosya Türü',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
+                if (secilenTur != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: secilenTur['color'].withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: secilenTur['color'].withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.auto_awesome,
+                          size: 14,
+                          color: secilenTur['color'],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Otomatik',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: secilenTur['color'],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _dosyaTurleri.length,
-              itemBuilder: (context, index) {
-                final entry = _dosyaTurleri.entries.elementAt(index);
-                final key = entry.key;
-                final value = entry.value;
-                final secili = _secilenDosyaTuru == key;
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color:
-                        secili
-                            ? value['color'].withOpacity(0.1)
-                            : Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: secili ? value['color'] : Colors.grey.shade300,
-                      width: secili ? 2 : 1,
+            // Şık Dropdown Container
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color:
+                      secilenTur != null
+                          ? secilenTur['color'].withOpacity(0.3)
+                          : Colors.grey.shade300,
+                  width: 1,
+                ),
+              ),
+              child: Theme(
+                data: Theme.of(
+                  context,
+                ).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  childrenPadding: EdgeInsets.zero,
+                  initiallyExpanded: _secilenDosyaTuru == null,
+                  leading:
+                      secilenTur != null
+                          ? Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: secilenTur['color'].withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              secilenTur['icon'],
+                              color: secilenTur['color'],
+                              size: 20,
+                            ),
+                          )
+                          : Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.folder_open,
+                              color: Colors.grey[600],
+                              size: 20,
+                            ),
+                          ),
+                  title: Text(
+                    secilenTur != null ? secilenTur['ad'] : 'Dosya türü seçin',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          secilenTur != null
+                              ? secilenTur['color']
+                              : Colors.grey[700],
                     ),
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        setState(() {
-                          _secilenDosyaTuru = key;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color:
-                                    secili
-                                        ? value['color'].withOpacity(0.2)
-                                        : Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                value['icon'],
-                                color:
-                                    secili ? value['color'] : Colors.grey[600],
-                                size: 24,
-                              ),
+                  subtitle:
+                      secilenTur != null
+                          ? Text(
+                            'Desteklenen: ${secilenTur['uzantilar'].join(', ').toUpperCase()}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    value['ad'],
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight:
-                                          secili
-                                              ? FontWeight.bold
-                                              : FontWeight.w500,
-                                      color:
-                                          secili
-                                              ? value['color']
-                                              : Colors.grey[700],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Desteklenen: ${value['uzantilar'].join(', ').toUpperCase()}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (secili)
-                              Icon(
-                                Icons.check_circle,
-                                color: value['color'],
-                                size: 20,
-                              ),
-                          ],
+                          )
+                          : const Text(
+                            'Dosya türünü belirlemek için tıklayın',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                  trailing: Icon(
+                    Icons.keyboard_arrow_down,
+                    color:
+                        secilenTur != null
+                            ? secilenTur['color']
+                            : Colors.grey[600],
+                  ),
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(12),
+                          bottomRight: Radius.circular(12),
                         ),
                       ),
+                      child: Column(
+                        children:
+                            _dosyaTurleri.entries.map((entry) {
+                              final key = entry.key;
+                              final value = entry.value;
+                              final secili = _secilenDosyaTuru == key;
+
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _secilenDosyaTuru = key;
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          secili
+                                              ? value['color'].withOpacity(0.05)
+                                              : Colors.transparent,
+                                      border: Border(
+                                        top: BorderSide(
+                                          color: Colors.grey.shade200,
+                                          width: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: value['color'].withOpacity(
+                                              0.1,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            value['icon'],
+                                            color: value['color'],
+                                            size: 18,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                value['ad'],
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight:
+                                                      secili
+                                                          ? FontWeight.w600
+                                                          : FontWeight.w500,
+                                                  color:
+                                                      secili
+                                                          ? value['color']
+                                                          : Colors.grey[700],
+                                                ),
+                                              ),
+                                              Text(
+                                                value['uzantilar']
+                                                    .join(', ')
+                                                    .toUpperCase(),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey[500],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (secili)
+                                          Icon(
+                                            Icons.check_circle,
+                                            color: value['color'],
+                                            size: 18,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Otomatik algılama butonu
+            if (_secilenDosyalar.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton.icon(
+                  onPressed: _otomatikDosyaTuruAlgila,
+                  icon: const Icon(Icons.auto_fix_high, size: 18),
+                  label: const Text('Otomatik Algıla'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.blue[600],
+                    backgroundColor: Colors.blue.shade50,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  // Otomatik dosya türü algılama metodu
+  void _otomatikDosyaTuruAlgila() {
+    if (_secilenDosyalar.isEmpty) return;
+
+    // Tüm dosyaların uzantılarını analiz et
+    Map<String, int> uzantiSayilari = {};
+    Map<String, String> uzantiTurleri = {};
+
+    for (final dosya in _secilenDosyalar) {
+      if (dosya.name.contains('.')) {
+        String uzanti = dosya.name.split('.').last.toLowerCase();
+        uzantiSayilari[uzanti] = (uzantiSayilari[uzanti] ?? 0) + 1;
+
+        // Bu uzantının hangi dosya türüne ait olduğunu bul
+        for (final entry in _dosyaTurleri.entries) {
+          if (entry.value['uzantilar'].contains(uzanti)) {
+            uzantiTurleri[uzanti] = entry.key;
+            break;
+          }
+        }
+      }
+    }
+
+    if (uzantiTurleri.isEmpty) return;
+
+    // En yaygın dosya türünü bul
+    Map<String, int> turSayilari = {};
+    for (final uzanti in uzantiSayilari.keys) {
+      String? tur = uzantiTurleri[uzanti];
+      if (tur != null) {
+        turSayilari[tur] = (turSayilari[tur] ?? 0) + uzantiSayilari[uzanti]!;
+      }
+    }
+
+    if (turSayilari.isEmpty) return;
+
+    // En çok tekrar eden dosya türünü al
+    String algilanaDosyaTuru =
+        turSayilari.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
+    if (algilanaDosyaTuru != _secilenDosyaTuru) {
+      setState(() {
+        _secilenDosyaTuru = algilanaDosyaTuru;
+      });
+
+      // Başarı animasyonu için snackbar göster
+      final secilenTur = _dosyaTurleri[algilanaDosyaTuru]!;
+      bool karisikTur = turSayilari.length > 1;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(secilenTur['icon'], color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${secilenTur['ad']} olarak algılandı',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    if (karisikTur)
+                      Text(
+                        'Karışık dosya türleri - en yaygın seçildi',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: secilenTur['color'],
+          duration: Duration(seconds: karisikTur ? 3 : 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          action:
+              karisikTur
+                  ? SnackBarAction(
+                    label: 'Değiştir',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      // ExpansionTile'ı aç
+                      setState(() {
+                        _secilenDosyaTuru = null;
+                      });
+                    },
+                  )
+                  : null,
+        ),
+      );
+    }
   }
 
   Widget _buildBelgeBilgileriKarti() {
@@ -855,6 +1134,42 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 });
               },
             ),
+            // Kişi yönetimi butonları
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _hizliKisiEkle,
+                    icon: const Icon(Icons.person_add, size: 18),
+                    label: const Text('Hızlı Kişi Ekle'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _kisileriYenile,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Yenile'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+
             if (_kisiler.isEmpty) ...[
               const SizedBox(height: 16),
               Container(
@@ -864,14 +1179,58 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.orange.shade200),
                 ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.orange.shade600),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Kişi listesi boş!',
+                            style: TextStyle(
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Belge eklemek için bir kişi seçmelisiniz. Yukarıdaki "Hızlı Kişi Ekle" butonunu kullanarak hemen kişi ekleyebilir veya "Yenile" butonuyla kişi listesini güncelleyebilirsiniz.',
+                      style: TextStyle(
+                        color: Colors.orange.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning, color: Colors.orange.shade600),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Önce bir kişi eklemelisiniz. Kişiler sekmesinden yeni kişi ekleyebilirsiniz.',
-                        style: TextStyle(color: Colors.orange.shade700),
+                    Icon(
+                      Icons.check_circle,
+                      color: Colors.green.shade600,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_kisiler.length} kişi mevcut',
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -1065,6 +1424,11 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         setState(() {
           _secilenDosyalar.addAll(dosyalar);
         });
+
+        // Otomatik dosya türü algılamasını tetikle
+        Future.delayed(const Duration(milliseconds: 100), () {
+          _otomatikDosyaTuruAlgila();
+        });
       }
     } catch (e) {
       _hataGoster('Dosya seçilirken hata oluştu: $e');
@@ -1091,6 +1455,129 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       await _belgeGuncelle();
     } else {
       await _yeniBelgelerEkle();
+    }
+  }
+
+  // Hızlı kişi ekleme
+  Future<void> _hizliKisiEkle() async {
+    final TextEditingController adController = TextEditingController();
+    final TextEditingController soyadController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Hızlı Kişi Ekle'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: adController,
+                  decoration: const InputDecoration(
+                    labelText: 'Ad *',
+                    hintText: 'Kişinin adını girin',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: soyadController,
+                  decoration: const InputDecoration(
+                    labelText: 'Soyad *',
+                    hintText: 'Kişinin soyadını girin',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (adController.text.trim().isEmpty ||
+                      soyadController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ad ve soyad alanları gereklidir'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  try {
+                    final yeniKisi = KisiModeli(
+                      ad: adController.text.trim(),
+                      soyad: soyadController.text.trim(),
+                      olusturmaTarihi: DateTime.now(),
+                      guncellemeTarihi: DateTime.now(),
+                    );
+
+                    await _veriTabani.kisiEkle(yeniKisi);
+                    Navigator.of(context).pop(true);
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Kişi eklenirken hata oluştu: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Ekle'),
+              ),
+            ],
+          ),
+    );
+
+    if (result == true) {
+      await _kisileriYenile();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kişi başarıyla eklendi'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  // Kişi listesini yenile
+  Future<void> _kisileriYenile() async {
+    try {
+      final kisiler = await _veriTabani.kisileriGetir();
+      setState(() {
+        _kisiler = kisiler;
+      });
+
+      // Eski seçimi kontrol et
+      if (_secilenKisi != null) {
+        final mevcutKisi = _kisiler.firstWhere(
+          (k) => k.id == _secilenKisi!.id,
+          orElse:
+              () => KisiModeli(
+                ad: '',
+                soyad: '',
+                olusturmaTarihi: DateTime.now(),
+                guncellemeTarihi: DateTime.now(),
+              ),
+        );
+
+        if (mevcutKisi.ad.isEmpty) {
+          _secilenKisi = null; // Seçili kişi artık yok
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_kisiler.length} kişi yüklendi'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    } catch (e) {
+      _hataGoster('Kişiler yüklenirken hata oluştu: $e');
     }
   }
 

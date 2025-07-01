@@ -79,6 +79,8 @@ class HttpSunucuServisi {
           int statusCode = 200;
 
           // Route handling
+          bool isBinaryResponse = false;
+
           switch (request.uri.path) {
             case '/info':
               responseBody = await _handleInfo();
@@ -101,6 +103,10 @@ class HttpSunucuServisi {
             default:
               if (request.uri.path.startsWith('/download/')) {
                 responseBody = await _handleDownload(request);
+                if (responseBody == 'BINARY_SENT') {
+                  isBinaryResponse = true;
+                  print('✅ Binary dosya gönderildi');
+                }
               } else if (request.uri.path == '/upload' &&
                   request.method == 'POST') {
                 responseBody = await _handleUpload(request);
@@ -110,14 +116,17 @@ class HttpSunucuServisi {
               }
           }
 
-          // UTF-8 bytes olarak yaz
-          final responseBytes = utf8.encode(responseBody);
-          request.response
-            ..statusCode = statusCode
-            ..add(responseBytes);
+          // Binary response değilse normal JSON response gönder
+          if (!isBinaryResponse) {
+            // UTF-8 bytes olarak yaz
+            final responseBytes = utf8.encode(responseBody);
+            request.response
+              ..statusCode = statusCode
+              ..add(responseBytes);
 
-          await request.response.close();
-          print('✅ HTTP Yanıt gönderildi: $statusCode');
+            await request.response.close();
+            print('✅ HTTP Yanıt gönderildi: $statusCode');
+          }
         } catch (e) {
           print('❌ İstek işleme hatası: $e');
           try {
@@ -341,32 +350,52 @@ class HttpSunucuServisi {
   // Belge indirme endpoint'i
   Future<String> _handleDownload(HttpRequest request) async {
     try {
-      final dosyaAdi = request.uri.pathSegments.last;
+      final dosyaAdi = Uri.decodeComponent(request.uri.pathSegments.last);
       print('📥 Belge indirme isteği: $dosyaAdi');
 
       final belgeler = await _veriTabani.belgeAra(dosyaAdi);
       if (belgeler.isEmpty) {
         request.response.statusCode = 404;
+        await request.response.close();
         return json.encode({'error': 'Belge bulunamadı'});
       }
 
       final dosya = File(belgeler.first.dosyaYolu);
       if (!await dosya.exists()) {
         request.response.statusCode = 404;
+        await request.response.close();
         return json.encode({'error': 'Dosya bulunamadı'});
       }
 
       final dosyaBytes = await dosya.readAsBytes();
+
+      // Türkçe karakterler için güvenli filename oluştur
+      final safeDosyaAdi = dosyaAdi.replaceAll(RegExp(r'[^\w\-_\.]'), '_');
+
       request.response
         ..headers.contentType = ContentType.binary
-        ..headers.add('Content-Disposition', 'attachment; filename="$dosyaAdi"')
-        ..add(dosyaBytes);
+        ..headers.contentLength = dosyaBytes.length
+        ..headers.add(
+          'Content-Disposition',
+          'attachment; filename=$safeDosyaAdi',
+        )
+        ..headers.add('Access-Control-Allow-Origin', '*')
+        ..headers.add('Access-Control-Expose-Headers', 'Content-Disposition');
 
-      print('✅ Belge gönderildi: $dosyaAdi');
-      return ''; // Binary response için boş string
+      // Dosya verilerini yaz ve response'u kapat
+      request.response.add(dosyaBytes);
+      await request.response.close();
+
+      print('✅ Belge gönderildi: $dosyaAdi (${dosyaBytes.length} bytes)');
+      return 'BINARY_SENT'; // Binary response gönderildi işareti
     } catch (e) {
       print('❌ Download endpoint hatası: $e');
-      request.response.statusCode = 500;
+      try {
+        request.response.statusCode = 500;
+        await request.response.close();
+      } catch (closeError) {
+        print('❌ Response kapatma hatası: $closeError');
+      }
       return json.encode({'error': 'İndirme hatası: $e'});
     }
   }
@@ -442,16 +471,186 @@ class HttpSunucuServisi {
     }
   }
 
-  // Belge yükleme endpoint'i (basitleştirilmiş versiyon)
+  // Belge yükleme endpoint'i
   Future<String> _handleUpload(HttpRequest request) async {
     try {
       print('📤 Belge yükleme isteği alındı');
 
-      // Geçici olarak basit bir success response dön
-      print('✅ Belge yükleme endpoint\'i çağrıldı');
+      // Multipart form data parser
+      final boundary = request.headers.contentType?.parameters['boundary'];
+      if (boundary == null) {
+        throw Exception('Multipart boundary bulunamadı');
+      }
+
+      final bodyBytes = await request.fold<List<int>>(
+        <int>[],
+        (previous, element) => previous..addAll(element),
+      );
+
+      // Simple multipart parsing
+      final bodyString = utf8.decode(bodyBytes);
+      final parts = bodyString.split('--$boundary');
+
+      String? metadata;
+      List<int>? fileBytes;
+      String? fileName;
+
+      for (final part in parts) {
+        if (part.contains('Content-Disposition: form-data; name="metadata"')) {
+          final lines = part.split('\r\n');
+          for (int i = 0; i < lines.length; i++) {
+            if (lines[i].trim().isEmpty && i + 1 < lines.length) {
+              metadata = lines[i + 1].trim();
+              break;
+            }
+          }
+        } else if (part.contains(
+          'Content-Disposition: form-data; name="file"',
+        )) {
+          final lines = part.split('\r\n');
+
+          // Filename'i bul
+          for (final line in lines) {
+            if (line.contains('filename=')) {
+              final filenameMatch = RegExp(
+                r'filename="([^"]*)"',
+              ).firstMatch(line);
+              if (filenameMatch != null) {
+                fileName = filenameMatch.group(1);
+              }
+              break;
+            }
+          }
+
+          // Dosya verisinin başlangıcını bul
+          final headerEndIndex = part.indexOf('\r\n\r\n');
+          if (headerEndIndex != -1) {
+            final fileContent = part.substring(headerEndIndex + 4);
+            if (fileContent.isNotEmpty) {
+              fileBytes = utf8.encode(fileContent);
+            }
+          }
+        }
+      }
+
+      if (metadata == null || fileBytes == null || fileName == null) {
+        throw Exception('Gerekli veriler eksik: metadata, file, filename');
+      }
+
+      // Metadata'yi parse et
+      final metadataJson = json.decode(metadata) as Map<String, dynamic>;
+      print('📋 Metadata alındı: ${metadataJson['dosyaAdi']}');
+
+      // Dosyayı belgeler klasörüne kaydet
+      final dosyaServisi = DosyaServisi();
+      final belgelerKlasoru = await dosyaServisi.belgelerKlasoruYolu();
+      final yeniDosyaYolu = '$belgelerKlasoru/$fileName';
+
+      // Dosyayı yaz
+      final dosya = File(yeniDosyaYolu);
+      await dosya.writeAsBytes(fileBytes);
+
+      // Kişi ID'sini eşleştir (ad-soyad kombinasyonuna göre)
+      int? eslestirilenKisiId;
+      if (metadataJson['kisiAd'] != null && metadataJson['kisiSoyad'] != null) {
+        try {
+          // Yerel kişi listesinde ad-soyad kombinasyonunu ara
+          final yerelKisiler = await _veriTabani.kisileriGetir();
+          final eslestirilenKisi = yerelKisiler.firstWhere(
+            (k) =>
+                k.ad == metadataJson['kisiAd'] &&
+                k.soyad == metadataJson['kisiSoyad'],
+            orElse:
+                () => KisiModeli(
+                  ad: '',
+                  soyad: '',
+                  olusturmaTarihi: DateTime.now(),
+                  guncellemeTarihi: DateTime.now(),
+                ),
+          );
+
+          if (eslestirilenKisi.ad.isNotEmpty) {
+            eslestirilenKisiId = eslestirilenKisi.id;
+            print('👤 Kişi eşleştirildi: ${eslestirilenKisi.tamAd}');
+          } else {
+            // Kişi yoksa yeni kişi ekle
+            final yeniKisi = KisiModeli(
+              ad: metadataJson['kisiAd'],
+              soyad: metadataJson['kisiSoyad'],
+              olusturmaTarihi: DateTime.now(),
+              guncellemeTarihi: DateTime.now(),
+            );
+
+            final kisiId = await _veriTabani.kisiEkle(yeniKisi);
+            eslestirilenKisiId = kisiId;
+            print('👤 Yeni kişi eklendi: ${yeniKisi.tamAd}');
+          }
+        } catch (e) {
+          print('⚠️ Kişi eşleştirme hatası: $e');
+          // Varsayılan olarak ilk kişiyi seç
+          final yerelKisiler = await _veriTabani.kisileriGetir();
+          if (yerelKisiler.isNotEmpty) {
+            eslestirilenKisiId = yerelKisiler.first.id;
+            print('⚠️ Varsayılan kişi seçildi: ${yerelKisiler.first.tamAd}');
+          }
+        }
+      } else if (metadataJson['kisiId'] != null) {
+        // Fallback: eski yöntem (ID ile)
+        try {
+          final yerelKisiler = await _veriTabani.kisileriGetir();
+          final eslestirilenKisi = yerelKisiler.firstWhere(
+            (k) => k.id == metadataJson['kisiId'],
+            orElse:
+                () => KisiModeli(
+                  ad: '',
+                  soyad: '',
+                  olusturmaTarihi: DateTime.now(),
+                  guncellemeTarihi: DateTime.now(),
+                ),
+          );
+
+          if (eslestirilenKisi.ad.isNotEmpty) {
+            eslestirilenKisiId = eslestirilenKisi.id;
+          } else if (yerelKisiler.isNotEmpty) {
+            eslestirilenKisiId = yerelKisiler.first.id;
+            print(
+              '⚠️ ID ile eşleştirilemedi, varsayılan seçildi: ${yerelKisiler.first.tamAd}',
+            );
+          }
+        } catch (e) {
+          print('⚠️ Kişi ID eşleştirme hatası: $e');
+        }
+      }
+
+      // Veritabanına ekle
+      final yeniBelge = BelgeModeli(
+        dosyaAdi: fileName,
+        orijinalDosyaAdi: metadataJson['dosyaAdi'] ?? fileName,
+        dosyaYolu: yeniDosyaYolu,
+        dosyaBoyutu: fileBytes.length,
+        dosyaTipi: fileName.split('.').last.toLowerCase(),
+        dosyaHash: '', // Hash hesaplanacak
+        olusturmaTarihi: DateTime.parse(metadataJson['olusturmaTarihi']),
+        guncellemeTarihi: DateTime.now(),
+        kategoriId: metadataJson['kategoriId'] ?? 1,
+        baslik: metadataJson['baslik'],
+        aciklama: metadataJson['aciklama'],
+        kisiId: eslestirilenKisiId,
+        etiketler:
+            metadataJson['etiketler'] != null
+                ? List<String>.from(metadataJson['etiketler'])
+                : null,
+      );
+
+      await _veriTabani.belgeEkle(yeniBelge);
+
+      print('✅ Belge başarıyla yüklendi: $fileName');
+
       return json.encode({
         'status': 'success',
-        'message': 'Belge yükleme endpoint\'i hazır (implement edilecek)',
+        'message': 'Belge başarıyla yüklendi',
+        'fileName': fileName,
+        'size': fileBytes.length,
       });
     } catch (e) {
       print('❌ Upload endpoint hatası: $e');
