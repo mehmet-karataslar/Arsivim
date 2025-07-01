@@ -110,6 +110,15 @@ class HttpSunucuServisi {
               } else if (request.uri.path == '/upload' &&
                   request.method == 'POST') {
                 responseBody = await _handleUpload(request);
+                // Upload response'unda hata kontrolü yap
+                try {
+                  final responseJson = json.decode(responseBody);
+                  if (responseJson['status'] == 'error') {
+                    statusCode = 400; // Bad Request
+                  }
+                } catch (e) {
+                  // JSON parse edilemezse default 200 kullan
+                }
               } else {
                 statusCode = 404;
                 responseBody = json.encode({'error': 'Endpoint bulunamadı'});
@@ -482,73 +491,192 @@ class HttpSunucuServisi {
         throw Exception('Multipart boundary bulunamadı');
       }
 
+      print('🔧 Boundary bulundu: $boundary');
+
       final bodyBytes = await request.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
       );
 
-      // Simple multipart parsing
-      final bodyString = utf8.decode(bodyBytes);
-      final parts = bodyString.split('--$boundary');
+      print('📦 Body alındı: ${bodyBytes.length} bytes');
+      print(
+        '🔍 İlk 50 byte (hex): ${bodyBytes.take(50).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+      );
+      print(
+        '🔍 İlk 200 byte (string): ${String.fromCharCodes(bodyBytes.take(200))}',
+      );
+
+      // Boundary'i binary olarak ara
+      final boundaryBytes = utf8.encode('--$boundary');
+      print(
+        '🔍 Aranan boundary (hex): ${boundaryBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+      );
+
+      // Binary parsing kullan
+      final List<List<int>> binaryParts = [];
+
+      int start = 0;
+      int partCount = 0;
+      while (start < bodyBytes.length && partCount < 10) {
+        // Sonsuz döngü önlemi
+        int boundaryIndex = _findBoundary(bodyBytes, boundaryBytes, start);
+        print('🔍 Boundary arama: start=$start, bulunan=$boundaryIndex');
+
+        if (boundaryIndex == -1) break;
+
+        if (start < boundaryIndex) {
+          final partData = bodyBytes.sublist(start, boundaryIndex);
+          binaryParts.add(partData);
+          print('📦 Part ${partCount++} bulundu: ${partData.length} bytes');
+        }
+
+        start = boundaryIndex + boundaryBytes.length;
+        // \r\n'i atla
+        if (start < bodyBytes.length && bodyBytes[start] == 13) start++;
+        if (start < bodyBytes.length && bodyBytes[start] == 10) start++;
+      }
+
+      print('🔍 ${binaryParts.length} binary part bulundu');
 
       String? metadata;
       List<int>? fileBytes;
       String? fileName;
 
-      for (final part in parts) {
-        if (part.contains('Content-Disposition: form-data; name="metadata"')) {
-          final lines = part.split('\r\n');
-          for (int i = 0; i < lines.length; i++) {
-            if (lines[i].trim().isEmpty && i + 1 < lines.length) {
-              metadata = lines[i + 1].trim();
-              break;
-            }
-          }
-        } else if (part.contains(
-          'Content-Disposition: form-data; name="file"',
-        )) {
-          final lines = part.split('\r\n');
+      // Her bir binary part'ı işle
+      for (int i = 0; i < binaryParts.length; i++) {
+        final partBytes = binaryParts[i];
+        if (partBytes.isEmpty) continue;
 
-          // Filename'i bul
-          for (final line in lines) {
-            if (line.contains('filename=')) {
-              final filenameMatch = RegExp(
-                r'filename="([^"]*)"',
-              ).firstMatch(line);
-              if (filenameMatch != null) {
-                fileName = filenameMatch.group(1);
+        print('🔍 Binary part $i işleniyor (${partBytes.length} bytes)...');
+
+        try {
+          // Header kısmını bulup string olarak parse et
+          final headerEndIndex = _findHeaderEnd(partBytes);
+          if (headerEndIndex == -1) {
+            print('⚠️ Header end bulunamadı');
+            continue;
+          }
+
+          final headerBytes = partBytes.sublist(0, headerEndIndex);
+          final headerString = utf8.decode(headerBytes, allowMalformed: true);
+
+          print('📋 Header: ${headerString.replaceAll('\r\n', '\\r\\n')}');
+
+          // Case-insensitive header matching
+          final headerLower = headerString.toLowerCase();
+
+          if (headerLower.contains(
+            'content-disposition: form-data; name="metadata"',
+          )) {
+            print('📋 Metadata part bulundu');
+
+            // Data kısmını al
+            final dataStart = headerEndIndex + 4; // \r\n\r\n atla
+            if (dataStart < partBytes.length) {
+              final metadataBytes = partBytes.sublist(dataStart);
+              // Son \r\n'leri temizle
+              while (metadataBytes.isNotEmpty &&
+                  (metadataBytes.last == 13 || metadataBytes.last == 10)) {
+                metadataBytes.removeLast();
               }
-              break;
-            }
-          }
 
-          // Dosya verisinin başlangıcını bul
-          final headerEndIndex = part.indexOf('\r\n\r\n');
-          if (headerEndIndex != -1) {
-            final fileContent = part.substring(headerEndIndex + 4);
-            if (fileContent.isNotEmpty) {
-              fileBytes = utf8.encode(fileContent);
+              metadata = utf8.decode(metadataBytes, allowMalformed: true);
+              print(
+                '✅ Metadata alındı: ${metadata.substring(0, metadata.length.clamp(0, 100))}...',
+              );
+            }
+          } else if (headerLower.contains(
+            'content-disposition: form-data; name="file"',
+          )) {
+            print('📁 File part bulundu');
+
+            // Filename'i bul
+            final filenameMatch = RegExp(
+              r'filename="([^"]*)"',
+            ).firstMatch(headerString);
+            if (filenameMatch != null) {
+              fileName = filenameMatch.group(1);
+              print('✅ Filename bulundu: $fileName');
+            }
+
+            // Binary data'yı al
+            final dataStart = headerEndIndex + 4; // \r\n\r\n atla
+            if (dataStart < partBytes.length) {
+              fileBytes = partBytes.sublist(dataStart);
+              // Son \r\n'leri temizle
+              while (fileBytes!.isNotEmpty &&
+                  (fileBytes.last == 13 || fileBytes.last == 10)) {
+                fileBytes.removeLast();
+              }
+
+              print('✅ File bytes alındı: ${fileBytes!.length} bytes');
+              print('🔍 İlk 20 byte: ${fileBytes!.take(20).toList()}');
             }
           }
+        } catch (e) {
+          print('⚠️ Binary part $i parsing hatası: $e');
+          continue;
         }
       }
 
+      // Debug bilgileri
+      print('🔍 Parsing sonuçları:');
+      print('   • Metadata: ${metadata != null ? "✅" : "❌"}');
+      print(
+        '   • FileBytes: ${fileBytes != null ? "✅ (${fileBytes?.length} bytes)" : "❌"}',
+      );
+      print('   • FileName: ${fileName ?? "❌"}');
+
       if (metadata == null || fileBytes == null || fileName == null) {
-        throw Exception('Gerekli veriler eksik: metadata, file, filename');
+        final errorMsg =
+            'Gerekli veriler eksik - metadata: $metadata, fileBytes: ${fileBytes?.length}, fileName: $fileName';
+        print('❌ $errorMsg');
+        throw Exception(errorMsg);
       }
 
       // Metadata'yi parse et
-      final metadataJson = json.decode(metadata) as Map<String, dynamic>;
-      print('📋 Metadata alındı: ${metadataJson['dosyaAdi']}');
+      Map<String, dynamic> metadataJson;
+      try {
+        metadataJson = json.decode(metadata) as Map<String, dynamic>;
+        print(
+          '📋 Metadata başarıyla parse edildi: ${metadataJson['dosyaAdi']}',
+        );
+        print(
+          '   • Kişi: ${metadataJson['kisiAd']} ${metadataJson['kisiSoyad']}',
+        );
+        print('   • Kategori ID: ${metadataJson['kategoriId']}');
+      } catch (e) {
+        print('❌ Metadata parse hatası: $e');
+        print('   Raw metadata: $metadata');
+        throw Exception('Metadata parse edilemedi: $e');
+      }
 
       // Dosyayı belgeler klasörüne kaydet
       final dosyaServisi = DosyaServisi();
       final belgelerKlasoru = await dosyaServisi.belgelerKlasoruYolu();
       final yeniDosyaYolu = '$belgelerKlasoru/$fileName';
 
+      print('💾 Dosya yazılıyor: $yeniDosyaYolu (${fileBytes.length} bytes)');
+
       // Dosyayı yaz
       final dosya = File(yeniDosyaYolu);
-      await dosya.writeAsBytes(fileBytes);
+      try {
+        await dosya.writeAsBytes(fileBytes);
+        print('✅ Dosya başarıyla yazıldı');
+
+        // Dosya boyutunu kontrol et
+        final writtenSize = await dosya.length();
+        print('📏 Yazılan dosya boyutu: $writtenSize bytes');
+
+        if (writtenSize != fileBytes.length) {
+          throw Exception(
+            'Dosya boyutu eşleşmiyor - beklenen: ${fileBytes.length}, yazılan: $writtenSize',
+          );
+        }
+      } catch (e) {
+        print('❌ Dosya yazma hatası: $e');
+        throw Exception('Dosya yazılamadı: $e');
+      }
 
       // Kişi ID'sini eşleştir (ad-soyad kombinasyonuna göre)
       int? eslestirilenKisiId;
@@ -622,6 +750,55 @@ class HttpSunucuServisi {
         }
       }
 
+      // Dosya hash'ini hesapla
+      final dosyaHashBytes = sha256.convert(fileBytes);
+      final dosyaHashString = dosyaHashBytes.toString();
+      print('🔐 Dosya hash hesaplandı: ${dosyaHashString.substring(0, 16)}...');
+
+      // Duplicate kontrolü yap
+      try {
+        final mevcutBelgeler = await _veriTabani.belgeleriGetir();
+        final duplicateBelge = mevcutBelgeler.firstWhere(
+          (belge) => belge.dosyaHash == dosyaHashString,
+          orElse:
+              () => BelgeModeli(
+                dosyaAdi: '',
+                orijinalDosyaAdi: '',
+                dosyaYolu: '',
+                dosyaBoyutu: 0,
+                dosyaTipi: '',
+                dosyaHash: '',
+                olusturmaTarihi: DateTime.now(),
+                guncellemeTarihi: DateTime.now(),
+                kategoriId: 1,
+                baslik: '',
+                aciklama: '',
+              ),
+        );
+
+        if (duplicateBelge.dosyaAdi.isNotEmpty) {
+          print('⚠️ Duplicate dosya bulundu: ${duplicateBelge.dosyaAdi}');
+
+          // Dosyayı disk'ten sil
+          final dosya = File(yeniDosyaYolu);
+          if (await dosya.exists()) {
+            await dosya.delete();
+            print('🗑️ Duplicate dosya diskten silindi');
+          }
+
+          return json.encode({
+            'status': 'warning',
+            'message': 'Bu dosya zaten mevcut',
+            'fileName': fileName,
+            'existingFile': duplicateBelge.dosyaAdi,
+            'duplicate': true,
+          });
+        }
+      } catch (e) {
+        print('⚠️ Duplicate kontrolü hatası: $e');
+        // Hata durumunda devam et
+      }
+
       // Veritabanına ekle
       final yeniBelge = BelgeModeli(
         dosyaAdi: fileName,
@@ -629,7 +806,7 @@ class HttpSunucuServisi {
         dosyaYolu: yeniDosyaYolu,
         dosyaBoyutu: fileBytes.length,
         dosyaTipi: fileName.split('.').last.toLowerCase(),
-        dosyaHash: '', // Hash hesaplanacak
+        dosyaHash: dosyaHashString,
         olusturmaTarihi: DateTime.parse(metadataJson['olusturmaTarihi']),
         guncellemeTarihi: DateTime.now(),
         kategoriId: metadataJson['kategoriId'] ?? 1,
@@ -642,21 +819,78 @@ class HttpSunucuServisi {
                 : null,
       );
 
-      await _veriTabani.belgeEkle(yeniBelge);
+      final belgeId = await _veriTabani.belgeEkle(yeniBelge);
+      print('✅ Belge veritabanına eklendi - ID: $belgeId');
 
-      print('✅ Belge başarıyla yüklendi: $fileName');
+      print('🎉 Belge başarıyla yüklendi: $fileName');
+      print('📊 Özet:');
+      print('   • Dosya adı: $fileName');
+      print('   • Boyut: ${fileBytes.length} bytes');
+      print(
+        '   • Kişi: ${metadataJson['kisiAd']} ${metadataJson['kisiSoyad']}',
+      );
+      print('   • Kategori ID: ${metadataJson['kategoriId']}');
 
       return json.encode({
         'status': 'success',
         'message': 'Belge başarıyla yüklendi',
         'fileName': fileName,
         'size': fileBytes.length,
+        'belgeId': belgeId,
+        'kisi': '${metadataJson['kisiAd']} ${metadataJson['kisiSoyad']}',
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Upload endpoint hatası: $e');
-      request.response.statusCode = 500;
-      return json.encode({'error': 'Yükleme hatası: $e'});
+      print('📋 Stack trace: $stackTrace');
+
+      // Hata durumunda da uygun response dön
+      final errorResponse = json.encode({
+        'status': 'error',
+        'error': 'Yükleme hatası',
+        'message': e.toString(),
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      // Status code'u düzgün ayarla ama response'u bizim döndürmemize izin ver
+      // Çünkü main handler zaten response'u kapatacak
+      return errorResponse;
     }
+  }
+
+  // Multipart parsing helper fonksiyonları
+  int _findHeaderEnd(List<int> bytes) {
+    // \r\n\r\n (double CRLF) pattern'ini ara
+    final pattern = [13, 10, 13, 10]; // \r\n\r\n
+
+    for (int i = 0; i <= bytes.length - pattern.length; i++) {
+      bool match = true;
+      for (int j = 0; j < pattern.length; j++) {
+        if (bytes[i + j] != pattern[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  int _findBoundary(List<int> haystack, List<int> needle, int start) {
+    for (int i = start; i <= haystack.length - needle.length; i++) {
+      bool match = true;
+      for (int j = 0; j < needle.length; j++) {
+        if (haystack[i + j] != needle[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   // Kategori senkronizasyon endpoint'i (basitleştirilmiş)
