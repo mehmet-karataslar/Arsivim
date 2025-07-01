@@ -1,0 +1,70 @@
+name: arsiv_uygulamasi
+description: "A new Flutter project."
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.2
+
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+
+  cupertino_icons: ^1.0.8
+  
+  # Veritabanı
+  sqflite: ^2.4.1
+  
+  # Dosya işlemleri
+  path_provider: ^2.1.4
+  file_picker: ^8.1.2
+  path: ^1.9.1
+  
+  # Dosya açma ve paylaşma
+  open_filex: ^4.3.4
+  share_plus: ^7.2.2
+  url_launcher: ^6.2.2
+  
+  # Güvenlik ve hash
+  crypto: ^3.0.6
+  encrypt: ^5.0.3
+  
+  # Cihaz bilgileri
+  device_info_plus: ^11.1.0
+  
+  # Network
+  http: ^1.2.2
+  
+  # İzinler
+  permission_handler: ^11.3.1
+  
+  # Ayarlar ve tercihler
+  shared_preferences: ^2.2.2
+  
+  # USB ve network senkronizasyon
+  connectivity_plus: ^5.0.2
+  network_info_plus: ^5.0.2
+  
+  # HTTP server
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+
+  flutter_lints: ^5.0.0
+
+
+flutter:
+
+
+  uses-material-design: true
+
+

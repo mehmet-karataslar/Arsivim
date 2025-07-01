@@ -1,0 +1,304 @@
+import 'package:flutter/material.dart';
+import '../models/belge_modeli.dart';
+import '../models/kategori_modeli.dart';
+import '../models/kisi_modeli.dart';
+import '../services/veritabani_servisi.dart';
+import '../services/belge_islemleri_servisi.dart';
+import '../widgets/belge_karti_widget.dart';
+import '../widgets/belge_detay_dialog.dart';
+import '../widgets/arama_sonuclari_widget.dart';
+import 'yeni_belge_ekle_ekrani.dart';
+
+class BelgelerEkrani extends StatefulWidget {
+  const BelgelerEkrani({Key? key}) : super(key: key);
+
+  @override
+  State<BelgelerEkrani> createState() => _BelgelerEkraniState();
+}
+
+class _BelgelerEkraniState extends State<BelgelerEkrani> {
+  final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
+  final BelgeIslemleriServisi _belgeIslemleri = BelgeIslemleriServisi();
+
+  List<BelgeModeli> _tumBelgeler = [];
+  List<BelgeModeli> _filtrelenmsBelgeler = [];
+  List<KategoriModeli> _kategoriler = [];
+  List<KisiModeli> _kisiler = [];
+  bool _yukleniyor = true;
+
+  // Basit arama durumu
+  String _aramaMetni = '';
+
+  // Sonuç widget durumu
+  AramaSiralamaTuru _siralamaTuru = AramaSiralamaTuru.tarihYeni;
+  AramaGorunumTuru _gorunumTuru = AramaGorunumTuru.liste;
+
+  final TextEditingController _aramaController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _verileriYukle();
+  }
+
+  @override
+  void dispose() {
+    _aramaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _verileriYukle() async {
+    setState(() {
+      _yukleniyor = true;
+    });
+
+    try {
+      final belgeler = await _veriTabani.belgeleriGetir();
+      final kategoriler = await _veriTabani.kategorileriGetir();
+      final kisiler = await _veriTabani.kisileriGetir();
+
+      setState(() {
+        _tumBelgeler = belgeler;
+        _kategoriler = kategoriler;
+        _kisiler = kisiler;
+        _yukleniyor = false;
+      });
+
+      _belgeleriFiltrele();
+    } catch (e) {
+      setState(() {
+        _yukleniyor = false;
+      });
+      _hataGoster('Veriler yüklenirken hata oluştu: $e');
+    }
+  }
+
+  void _belgeleriFiltrele() {
+    List<BelgeModeli> filtrelenmsBelgeler = List.from(_tumBelgeler);
+
+    // Basit arama filtresi - istenen kriterlere göre
+    if (_aramaMetni.isNotEmpty) {
+      filtrelenmsBelgeler =
+          filtrelenmsBelgeler.where((belge) {
+            final aramaKelimesi = _aramaMetni.toLowerCase();
+
+            // 1. Dosya adında arama
+            if (belge.orijinalDosyaAdi.toLowerCase().contains(aramaKelimesi) ||
+                belge.dosyaAdi.toLowerCase().contains(aramaKelimesi)) {
+              return true;
+            }
+
+            // 2. Başlıkta arama
+            if (belge.baslik?.toLowerCase().contains(aramaKelimesi) ?? false) {
+              return true;
+            }
+
+            // 3. Açıklamada arama
+            if (belge.aciklama?.toLowerCase().contains(aramaKelimesi) ??
+                false) {
+              return true;
+            }
+
+            // 4. Etiketlerde arama
+            if (belge.etiketler?.any(
+                  (etiket) => etiket.toLowerCase().contains(aramaKelimesi),
+                ) ??
+                false) {
+              return true;
+            }
+
+            // 5. Kategoride arama
+            if (belge.kategoriId != null) {
+              try {
+                final kategori = _kategoriler.firstWhere(
+                  (k) => k.id == belge.kategoriId,
+                );
+                if (kategori.kategoriAdi.toLowerCase().contains(
+                  aramaKelimesi,
+                )) {
+                  return true;
+                }
+              } catch (e) {
+                // Kategori bulunamadı, devam et
+              }
+            }
+
+            // 6. Kişide arama
+            if (belge.kisiId != null) {
+              try {
+                final kisi = _kisiler.firstWhere((k) => k.id == belge.kisiId);
+                if ('${kisi.ad} ${kisi.soyad}'.toLowerCase().contains(
+                  aramaKelimesi,
+                )) {
+                  return true;
+                }
+              } catch (e) {
+                // Kişi bulunamadı, devam et
+              }
+            }
+
+            return false;
+          }).toList();
+    }
+
+    setState(() {
+      _filtrelenmsBelgeler = filtrelenmsBelgeler;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Belgeler'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        actions: [
+          // Belge ekleme butonu
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade400, Colors.purple.shade400],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  final sonuc = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const YeniBelgeEkleEkrani(),
+                    ),
+                  );
+                  if (sonuc == true) {
+                    _verileriYukle();
+                  }
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, color: Colors.white, size: 20),
+                      SizedBox(width: 4),
+                      Text(
+                        'EKLE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blue.shade50, Colors.white],
+          ),
+        ),
+        child: Column(
+          children: [
+            // Ana arama kutusu
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _aramaController,
+                decoration: InputDecoration(
+                  hintText:
+                      'Belgeler arasında arama yapın (dosya adı, başlık, açıklama, etiket, kategori, kişi)...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon:
+                      _aramaMetni.isNotEmpty
+                          ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _aramaController.clear();
+                              setState(() => _aramaMetni = '');
+                              _belgeleriFiltrele();
+                            },
+                          )
+                          : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.blue[600]!),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                onChanged: (value) {
+                  setState(() => _aramaMetni = value);
+                  _belgeleriFiltrele();
+                },
+              ),
+            ),
+
+            // Arama sonuçları
+            Expanded(
+              child: AramaSonuclariWidget(
+                belgeler: _filtrelenmsBelgeler,
+                kategoriler: _kategoriler,
+                kisiler: _kisiler,
+                siralamaTuru: _siralamaTuru,
+                gorunumTuru: _gorunumTuru,
+                yukleniyor: _yukleniyor,
+                onSiralamaSecildi: (siralama) {
+                  setState(() => _siralamaTuru = siralama);
+                },
+                onGorunumSecildi: (gorunum) {
+                  setState(() => _gorunumTuru = gorunum);
+                },
+                onBelgeDuzenle: (belge) async {
+                  final sonuc = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) =>
+                              YeniBelgeEkleEkrani(duzenlenecekBelge: belge),
+                    ),
+                  );
+                  if (sonuc == true) {
+                    _verileriYukle();
+                  }
+                },
+                onBelgelerGuncellendi: () {
+                  _verileriYukle();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _hataGoster(String mesaj) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(mesaj), backgroundColor: Colors.red));
+  }
+}
