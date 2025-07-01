@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/senkron_cihazi.dart';
 
 class SenkronCards {
@@ -177,6 +179,228 @@ class SenkronCards {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // QR Kod Gösterim Kartı (PC için)
+  static Widget buildQRDisplayCard({
+    required String localIP,
+    required String deviceId,
+    required String deviceName,
+    required String platform,
+    required int belgeSayisi,
+    required int toplamBoyut,
+    VoidCallback? onRefreshQR,
+  }) {
+    // QR kod verisi oluştur
+    final qrData = json.encode({
+      'type': 'arsivim_connection',
+      'version': '1.0',
+      'ip': localIP,
+      'port': 8080,
+      'deviceId': deviceId,
+      'deviceName': deviceName,
+      'platform': platform,
+      'belgeSayisi': belgeSayisi,
+      'toplamBoyut': toplamBoyut,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [
+              Colors.blue.withOpacity(0.1),
+              Colors.purple.withOpacity(0.1),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Başlık
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.qr_code_2,
+                      color: Colors.blue,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      '📱 QR Kod ile Bağlantı',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (onRefreshQR != null)
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: Colors.blue),
+                      onPressed: onRefreshQR,
+                      tooltip: 'QR Kodu Yenile',
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // QR Kod Alanı
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: QrImageView(
+                    data: qrData,
+                    version: QrVersions.auto,
+                    size: 180.0,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    errorCorrectionLevel: QrErrorCorrectLevel.M,
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Bilgi metni
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.smartphone,
+                          color: Colors.blue[600],
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Mobil cihazdan bağlantı kurmak için:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '• Mobil cihazda Arşivim uygulamasını açın',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const Text(
+                      '• Senkronizasyon → QR Kod Tara butonuna basın',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const Text(
+                      '• Bu QR kodu tarayın ve otomatik bağlantı kurun',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Cihaz bilgileri
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    _buildInfoRow('Cihaz Adı', deviceName, Icons.computer),
+                    _buildInfoRow('IP Adresi', localIP, Icons.wifi),
+                    _buildInfoRow('Platform', platform, Icons.info),
+                    _buildInfoRow(
+                      'Belgeler',
+                      '$belgeSayisi adet',
+                      Icons.folder,
+                    ),
+                    _buildInfoRow(
+                      'Toplam Boyut',
+                      _formatFileSize(toplamBoyut),
+                      Icons.storage,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Dosya boyutu formatlama
+  static String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  // Bilgi satırı oluşturma
+  static Widget _buildInfoRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey[600]),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

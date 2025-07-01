@@ -228,43 +228,58 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                       ],
                     ),
                   ),
-                  // Üç nokta menüsü
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'open') {
-                        widget.onAc();
-                      } else if (value == 'share') {
-                        widget.onPaylas();
-                      } else if (value == 'edit') {
-                        widget.onDuzenle();
-                      } else if (value == 'delete') {
-                        widget.onSil();
-                      }
-                    },
-                    itemBuilder:
-                        (context) => [
-                          const PopupMenuItem<String>(
-                            value: 'open',
-                            child: Text('Aç'),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'share',
-                            child: Text('Paylaş'),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'edit',
-                            child: Text('Düzenle'),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Text('Sil'),
-                          ),
-                        ],
-                  ),
                 ],
               ),
             ),
           ),
+
+          // Aksiyon butonları
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Aç butonu
+                _buildActionButton(
+                  icon: Icons.open_in_new,
+                  label: 'Aç',
+                  color: Colors.blue,
+                  onTap: widget.onAc,
+                ),
+
+                // Paylaş butonu
+                _buildActionButton(
+                  icon: Icons.share,
+                  label: 'Paylaş',
+                  color: Colors.green,
+                  onTap: widget.onPaylas,
+                ),
+
+                // Düzenle butonu
+                _buildActionButton(
+                  icon: Icons.edit,
+                  label: 'Düzenle',
+                  color: Colors.orange,
+                  onTap: widget.onDuzenle,
+                ),
+
+                // Sil butonu
+                _buildActionButton(
+                  icon: Icons.delete,
+                  label: 'Sil',
+                  color: Colors.red,
+                  onTap: widget.onSil,
+                ),
+              ],
+            ),
+          ),
+
           // Senkronizasyon durumu göstergesi (sadece senkronize ediliyorsa)
           if (widget.belge.senkronDurumu == 1) // Senkronize ediliyor
             Container(
@@ -328,5 +343,36 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
       case SenkronDurumu.UZAK_DEGISIM:
         return Colors.purple;
     }
+  }
+
+  // Aksiyon butonları için widget builder
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

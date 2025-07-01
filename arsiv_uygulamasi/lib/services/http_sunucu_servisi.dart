@@ -5,6 +5,10 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
 import 'veritabani_servisi.dart';
 import 'dosya_servisi.dart';
+import 'belge_islemleri_servisi.dart';
+import '../models/belge_modeli.dart';
+import '../models/kategori_modeli.dart';
+import '../models/kisi_modeli.dart';
 
 class HttpSunucuServisi {
   static const int SUNUCU_PORTU = 8080;
@@ -438,27 +442,53 @@ class HttpSunucuServisi {
     }
   }
 
-  // Belge yükleme endpoint'i
+  // Belge yükleme endpoint'i (basitleştirilmiş versiyon)
   Future<String> _handleUpload(HttpRequest request) async {
     try {
       print('📤 Belge yükleme isteği alındı');
 
-      // Basit multipart parsing (gerçek uygulamada daha robust olmalı)
-      final bodyBytes = await request.fold<List<int>>(
-        <int>[],
-        (previous, element) => previous..addAll(element),
-      );
-
-      // Geçici olarak başarılı response döndür
-      print('✅ Belge yükleme tamamlandı');
+      // Geçici olarak basit bir success response dön
+      print('✅ Belge yükleme endpoint\'i çağrıldı');
       return json.encode({
         'status': 'success',
-        'message': 'Belge başarıyla yüklendi',
+        'message': 'Belge yükleme endpoint\'i hazır (implement edilecek)',
       });
     } catch (e) {
       print('❌ Upload endpoint hatası: $e');
       request.response.statusCode = 500;
       return json.encode({'error': 'Yükleme hatası: $e'});
+    }
+  }
+
+  // Kategori senkronizasyon endpoint'i (basitleştirilmiş)
+  Future<String> _handleCategorySync(HttpRequest request) async {
+    try {
+      print('📂 Kategori senkronizasyon endpoint\'i çağrıldı');
+
+      return json.encode({
+        'status': 'success',
+        'message': 'Kategori sync endpoint\'i hazır (implement edilecek)',
+      });
+    } catch (e) {
+      print('❌ Category sync hatası: $e');
+      request.response.statusCode = 500;
+      return json.encode({'error': 'Kategori sync hatası: $e'});
+    }
+  }
+
+  // Kişi senkronizasyon endpoint'i (basitleştirilmiş)
+  Future<String> _handlePeopleSync(HttpRequest request) async {
+    try {
+      print('🧑‍🤝‍🧑 Kişi senkronizasyon endpoint\'i çağrıldı');
+
+      return json.encode({
+        'status': 'success',
+        'message': 'Kişi sync endpoint\'i hazır (implement edilecek)',
+      });
+    } catch (e) {
+      print('❌ People sync hatası: $e');
+      request.response.statusCode = 500;
+      return json.encode({'error': 'Kişi sync hatası: $e'});
     }
   }
 }

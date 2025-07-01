@@ -77,6 +77,42 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     }
   }
 
+  // Verileri yenileme metodu
+  Future<void> _verileriYenile() async {
+    try {
+      // Animasyonu sıfırla
+      _animationController.reset();
+
+      await _verileriYukle();
+
+      // Başarı mesajı göster
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              const Text('Veriler yenilendi!'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      _hataGoster('Yenileme sırasında hata oluştu: $e');
+    }
+  }
+
+  // Pull-to-refresh metodu
+  Future<void> _onRefresh() async {
+    await _verileriYenile();
+  }
+
   void _hataGoster(String mesaj) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -116,7 +152,10 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 child:
                     _yukleniyor
                         ? const Center(child: CircularProgressIndicator())
-                        : _buildTabContent(),
+                        : RefreshIndicator(
+                          onRefresh: _onRefresh,
+                          child: _buildTabContent(),
+                        ),
               ),
             ],
           ),
@@ -175,6 +214,40 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(width: 8),
+          // Yenileme butonu - sadece desktop platformlarda göster
+          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 5,
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon:
+                    _yukleniyor
+                        ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).primaryColor,
+                            ),
+                          ),
+                        )
+                        : const Icon(Icons.refresh),
+                onPressed: _yukleniyor ? null : _verileriYenile,
+                tooltip: 'Yenile',
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           Container(
             decoration: BoxDecoration(
               color: Colors.white,

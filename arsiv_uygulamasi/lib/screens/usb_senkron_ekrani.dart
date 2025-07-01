@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 import 'package:network_info_plus/network_info_plus.dart';
 import '../services/usb_senkron_servisi.dart';
 import '../services/http_sunucu_servisi.dart';
@@ -494,18 +495,14 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
       if (data['type'] == 'arsivim_connection') {
         final ip = data['ip'];
         final port = data['port'] ?? 8080;
-        final url = '$ip:$port';
+        final deviceName = data['deviceName'] ?? 'PC';
 
-        // IP adresini otomatik doldur
-        _ipController.text = url;
+        _addLog('📱 QR kod tarandı!');
+        _addLog('🖥️ PC: $deviceName');
+        _addLog('🌐 IP: $ip:$port');
 
-        // Otomatik bağlantı dene
-        _connectToDevice();
-
-        _addLog('📱 QR kod tarandı: $url');
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('QR kod tarandı: $url')));
+        // Onay dialogu göster ve gerçek bağlantı yap
+        _showQRConnectionDialog(data);
       } else {
         throw Exception('Geçersiz QR kod formatı');
       }
@@ -514,6 +511,183 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Geçersiz QR kod')));
+    }
+  }
+
+  // QR kod bağlantı onay dialogu
+  void _showQRConnectionDialog(Map<String, dynamic> data) {
+    final deviceName = data['deviceName'] ?? 'Bilinmeyen PC';
+    final ip = data['ip'];
+    final port = data['port'] ?? 8080;
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.qr_code_scanner, color: Colors.blue[600]),
+                const SizedBox(width: 8),
+                const Text('QR Kod Tarandı'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$deviceName cihazına bağlanmak istiyor musunuz?'),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'IP: $ip:$port',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _connectToQRDevice(data);
+                },
+                icon: const Icon(Icons.link),
+                label: const Text('Bağlan'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  // QR kod ile gerçek bağlantı
+  Future<void> _connectToQRDevice(Map<String, dynamic> data) async {
+    setState(() {
+      _baglantiDeneniyor = true;
+    });
+    _pulseController.repeat();
+
+    try {
+      final ip = data['ip'];
+      final port = data['port'] ?? 8080;
+      final deviceName = data['deviceName'] ?? 'PC';
+
+      _addLog('🔗 $deviceName cihazına bağlanılıyor...');
+
+      // Önce ping test et
+      final pingResponse = await http
+          .get(Uri.parse('http://$ip:$port/ping'))
+          .timeout(const Duration(seconds: 10));
+
+      if (pingResponse.statusCode != 200) {
+        throw Exception('Ping başarısız');
+      }
+
+      _addLog('✅ Ping başarılı, gerçek bağlantı kuruluyor...');
+
+      // Şimdi gerçek connect endpoint'ine POST isteği at
+      final connectData = {
+        'clientId': 'mobile-${DateTime.now().millisecondsSinceEpoch}',
+        'clientName': 'Arşivim Mobil',
+        'platform': Platform.operatingSystem,
+        'belgeSayisi': 0,
+        'toplamBoyut': 0,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      final connectResponse = await http
+          .post(
+            Uri.parse('http://$ip:$port/connect'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(connectData),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (connectResponse.statusCode == 200) {
+        final responseData = json.decode(connectResponse.body);
+
+        if (responseData['success'] == true) {
+          _addLog('🎉 GERÇEK BAĞLANTI BAŞARILI!');
+          _addLog('🔗 PC\'ye connect edildi, callback çalıştı!');
+
+          // Bağlı cihaz bilgisini oluştur
+          setState(() {
+            _bagliBulunanCihaz = models.SenkronCihazi(
+              id: data['deviceId'] ?? 'unknown',
+              ad: deviceName,
+              ip: ip,
+              mac: 'unknown',
+              platform: data['platform'] ?? 'PC',
+              sonGorulen: DateTime.now(),
+              aktif: true,
+              belgeSayisi: data['belgeSayisi'] ?? 0,
+              toplamBoyut: data['toplamBoyut'] ?? 0,
+            );
+          });
+
+          // 🎉 BAĞLANTI BAŞARILI BİLDİRİMİ
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.devices_outlined,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '🎉 $deviceName\'a bağlandı!\nSenkronizasyon başlatılıyor...',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green.shade600,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+
+          // Senkronizasyonu başlat
+          await Future.delayed(const Duration(seconds: 1));
+          _performRealSynchronization();
+        } else {
+          throw Exception('Bağlantı yanıtı başarısız');
+        }
+      } else {
+        throw Exception('HTTP ${connectResponse.statusCode}');
+      }
+    } catch (e) {
+      _addLog('❌ QR bağlantı hatası: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Bağlantı hatası: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _baglantiDeneniyor = false;
+      });
+      _pulseController.stop();
     }
   }
 
@@ -679,32 +853,67 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     );
   }
 
-  // Bu metodları daha sonra kendi kartlarına taşıyacağız
+  // Sunucu kartı (PC için)
   Widget _buildServerCard() {
-    // Geçici implementasyon
-    return Container(
-      child: Text('Server Card - Will be moved to SenkronCards'),
+    return SenkronCards.buildServerCard(
+      sunucuCalisiyorMu: _sunucuCalisiyorMu,
+      localIP: _localIP,
+      onStartServer: _startServer,
+      onShowQRCode: _showQRCode,
     );
   }
 
+  // Bağlantı kartı
   Widget _buildConnectionCard() {
-    // Geçici implementasyon
-    return Container(
-      child: Text('Connection Card - Will be moved to SenkronCards'),
+    return SenkronCards.buildConnectionCard(
+      ipController: _ipController,
+      baglantiDeneniyor: _baglantiDeneniyor,
+      onConnect: _connectToDevice,
     );
   }
 
+  // QR kod tarama kartı (mobil için)
   Widget _buildQRScanCard() {
-    // Geçici implementasyon
-    return Container(
-      child: Text('QR Scan Card - Will be moved to SenkronCards'),
+    return SenkronCards.buildQRScanCard(onStartQRScan: _startQRScan);
+  }
+
+  // Bağlı cihaz kartı
+  Widget _buildConnectedDeviceCard() {
+    return SenkronCards.buildConnectedDeviceCard(
+      bagliBulunanCihaz: _bagliBulunanCihaz!,
+      onSync: _startSynchronization,
+      onDisconnect: _disconnectDevice,
+      formatFileSize: _formatFileSize,
     );
   }
 
-  Widget _buildConnectedDeviceCard() {
-    // Geçici implementasyon
-    return Container(
-      child: Text('Connected Device Card - Will be moved to SenkronCards'),
+  void _showQRCode() {
+    if (_localIP != null && _sunucuCalisiyorMu) {
+      SenkronDialogs.showQRCode(context, _localIP!);
+    }
+  }
+
+  void _showServerSuccessSnackbar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '🌐 Sunucu başlatıldı: $_localIP:8080',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green[600],
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
     );
   }
 }
