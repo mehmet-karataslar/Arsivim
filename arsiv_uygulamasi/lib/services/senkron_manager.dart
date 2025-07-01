@@ -108,12 +108,30 @@ class SenkronManager {
           yeniBelgeSayisi++;
           _addLog('📥 Yeni belge eklendi: ${uzakBelge['dosyaAdi']}');
         } else {
-          // Mevcut belge - tarih kontrolü
-          final uzakTarih = DateTime.parse(uzakBelge['olusturmaTarihi']);
-          if (uzakTarih.isAfter(yerelBelge.olusturmaTarihi)) {
-            await _downloadDocument(uzakBelge, bagliBulunanCihaz.ip);
+          // Mevcut belge - GÜNCELLEME TARİHİ kontrolü (conflict resolution)
+          final uzakGuncellemeTarihi = DateTime.parse(
+            uzakBelge['guncellemeTarihi'],
+          );
+          final yerelGuncellemeTarihi = yerelBelge.guncellemeTarihi;
+
+          _addLog('📅 Tarih kontrolü: ${uzakBelge['dosyaAdi']}');
+          _addLog('   • Uzak güncelleme: ${uzakGuncellemeTarihi.toString()}');
+          _addLog('   • Yerel güncelleme: ${yerelGuncellemeTarihi.toString()}');
+
+          if (uzakGuncellemeTarihi.isAfter(yerelGuncellemeTarihi)) {
+            _addLog('⬇️ Uzak versiyon daha güncel - indiriliyor');
+            await _downloadDocument(
+              uzakBelge,
+              bagliBulunanCihaz.ip,
+              isUpdate: true,
+            );
             guncellenmisBelgeSayisi++;
             _addLog('🔄 Belge güncellendi: ${uzakBelge['dosyaAdi']}');
+          } else if (yerelGuncellemeTarihi.isAfter(uzakGuncellemeTarihi)) {
+            _addLog('⬆️ Yerel versiyon daha güncel - gönderilecek');
+            // Upload kısmında işlenecek
+          } else {
+            _addLog('✅ Versiyonlar aynı: ${uzakBelge['dosyaAdi']}');
           }
         }
 
@@ -132,14 +150,37 @@ class SenkronManager {
           'Gönderiliyor: ${yerelBelge.dosyaAdi}',
         );
 
-        final uzakBelgeVar = uzakBelgeler.any(
+        // Uzak belgede aynı dosya var mı?
+        final uzakBelge = uzakBelgeler.firstWhere(
           (uzakBelge) => uzakBelge['dosyaAdi'] == yerelBelge.dosyaAdi,
+          orElse: () => <String, dynamic>{},
         );
 
-        if (!uzakBelgeVar) {
+        if (uzakBelge.isEmpty) {
+          // Uzakta yok - gönder
+          _addLog('📤 Yeni belge gönderiliyor: ${yerelBelge.dosyaAdi}');
           await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
           gonderilmiBelgeSayisi++;
           _addLog('📤 Belge gönderildi: ${yerelBelge.dosyaAdi}');
+        } else {
+          // Uzakta var - güncelleme tarihi kontrolü
+          final yerelGuncellemeTarihi = yerelBelge.guncellemeTarihi;
+          final uzakGuncellemeTarihi = DateTime.parse(
+            uzakBelge['guncellemeTarihi'],
+          );
+
+          _addLog('📅 Upload tarih kontrolü: ${yerelBelge.dosyaAdi}');
+          _addLog('   • Yerel güncelleme: ${yerelGuncellemeTarihi.toString()}');
+          _addLog('   • Uzak güncelleme: ${uzakGuncellemeTarihi.toString()}');
+
+          if (yerelGuncellemeTarihi.isAfter(uzakGuncellemeTarihi)) {
+            _addLog('⬆️ Yerel versiyon daha güncel - gönderiliyor');
+            await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
+            gonderilmiBelgeSayisi++;
+            _addLog('🔄 Belge güncelleme gönderildi: ${yerelBelge.dosyaAdi}');
+          } else {
+            _addLog('✅ Uzak versiyon güncel: ${yerelBelge.dosyaAdi}');
+          }
         }
       }
 
@@ -190,8 +231,9 @@ class SenkronManager {
   // Uzak cihazdan belge indir
   Future<void> _downloadDocument(
     Map<String, dynamic> belgeData,
-    String ip,
-  ) async {
+    String ip, {
+    bool isUpdate = false,
+  }) async {
     try {
       final dosyaAdi = belgeData['dosyaAdi'];
       _addLog('📥 İndiriliyor: $dosyaAdi');
@@ -284,7 +326,41 @@ class SenkronManager {
                   : null,
         );
 
-        await veriTabani.belgeEkle(yeniBelge);
+        if (isUpdate) {
+          // Mevcut belgeyi bul ve güncelle
+          final mevcutBelgeler = await veriTabani.belgeleriGetir();
+          final mevcutBelge = mevcutBelgeler.firstWhere(
+            (b) => b.dosyaAdi == dosyaAdi,
+            orElse:
+                () => BelgeModeli(
+                  dosyaAdi: '',
+                  orijinalDosyaAdi: '',
+                  dosyaYolu: '',
+                  dosyaBoyutu: 0,
+                  dosyaTipi: '',
+                  dosyaHash: '',
+                  olusturmaTarihi: DateTime.now(),
+                  guncellemeTarihi: DateTime.now(),
+                  kategoriId: 1,
+                  baslik: '',
+                  aciklama: '',
+                ),
+          );
+
+          if (mevcutBelge.dosyaAdi.isNotEmpty) {
+            // Mevcut belgeyi güncelle (ID'yi koru)
+            final guncellenmisBelge = yeniBelge.copyWith(id: mevcutBelge.id);
+            await veriTabani.belgeGuncelle(guncellenmisBelge);
+            _addLog('🔄 Mevcut belge güncellendi: $dosyaAdi');
+          } else {
+            // Belge bulunamadı, yeni ekle
+            await veriTabani.belgeEkle(yeniBelge);
+            _addLog('📥 Yeni belge eklendi: $dosyaAdi');
+          }
+        } else {
+          // Normal ekleme
+          await veriTabani.belgeEkle(yeniBelge);
+        }
 
         // Kişi bilgilerini log'a ekle
         String logMesaji = '✅ İndirildi: $dosyaAdi';

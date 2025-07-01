@@ -359,14 +359,46 @@ class HttpSunucuServisi {
   // Belge indirme endpoint'i
   Future<String> _handleDownload(HttpRequest request) async {
     try {
-      final dosyaAdi = Uri.decodeComponent(request.uri.pathSegments.last);
+      // URL decode'u güvenli şekilde yap
+      String dosyaAdi;
+      try {
+        dosyaAdi = Uri.decodeComponent(request.uri.pathSegments.last);
+      } catch (e) {
+        // Decode edilemiyorsa raw string kullan
+        dosyaAdi = request.uri.pathSegments.last;
+        print('⚠️ URL decode hatası, raw string kullanılıyor: $e');
+      }
       print('📥 Belge indirme isteği: $dosyaAdi');
 
-      final belgeler = await _veriTabani.belgeAra(dosyaAdi);
+      // Dosya adı ile belge ara (esnek arama)
+      List<BelgeModeli> belgeler = await _veriTabani.belgeAra(dosyaAdi);
+
+      // Eğer bulunamazsa, URL decode edilmiş hali ile de dene
       if (belgeler.isEmpty) {
-        request.response.statusCode = 404;
-        await request.response.close();
-        return json.encode({'error': 'Belge bulunamadı'});
+        print('📋 İlk arama sonuçsuz, farklı encode türleri deneniyor...');
+
+        // Farklı encode varyasyonlarını dene
+        final aramaTerimleri = [
+          dosyaAdi,
+          Uri.encodeComponent(dosyaAdi),
+          dosyaAdi.replaceAll('%20', ' '),
+          dosyaAdi.replaceAll('+', ' '),
+        ];
+
+        for (final terim in aramaTerimleri) {
+          belgeler = await _veriTabani.belgeAra(terim);
+          if (belgeler.isNotEmpty) {
+            print('✅ Belge bulundu: $terim');
+            break;
+          }
+        }
+
+        if (belgeler.isEmpty) {
+          print('❌ Belge hiçbir encode türünde bulunamadı: $dosyaAdi');
+          request.response.statusCode = 404;
+          await request.response.close();
+          return json.encode({'error': 'Belge bulunamadı'});
+        }
       }
 
       final dosya = File(belgeler.first.dosyaYolu);
@@ -396,15 +428,20 @@ class HttpSunucuServisi {
       await request.response.close();
 
       print('✅ Belge gönderildi: $dosyaAdi (${dosyaBytes.length} bytes)');
+      print('✅ Binary dosya gönderildi');
       return 'BINARY_SENT'; // Binary response gönderildi işareti
     } catch (e) {
       print('❌ Download endpoint hatası: $e');
+
+      // Response kapatmayı dene, eğer zaten kapalıysa ignore et
       try {
         request.response.statusCode = 500;
         await request.response.close();
+        print('⚠️ Error response gönderildi');
       } catch (closeError) {
-        print('❌ Response kapatma hatası: $closeError');
+        print('⚠️ Response zaten kapatılmış veya kapatma hatası: $closeError');
       }
+
       return json.encode({'error': 'İndirme hatası: $e'});
     }
   }
