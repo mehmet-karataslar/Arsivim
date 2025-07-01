@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:io' show Platform;
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'screens/ana_ekran.dart';
 import 'services/http_sunucu_servisi.dart';
 import 'services/ayarlar_servisi.dart';
@@ -6,6 +9,13 @@ import 'services/tema_yoneticisi.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Windows/Linux/macOS için SQLite FFI başlatma
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
   await AyarlarServisi.instance.init();
 
   // HTTP sunucusunu arka planda güvenli şekilde başlat

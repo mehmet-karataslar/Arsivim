@@ -6,7 +6,6 @@ import '../services/belge_islemleri_servisi.dart';
 import '../services/veritabani_servisi.dart';
 import 'belge_karti_widget.dart';
 import 'belge_detay_dialog.dart';
-import '../screens/yeni_belge_ekle_ekrani.dart';
 
 enum AramaSiralamaTuru {
   tarihYeni,

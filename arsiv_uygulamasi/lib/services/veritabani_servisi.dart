@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
+import '../models/senkron_log_modeli.dart';
 import '../utils/sabitler.dart';
 
 // SQLite veritabanı operasyonları
@@ -103,21 +104,6 @@ class VeriTabaniServisi {
       )
     ''');
 
-    // Cihaz bilgileri tablosu
-    await db.execute('''
-      CREATE TABLE cihaz_bilgileri (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cihaz_adi TEXT NOT NULL,
-        cihaz_tipi TEXT NOT NULL,
-        mac_adresi TEXT UNIQUE,
-        son_senkron_tarihi TEXT,
-        toplam_belge_sayisi INTEGER DEFAULT 0,
-        toplam_boyut INTEGER DEFAULT 0,
-        senkron_aktif INTEGER DEFAULT 1,
-        olusturma_tarihi TEXT NOT NULL
-      )
-    ''');
-
     // İndeksler
     await _createIndexes(db);
 
@@ -204,7 +190,6 @@ class VeriTabaniServisi {
     await db.execute('DROP TABLE IF EXISTS kategoriler');
     await db.execute('DROP TABLE IF EXISTS kisiler');
     await db.execute('DROP TABLE IF EXISTS senkron_logları');
-    await db.execute('DROP TABLE IF EXISTS cihaz_bilgileri');
   }
 
   // BELGE CRUD İŞLEMLERİ
@@ -247,8 +232,23 @@ class VeriTabaniServisi {
     return null;
   }
 
+  // Kategori ID'ye göre belgeleri getir
+  Future<List<BelgeModeli>> kategoriyeGoreBelgeleriGetir(int kategoriId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'belgeler',
+      where: 'kategori_id = ? AND aktif = ?',
+      whereArgs: [kategoriId, 1],
+      orderBy: 'guncelleme_tarihi DESC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return BelgeModeli.fromMap(maps[i]);
+    });
+  }
+
   // Hash'e göre belge getir
-  Future<BelgeModeli?> belgeGetirHash(String hash) async {
+  Future<BelgeModeli?> belgeGetirByHash(String hash) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
@@ -273,14 +273,14 @@ class VeriTabaniServisi {
     );
   }
 
-  // Belge silme (soft delete)
-  Future<int> belgeSil(int belgeId) async {
+  // Belge silme (aktif durumunu pasif yapma)
+  Future<int> belgeSil(int id) async {
     final db = await database;
     return await db.update(
       'belgeler',
       {'aktif': 0},
       where: 'id = ?',
-      whereArgs: [belgeId],
+      whereArgs: [id],
     );
   }
 
@@ -320,21 +320,6 @@ class VeriTabaniServisi {
         '%$aramaMetni%', // kategori_adi
         '%$aramaMetni%', // kişi adı soyadı
       ],
-    );
-
-    return List.generate(maps.length, (i) {
-      return BelgeModeli.fromMap(maps[i]);
-    });
-  }
-
-  // Kategoriye göre belgeler
-  Future<List<BelgeModeli>> kategoriyeGoreBelgeler(int kategoriId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'belgeler',
-      where: 'kategori_id = ? AND aktif = ?',
-      whereArgs: [kategoriId, 1],
-      orderBy: 'guncelleme_tarihi DESC',
     );
 
     return List.generate(maps.length, (i) {
@@ -391,14 +376,14 @@ class VeriTabaniServisi {
     );
   }
 
-  // Kişi silme (soft delete)
-  Future<int> kisiSil(int kisiId) async {
+  // Kişi silme (aktif durumunu pasif yapma)
+  Future<int> kisiSil(int id) async {
     final db = await database;
     return await db.update(
       'kisiler',
       {'aktif': 0},
       where: 'id = ?',
-      whereArgs: [kisiId],
+      whereArgs: [id],
     );
   }
 
@@ -463,6 +448,21 @@ class VeriTabaniServisi {
     });
   }
 
+  // ID'ye göre kategori getir
+  Future<KategoriModeli?> kategoriGetir(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'kategoriler',
+      where: 'id = ? AND aktif = ?',
+      whereArgs: [id, 1],
+    );
+
+    if (maps.isNotEmpty) {
+      return KategoriModeli.fromMap(maps.first);
+    }
+    return null;
+  }
+
   // Kategori güncelleme
   Future<int> kategoriGuncelle(KategoriModeli kategori) async {
     final db = await database;
@@ -474,15 +474,31 @@ class VeriTabaniServisi {
     );
   }
 
-  // Kategori silme
-  Future<int> kategoriSil(int kategoriId) async {
+  // Kategori silme (aktif durumunu pasif yapma)
+  Future<int> kategoriSil(int id) async {
     final db = await database;
     return await db.update(
       'kategoriler',
       {'aktif': 0},
       where: 'id = ?',
-      whereArgs: [kategoriId],
+      whereArgs: [id],
     );
+  }
+
+  // Kategoriye ait belge sayılarını getir
+  Future<Map<int, int>> kategoriBelgeSayilari() async {
+    final db = await database;
+    final List<Map<String, dynamic>> result = await db.rawQuery('''
+      SELECT kategori_id, COUNT(*) as belge_sayisi
+      FROM belgeler
+      WHERE aktif = 1
+      GROUP BY kategori_id
+    ''');
+
+    return {
+      for (var row in result)
+        (row['kategori_id'] as int): (row['belge_sayisi'] as int),
+    };
   }
 
   // SENKRONIZASYON METODLARI
@@ -550,29 +566,6 @@ class VeriTabaniServisi {
     return (result.first['total'] as int?) ?? 0;
   }
 
-  // Kategoriye göre belge sayıları
-  Future<Map<int, int>> kategoriBelgeSayilari() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery(
-      '''
-      SELECT kategori_id, COUNT(*) as count 
-      FROM belgeler 
-      WHERE aktif = ? 
-      GROUP BY kategori_id
-    ''',
-      [1],
-    );
-
-    Map<int, int> sayilar = {};
-    for (Map<String, dynamic> map in maps) {
-      int? kategoriId = map['kategori_id'];
-      if (kategoriId != null) {
-        sayilar[kategoriId] = map['count'] as int;
-      }
-    }
-    return sayilar;
-  }
-
   // VERİTABANI YÖNETİMİ
 
   // Veritabanını kapat
@@ -596,5 +589,52 @@ class VeriTabaniServisi {
     String path = await veritabaniYolu();
     await File(path).delete();
     _database = await _initDatabase();
+  }
+
+  // Tüm logları getir
+  Future<List<SenkronLogModeli>> senkronLoglariniGetir({int? limit}) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'senkron_logları',
+      orderBy: 'islem_tarihi DESC',
+      limit: limit,
+    );
+    return List.generate(maps.length, (i) {
+      return SenkronLogModeli.fromMap(maps[i]);
+    });
+  }
+
+  // Log ekle
+  Future<int> senkronLogEkle(SenkronLogModeli log) async {
+    final db = await database;
+    return await db.insert('senkron_logları', log.toMap());
+  }
+
+  // Senkron durumuna göre belgeleri getir
+  Future<List<BelgeModeli>> senkronDurumunaGoreBelgeleriGetir(
+    int senkronDurumu,
+  ) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'belgeler',
+      where: 'senkron_durumu = ? AND aktif = ?',
+      whereArgs: [senkronDurumu, 1],
+      orderBy: 'guncelleme_tarihi DESC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return BelgeModeli.fromMap(maps[i]);
+    });
+  }
+
+  // Belgeler tablosunda senkron durumunu güncelle
+  Future<int> belgeSenkronDurumuGuncelle(int belgeId, int durum) async {
+    final db = await database;
+    return await db.update(
+      'belgeler',
+      {'senkron_durumu': durum},
+      where: 'id = ?',
+      whereArgs: [belgeId],
+    );
   }
 }

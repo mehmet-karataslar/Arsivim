@@ -4,13 +4,13 @@ import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/belge_islemleri_servisi.dart';
-import '../widgets/belge_karti_widget.dart';
 import '../widgets/belge_detay_dialog.dart';
 import '../widgets/arama_sonuclari_widget.dart';
 import 'yeni_belge_ekle_ekrani.dart';
 
 class BelgelerEkrani extends StatefulWidget {
-  const BelgelerEkrani({Key? key}) : super(key: key);
+  final int? kategoriId;
+  const BelgelerEkrani({Key? key, this.kategoriId}) : super(key: key);
 
   @override
   State<BelgelerEkrani> createState() => _BelgelerEkraniState();
@@ -28,6 +28,8 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
 
   // Basit arama durumu
   String _aramaMetni = '';
+  int? _mevcutKategoriId; // Kategoriye göre filtreleme için
+  KategoriModeli? _mevcutKategori; // Kategori bilgisi için
 
   // Sonuç widget durumu
   AramaSiralamaTuru _siralamaTuru = AramaSiralamaTuru.tarihYeni;
@@ -38,6 +40,7 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   @override
   void initState() {
     super.initState();
+    _mevcutKategoriId = widget.kategoriId;
     _verileriYukle();
   }
 
@@ -53,14 +56,34 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
     });
 
     try {
-      final belgeler = await _veriTabani.belgeleriGetir();
+      List<BelgeModeli> belgeler;
+      if (_mevcutKategoriId != null) {
+        belgeler = await _veriTabani.kategoriyeGoreBelgeleriGetir(
+          _mevcutKategoriId!,
+        );
+      } else {
+        belgeler = await _veriTabani.belgeleriGetir();
+      }
       final kategoriler = await _veriTabani.kategorileriGetir();
       final kisiler = await _veriTabani.kisileriGetir();
+
+      // Mevcut kategoriyi bul
+      KategoriModeli? mevcutKategori;
+      if (_mevcutKategoriId != null) {
+        try {
+          mevcutKategori = kategoriler.firstWhere(
+            (k) => k.id == _mevcutKategoriId,
+          );
+        } catch (e) {
+          // Kategori bulunamazsa null kalır
+        }
+      }
 
       setState(() {
         _tumBelgeler = belgeler;
         _kategoriler = kategoriler;
         _kisiler = kisiler;
+        _mevcutKategori = mevcutKategori;
         _yukleniyor = false;
       });
 
@@ -150,7 +173,11 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Belgeler'),
+        title: Text(
+          _mevcutKategori != null
+              ? '${_mevcutKategori!.kategoriAdi} Belgeleri'
+              : 'Tüm Belgeler',
+        ),
         elevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.black,

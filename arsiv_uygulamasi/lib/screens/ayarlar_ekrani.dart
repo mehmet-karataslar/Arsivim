@@ -638,3 +638,4 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
     );
   }
 }
+ 

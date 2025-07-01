@@ -191,54 +191,26 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                             runSpacing: 4,
                             children:
                                 widget.belge.etiketler!.take(3).map((etiket) {
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue[50],
+
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      etiket,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.blue[700],
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue[50],
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: Colors.blue[200]!,
-                                          width: 0.5,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        etiket,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.blue[700],
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    );
-                                  }).toList()
-                                  ..addAll(
-                                    widget.belge.etiketler!.length > 3
-                                        ? [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[100],
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Text(
-                                              '+${widget.belge.etiketler!.length - 3}',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.grey[600],
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                        ]
-                                        : [],
-                                  ),
+                                    ),
+                                  );
+                                }).toList(),
                           ),
                         ],
 
@@ -256,166 +228,69 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                       ],
                     ),
                   ),
+                  // Üç nokta menüsü
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'open') {
+                        widget.onAc();
+                      } else if (value == 'share') {
+                        widget.onPaylas();
+                      } else if (value == 'edit') {
+                        widget.onDuzenle();
+                      } else if (value == 'delete') {
+                        widget.onSil();
+                      }
+                    },
+                    itemBuilder:
+                        (context) => [
+                          const PopupMenuItem<String>(
+                            value: 'open',
+                            child: Text('Aç'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'share',
+                            child: Text('Paylaş'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'edit',
+                            child: Text('Düzenle'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Text('Sil'),
+                          ),
+                        ],
+                  ),
                 ],
               ),
             ),
           ),
-
-          // Aksiyon butonları
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(12),
+          // Senkronizasyon durumu göstergesi (sadece senkronize ediliyorsa)
+          if (widget.belge.senkronDurumu == 1) // Senkronize ediliyor
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.sync, size: 16, color: Colors.blue[700]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Senkronize Ediliyor...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                // Aç butonu
-                Expanded(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: widget.onAc,
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(12),
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.open_in_new,
-                              size: 16,
-                              color: Colors.blue[600],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Aç',
-                              style: TextStyle(
-                                color: Colors.blue[600],
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Ayırıcı çizgi
-                Container(width: 1, height: 40, color: Colors.grey[300]),
-
-                // Paylaş butonu
-                Expanded(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: widget.onPaylas,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.share,
-                              size: 16,
-                              color: Colors.green[600],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Paylaş',
-                              style: TextStyle(
-                                color: Colors.green[600],
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Ayırıcı çizgi
-                Container(width: 1, height: 40, color: Colors.grey[300]),
-
-                // Düzenle butonu
-                Expanded(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: widget.onDuzenle,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.edit,
-                              size: 16,
-                              color: Colors.orange[600],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Düzenle',
-                              style: TextStyle(
-                                color: Colors.orange[600],
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Ayırıcı çizgi
-                Container(width: 1, height: 40, color: Colors.grey[300]),
-
-                // Sil butonu
-                Expanded(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: widget.onSil,
-                      borderRadius: const BorderRadius.only(
-                        bottomRight: Radius.circular(12),
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.delete,
-                              size: 16,
-                              color: Colors.red[600],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Sil',
-                              style: TextStyle(
-                                color: Colors.red[600],
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

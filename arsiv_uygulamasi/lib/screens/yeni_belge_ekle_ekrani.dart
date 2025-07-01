@@ -1159,7 +1159,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
           );
 
           // Aynı hash'e sahip belge var mı kontrol et
-          BelgeModeli? mevcutBelge = await _veriTabani.belgeGetirHash(
+          BelgeModeli? mevcutBelge = await _veriTabani.belgeGetirByHash(
             belge.dosyaHash,
           );
           if (mevcutBelge != null) {

@@ -171,27 +171,25 @@ class UsbSenkronServisi {
   // CIHAZ KEŞFI VE BAĞLANTI
   Future<void> cihazAramayaBasla() async {
     _discoveryIptalEdildi = false; // İptal flag'ini sıfırla
+    _currentIPIndex = 0; // Index'i sıfırla
+    _ipListesi.clear(); // Listeyi temizle
+    _bulunanCihazlar.clear(); // Önceki cihazları temizle
     _cihazDurumuGuncelle(CihazDurumu.ARANYOR);
     _logEkle('Cihaz arama başlatıldı...');
 
     try {
-      // HTTP sunucusunu arka planda başlat (eğer çalışmıyorsa)
+      // HTTP sunucusunu kontrol et
       if (!_httpSunucu.calisiyorMu) {
-        _logEkle('HTTP sunucusu başlatılıyor...');
-        // Ana thread'i bloke etmemek için arka planda başlat
-        _httpSunucu
-            .sunucuyuBaslat()
-            .then((_) {
-              _logEkle(
-                'HTTP sunucusu başlatıldı - Cihaz ID: ${_httpSunucu.cihazId}',
-              );
-            })
-            .catchError((error) {
-              _logEkle('HTTP sunucusu başlatma hatası: $error');
-            });
-
-        // Sunucunun başlaması için kısa bir bekleme
-        await Future.delayed(const Duration(milliseconds: 500));
+        _logEkle('HTTP sunucusu başlatılması gerekiyor...');
+        try {
+          await _httpSunucu.sunucuyuBaslat();
+          _logEkle(
+            'HTTP sunucusu başlatıldı - Cihaz ID: ${_httpSunucu.cihazId}',
+          );
+        } catch (error) {
+          _logEkle('HTTP sunucusu başlatma hatası: $error');
+          throw Exception('HTTP sunucusu başlatılamadı');
+        }
       }
 
       // Network bağlantısını kontrol et
@@ -209,11 +207,13 @@ class UsbSenkronServisi {
       _logEkle('Yerel IP: $wifiIP');
       _logEkle('Sunucu portu: $SENKRON_PORTU');
 
-      // Discovery'yi arka planda başlat
+      // Discovery'yi başlat
+      _logEkle('IP taraması başlatılıyor: $wifiIP');
       _discoveryBaslatArkaPlan(wifiIP);
 
-      // 15 saniye ara (batch'ler için biraz daha uzun)
-      _discoveryTimer = Timer(const Duration(seconds: 15), () {
+      // 60 saniye ara (daha geniş IP aralığı için daha uzun)
+      _discoveryTimer = Timer(const Duration(seconds: 60), () {
+        _logEkle('Cihaz arama zaman aşımı');
         cihazAramayiDurdur();
       });
     } catch (e) {
@@ -224,89 +224,96 @@ class UsbSenkronServisi {
 
   // Discovery'yi arka planda çalıştır
   void _discoveryBaslatArkaPlan(String localIP) {
-    Future.microtask(() async {
-      await _discoveryBaslat(localIP);
+    _logEkle('Timer tabanlı IP taraması başlatılıyor...');
+
+    // Ana thread'i hiç bloke etmemek için Timer kullan - daha yavaş tarama
+    Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      if (_discoveryIptalEdildi) {
+        _logEkle('Discovery iptal edildi, timer durduruluyor');
+        timer.cancel();
+        return;
+      }
+
+      // Sadece bir IP kontrol et ve çık
+      _discoveryBaslatHizli(localIP, timer);
     });
   }
 
-  Future<void> _discoveryBaslat(String localIP) async {
-    _logEkle('Discovery protokolü başlatılıyor...');
+  int _currentIPIndex = 0;
+  List<String> _ipListesi = [];
 
-    try {
-      // UDP broadcast ile cihazları ara
+  void _discoveryBaslatHizli(String localIP, Timer timer) {
+    if (_ipListesi.isEmpty) {
+      // IP listesini oluştur
       final parts = localIP.split('.');
       final networkBase = '${parts[0]}.${parts[1]}.${parts[2]}';
 
-      // Önce yaygın IP aralıklarını kontrol et (daha hızlı sonuç için)
-      final oncelikliIPler = [
-        '$networkBase.1', // Router
-        '$networkBase.2', // Yaygın cihaz IP'si
-        '$networkBase.10', // Yaygın cihaz IP'si
-        '$networkBase.100', // Yaygın cihaz IP'si
-        '$networkBase.101', // Yaygın cihaz IP'si
-        '$networkBase.102', // Yaygın cihaz IP'si
+      _logEkle('IP listesi oluşturuluyor: $networkBase.x');
+
+      // Öncelikli IP'ler (router, gateway, yaygın IP'ler)
+      _ipListesi = [
+        '$networkBase.1', // Gateway
+        '$networkBase.2', // Router
+        '$networkBase.10', // Yaygın IP
+        '$networkBase.100', // Yaygın IP
+        '$networkBase.101', // Yaygın IP
+        '$networkBase.102', // Yaygın IP
+        '$networkBase.20', // Android cihazlar
+        '$networkBase.30', // iOS cihazlar
+        '$networkBase.50', // Laptop'lar
       ];
 
-      // Progress tracking başlat
+      // Diğer IP'ler (daha geniş aralık - 1-254 arası)
+      for (int i = 3; i <= 254; i++) {
+        if (![1, 2, 10, 20, 30, 50, 100, 101, 102].contains(i)) {
+          _ipListesi.add('$networkBase.$i');
+        }
+      }
+
+      _toplamIPSayisi = _ipListesi.length;
       _kontrollEdilmisIPSayisi = 0;
-      _toplamIPSayisi = oncelikliIPler.length;
+      _logEkle('${_ipListesi.length} IP adresi taranacak');
+    }
 
-      // Öncelikli IP'leri hızlıca kontrol et
-      for (final ip in oncelikliIPler) {
-        if (_discoveryIptalEdildi) break; // İptal kontrolü
-
-        if (ip != localIP) {
-          // Her IP kontrolünü arka planda yap
-          _cihazKontrolEtArkaPlan(ip);
-          _kontrollEdilmisIPSayisi++;
-          _discoveryProgressController.add(
-            _kontrollEdilmisIPSayisi / _toplamIPSayisi,
-          );
-          // UI'ın responsiveness için bekleme
-          await Future.delayed(const Duration(milliseconds: 50));
-        }
-      }
-
-      // Batch halinde IP taraması yap (aynı anda maksimum 5 istek)
-      const batchSize = 5; // Daha küçük batch boyutu
-      final allIPs = <String>[];
-
-      for (int i = 1; i <= 254; i++) {
-        final targetIP = '$networkBase.$i';
-        if (targetIP != localIP && !oncelikliIPler.contains(targetIP)) {
-          allIPs.add(targetIP);
-        }
-      }
-
-      // Toplam IP sayısını güncelle
-      _toplamIPSayisi += allIPs.length;
-
-      // Batch'ler halinde işle
-      for (int i = 0; i < allIPs.length; i += batchSize) {
-        if (_discoveryIptalEdildi) break; // İptal kontrolü
-
-        final batch = allIPs.skip(i).take(batchSize).toList();
-
-        // Her batch'i arka planda çalıştır
-        for (final ip in batch) {
-          if (_discoveryIptalEdildi) break; // İptal kontrolü
-          _cihazKontrolEtArkaPlan(ip);
-        }
-
-        // Progress güncelle
-        _kontrollEdilmisIPSayisi += batch.length;
-        _discoveryProgressController.add(
-          _kontrollEdilmisIPSayisi / _toplamIPSayisi,
+    // Tek IP kontrol et
+    if (_currentIPIndex < _ipListesi.length) {
+      final ip = _ipListesi[_currentIPIndex];
+      if (ip != localIP) {
+        _logEkle(
+          'IP kontrol ediliyor: $ip (${_currentIPIndex + 1}/${_ipListesi.length})',
         );
-
-        // UI'ın donmasını engellemek için uzun bekleme
-        await Future.delayed(const Duration(milliseconds: 200));
-
-        // İptal kontrolü
-        if (_discoveryTimer == null || _discoveryIptalEdildi) break;
+        _cihazKontrolEtHizli(ip);
       }
-    } catch (e) {
-      _logEkle('Discovery hatası: $e');
+
+      _currentIPIndex++;
+      _kontrollEdilmisIPSayisi++;
+
+      // Progress güncelle
+      final progress = _kontrollEdilmisIPSayisi / _toplamIPSayisi;
+      _discoveryProgressController.add(progress);
+
+      // Tamamlandı mı?
+      if (_currentIPIndex >= _ipListesi.length) {
+        _logEkle('IP taraması tamamlandı');
+        timer.cancel();
+        _discoveryTamamlandi();
+      }
+    } else {
+      _logEkle('IP taraması sona erdi');
+      timer.cancel();
+      _discoveryTamamlandi();
+    }
+  }
+
+  void _discoveryTamamlandi() {
+    if (_bulunanCihazlar.isEmpty) {
+      _cihazDurumuGuncelle(CihazDurumu.BAGLI_DEGIL);
+      _logEkle('Cihaz arama tamamlandı - Hiç cihaz bulunamadı');
+    } else {
+      _cihazDurumuGuncelle(CihazDurumu.BULUNDU);
+      _logEkle(
+        'Cihaz arama tamamlandı - ${_bulunanCihazlar.length} cihaz bulundu',
+      );
     }
   }
 
@@ -315,6 +322,60 @@ class UsbSenkronServisi {
     Future.microtask(() async {
       await _cihazKontrolEt(ip);
     });
+  }
+
+  // Hızlı cihaz kontrolü (non-blocking)
+  void _cihazKontrolEtHizli(String ip) {
+    if (_discoveryIptalEdildi) return;
+
+    // HTTP isteğini arka planda yap - daha uzun timeout
+    http
+        .get(
+          Uri.parse('http://$ip:$SENKRON_PORTU/info'),
+          headers: {
+            'User-Agent': 'Arsivim-Client',
+            'Connection': 'close',
+            'Accept': 'application/json',
+          },
+        )
+        .timeout(const Duration(seconds: 2)) // Timeout'u artırdık
+        .then((response) {
+          if (_discoveryIptalEdildi) return;
+
+          if (response.statusCode == 200) {
+            _logEkle('✅ Cihaz yanıtı alındı: $ip');
+            try {
+              final data = json.decode(response.body);
+              if (data['app'] == 'arsivim') {
+                final cihaz = SenkronCihazi.fromJson({
+                  ...data,
+                  'ip': ip,
+                  'mac': '', // MAC adresi şimdilik boş
+                  'sonGorulen': DateTime.now().toIso8601String(),
+                });
+
+                _cihazBulundu(cihaz);
+              } else {
+                _logEkle('⚠️ Uyumlu olmayan cihaz: $ip');
+              }
+            } catch (e) {
+              _logEkle('❌ JSON parse hatası ($ip): $e');
+            }
+          } else {
+            _logEkle('⚠️ HTTP ${response.statusCode} yanıtı: $ip');
+          }
+        })
+        .catchError((e) {
+          // Sadece gerçek hataları logla
+          if (e.toString().contains('Connection refused') ||
+              e.toString().contains('No route to host')) {
+            // Bu normal, çoğu IP'de servis yok
+          } else if (e.toString().contains('TimeoutException')) {
+            _logEkle('⏱️ Timeout: $ip');
+          } else {
+            _logEkle('❌ Bağlantı hatası ($ip): $e');
+          }
+        });
   }
 
   Future<void> _cihazKontrolEt(String ip) async {
@@ -375,6 +436,10 @@ class UsbSenkronServisi {
     _discoveryTimer?.cancel();
     _discoveryTimer = null;
 
+    // State'i sıfırla
+    _currentIPIndex = 0;
+    _ipListesi.clear();
+
     if (_bulunanCihazlar.isEmpty) {
       _cihazDurumuGuncelle(CihazDurumu.BAGLI_DEGIL);
       _logEkle('Cihaz arama durduruldu - Hiç cihaz bulunamadı');
@@ -384,6 +449,96 @@ class UsbSenkronServisi {
         'Cihaz arama tamamlandı - ${_bulunanCihazlar.length} cihaz bulundu',
       );
     }
+  }
+
+  // Manuel IP ile bağlantı deneme
+  Future<bool> manuelBaglantiDene(String ipPort) async {
+    try {
+      // IP:Port formatını kontrol et ve düzelt
+      String ip;
+      int port = 8080; // varsayılan port
+
+      // Girdiyi temizle
+      String cleanInput = ipPort.trim();
+
+      if (cleanInput.contains(':')) {
+        final parts = cleanInput.split(':');
+        ip = parts[0].trim();
+        // Son kısmı port olarak al (eğer birden fazla : varsa)
+        if (parts.length > 1) {
+          port = int.tryParse(parts.last.trim()) ?? 8080;
+        }
+      } else {
+        ip = cleanInput;
+      }
+
+      _logEkle('🔍 Manuel bağlantı test ediliyor: $ip:$port');
+
+      // HTTP isteği gönder
+      final response = await http
+          .get(
+            Uri.parse('http://$ip:$port/info'),
+            headers: {
+              'User-Agent': 'Arsivim-Client',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['app'] == 'arsivim') {
+          _logEkle('✅ Cihaz doğrulandı: ${data['ad']}');
+
+          // Bağlı cihaz olarak kaydet
+          final cihaz = SenkronCihazi.fromJson({
+            ...data,
+            'ip': ip,
+            'mac': '',
+            'sonGorulen': DateTime.now().toIso8601String(),
+          });
+
+          _bagliBulunanCihaz = cihaz;
+          _cihazDurumuGuncelle(CihazDurumu.BAGLI);
+          _logEkle('🎉 BAĞLANTI BAŞARILI! Cihaz: ${cihaz.ad}');
+
+          // Başarı bildirimi gönder
+          _basariBildirimiGonder(cihaz);
+
+          return true;
+        } else {
+          _logEkle('⚠️ Uyumlu olmayan uygulama');
+          return false;
+        }
+      } else {
+        _logEkle('❌ HTTP hatası: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      _logEkle('❌ Bağlantı hatası: $e');
+      return false;
+    }
+  }
+
+  // Bağlantı başarı bildirimi
+  void _basariBildirimiGonder(SenkronCihazi cihaz) {
+    // Başarı bildirimi için callback ekleyebiliriz
+    _logEkle('🔔 Bildirim: ${cihaz.ad} cihazı ile bağlantı kuruldu!');
+    _logEkle('📊 Cihaz Bilgileri:');
+    _logEkle('   • Platform: ${cihaz.platform}');
+    _logEkle('   • IP: ${cihaz.ip}');
+    _logEkle('   • Belge Sayısı: ${cihaz.belgeSayisi}');
+    _logEkle('   • Toplam Boyut: ${_formatFileSize(cihaz.toplamBoyut)}');
+  }
+
+  // Dosya boyutu formatlama
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   Future<bool> cihazaBaglan(SenkronCihazi cihaz) async {

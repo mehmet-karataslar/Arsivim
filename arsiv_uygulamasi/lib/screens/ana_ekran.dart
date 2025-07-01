@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
 import '../models/belge_modeli.dart';
@@ -300,20 +301,25 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   }
 
   Widget _buildAnaEkran() {
+    final bool isDesktop =
+        Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: RefreshIndicator(
         onRefresh: _verileriYukle,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20.0),
+          padding: EdgeInsets.all(
+            isDesktop ? 32.0 : 20.0,
+          ), // PC'de daha geniş padding
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildIstatistikKartlari(),
-              const SizedBox(height: 32),
+              SizedBox(height: isDesktop ? 24 : 32),
               _buildSonBelgeler(),
-              const SizedBox(height: 32),
+              SizedBox(height: isDesktop ? 24 : 32),
               _buildHizliIslemler(),
               const SizedBox(height: 100), // FAB için boşluk
             ],
@@ -455,16 +461,17 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                   const SizedBox(height: 16),
                   Text(
                     'Henüz belge eklenmemiş',
-                    style: TextStyle(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Colors.grey[600],
-                      fontSize: 16,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'İlk belgenizi eklemek için + butonuna dokunun',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -514,13 +521,17 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         ),
         title: Text(
           belge.baslik ?? belge.orijinalDosyaAdi,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           '${belge.dosyaTipi.toUpperCase()} • ${belge.formatliDosyaBoyutu}',
-          style: TextStyle(color: Colors.grey[600]),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
         ),
         trailing: Icon(
           Icons.arrow_forward_ios_rounded,
@@ -537,6 +548,10 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   }
 
   Widget _buildHizliIslemler() {
+    // PC için farklı layout
+    final bool isDesktop =
+        Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -548,34 +563,112 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
           ),
         ),
         const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 1.5,
-          children: [
-            _buildHizliIslemKarti('Belge Ekle', Icons.add_circle_rounded, [
-              Colors.blue,
-              Colors.lightBlue,
-            ], () => _yeniBelgeEkle()),
-            _buildHizliIslemKarti('Belgeler', Icons.folder_rounded, [
-              Colors.green,
-              Colors.lightGreen,
-            ], () => setState(() => _secilenTab = 1)),
-            _buildHizliIslemKarti(
-              'Kategoriler',
-              Icons.category_rounded,
-              [Colors.orange, Colors.deepOrange],
-              () => setState(() => _secilenTab = 2),
+        if (isDesktop)
+          // PC için kompakt grid layout
+          GridView.count(
+            crossAxisCount: 4, // PC'de 4 sütun
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.2, // Daha kompakt
+            children: [
+              _buildKompaktHizliIslemKarti(
+                'Belge Ekle',
+                Icons.add_circle_rounded,
+                [Colors.blue, Colors.lightBlue],
+                () => _yeniBelgeEkle(),
+              ),
+              _buildKompaktHizliIslemKarti(
+                'Belgeler',
+                Icons.folder_rounded,
+                [Colors.green, Colors.lightGreen],
+                () => setState(() => _secilenTab = 1),
+              ),
+              _buildKompaktHizliIslemKarti(
+                'Kategoriler',
+                Icons.category_rounded,
+                [Colors.orange, Colors.deepOrange],
+                () => setState(() => _secilenTab = 2),
+              ),
+              _buildKompaktHizliIslemKarti('Kişiler', Icons.people_rounded, [
+                Colors.purple,
+                Colors.deepPurple,
+              ], () => setState(() => _secilenTab = 3)),
+            ],
+          )
+        else
+          // Mobil için orijinal layout
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1.5,
+            children: [
+              _buildHizliIslemKarti('Belge Ekle', Icons.add_circle_rounded, [
+                Colors.blue,
+                Colors.lightBlue,
+              ], () => _yeniBelgeEkle()),
+              _buildHizliIslemKarti(
+                'Belgeler',
+                Icons.folder_rounded,
+                [Colors.green, Colors.lightGreen],
+                () => setState(() => _secilenTab = 1),
+              ),
+              _buildHizliIslemKarti(
+                'Kategoriler',
+                Icons.category_rounded,
+                [Colors.orange, Colors.deepOrange],
+                () => setState(() => _secilenTab = 2),
+              ),
+              _buildHizliIslemKarti('Kişiler', Icons.people_rounded, [
+                Colors.purple,
+                Colors.deepPurple,
+              ], () => setState(() => _secilenTab = 3)),
+            ],
+          ),
+
+        // PC için ek modüller
+        if (isDesktop) ...[
+          const SizedBox(height: 24),
+          Text(
+            'Diğer Modüller',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
             ),
-            _buildHizliIslemKarti('Kişiler', Icons.people_rounded, [
-              Colors.purple,
-              Colors.deepPurple,
-            ], () => setState(() => _secilenTab = 3)),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildModulKarti(
+                  'Senkronizasyon',
+                  'Cihazlar arası veri senkronizasyonu',
+                  Icons.sync_rounded,
+                  [Colors.teal, Colors.cyan],
+                  () => setState(() => _secilenTab = 4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildModulKarti(
+                  'Ayarlar',
+                  'Uygulama ayarları ve konfigürasyon',
+                  Icons.settings_rounded,
+                  [Colors.grey, Colors.blueGrey],
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AyarlarEkrani(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -613,10 +706,125 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
               const SizedBox(height: 12),
               Text(
                 baslik,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // PC için kompakt buton
+  Widget _buildKompaktHizliIslemKarti(
+    String baslik,
+    IconData icon,
+    List<Color> gradientColors,
+    VoidCallback onTap,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors.map((c) => c.withOpacity(0.1)).toList(),
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: gradientColors.first.withOpacity(0.2)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: gradientColors),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                baslik,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // PC için modül kartı
+  Widget _buildModulKarti(
+    String baslik,
+    String aciklama,
+    IconData icon,
+    List<Color> gradientColors,
+    VoidCallback onTap,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors.map((c) => c.withOpacity(0.1)).toList(),
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: gradientColors.first.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: gradientColors),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      baslik,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      aciklama,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: Colors.grey[400],
               ),
             ],
           ),
