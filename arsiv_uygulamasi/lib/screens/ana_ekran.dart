@@ -521,17 +521,19 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         ),
         title: Text(
           belge.baslik ?? belge.orijinalDosyaAdi,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            inherit: false,
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           '${belge.dosyaTipi.toUpperCase()} • ${belge.formatliDosyaBoyutu}',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.grey[600],
+            inherit: false,
+          ),
         ),
         trailing: Icon(
           Icons.arrow_forward_ios_rounded,

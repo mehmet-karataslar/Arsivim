@@ -4,26 +4,19 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="ilk komit yapıldı">
-      <change beforePath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" afterDir="false" />
+    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="sistem genel hatlarıyal toplandı">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/AndroidManifest.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Info.plist" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Info.plist" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/main.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ayarlar_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ayarlar_ekrani.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/belgeler_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/belgeler_ekrani.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/kategoriler_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/kategoriler_ekrani.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/usb_senkron_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/usb_senkron_ekrani.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/yeni_belge_ekle_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/yeni_belge_ekle_ekrani.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/belge_islemleri_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/belge_islemleri_servisi.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/http_sunucu_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/http_sunucu_servisi.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/usb_senkron_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/usb_senkron_servisi.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/veritabani_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/veritabani_servisi.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/belge_karti_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/belge_karti_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Flutter/GeneratedPluginRegistrant.swift" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Flutter/GeneratedPluginRegistrant.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.lock" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/web/manifest.json" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/web/manifest.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/windows/runner/Runner.rc" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/windows/runner/Runner.rc" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -66,6 +59,7 @@
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
+    "dart.analysis.tool.window.visible": "false",
     "git-widget-placeholder": "master",
     "io.flutter.reload.alreadyRun": "true",
     "kotlin-language-version-configured": "true",
@@ -96,11 +90,20 @@
       <option name="project" value="LOCAL" />
       <updated>1751381870442</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="sistem genel hatlarıyal toplandı">
+      <option name="closed" value="true" />
+      <created>1751387822204</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1751387822204</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="ilk komit yapıldı" />
-    <option name="LAST_COMMIT_MESSAGE" value="ilk komit yapıldı" />
+    <MESSAGE value="sistem genel hatlarıyal toplandı" />
+    <option name="LAST_COMMIT_MESSAGE" value="sistem genel hatlarıyal toplandı" />
   </component>
 </project>

@@ -1,11 +1,11 @@
 {
-    "name": "arsiv_uygulamasi",
-    "short_name": "arsiv_uygulamasi",
+    "name": "Arşim",
+    "short_name": "Arşim",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Arşim - Kişisel Belge Arşiv Uygulaması",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

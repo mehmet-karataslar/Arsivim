@@ -433,8 +433,14 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
 
             // Otomatik yedekleme ayarları
             SwitchListTile(
-              title: const Text('Otomatik Yedekleme'),
-              subtitle: const Text('Belirli aralıklarla otomatik yedek al'),
+              title: Text(
+                'Otomatik Yedekleme',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              subtitle: Text(
+                'Belirli aralıklarla otomatik yedek al',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               value: _otomatikYedekleme,
               onChanged: (value) async {
                 await _ayarlarServisi.setOtomatikYedekleme(value);
@@ -487,8 +493,14 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
 
               return ListTile(
                 leading: const Icon(Icons.folder),
-                title: Text(tarih),
-                subtitle: Text(dosyaAdi, style: const TextStyle(fontSize: 12)),
+                title: Text(
+                  tarih,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                subtitle: Text(
+                  dosyaAdi,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
                   onPressed: () => _yedekDosyasiniSil(dosyaYolu),
@@ -569,8 +581,14 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: SwitchListTile(
-          title: const Text('Bildirimlere İzin Ver'),
-          subtitle: const Text('Uygulama bildirimleri göster'),
+          title: Text(
+            'Bildirimlere İzin Ver',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          subtitle: Text(
+            'Uygulama bildirimleri göster',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           value: _bildirimlereIzin,
           onChanged: (value) async {
             await _ayarlarServisi.setBildirimlereIzin(value);
@@ -598,20 +616,38 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.info),
-              title: const Text('Versiyon'),
-              subtitle: Text(bilgiler['versiyon']),
+              title: Text(
+                'Versiyon',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              subtitle: Text(
+                bilgiler['versiyon'],
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               contentPadding: EdgeInsets.zero,
             ),
             ListTile(
               leading: const Icon(Icons.calendar_today),
-              title: const Text('Yapım Tarihi'),
-              subtitle: Text(bilgiler['yapim_tarihi']),
+              title: Text(
+                'Yapım Tarihi',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              subtitle: Text(
+                bilgiler['yapim_tarihi'],
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               contentPadding: EdgeInsets.zero,
             ),
             ListTile(
               leading: const Icon(Icons.group),
-              title: const Text('Geliştirici'),
-              subtitle: Text(bilgiler['gelistirici']),
+              title: Text(
+                'Geliştirici',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              subtitle: Text(
+                bilgiler['gelistirici'],
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               contentPadding: EdgeInsets.zero,
             ),
           ],
@@ -638,4 +674,3 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
     );
   }
 }
- 

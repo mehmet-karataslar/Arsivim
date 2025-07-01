@@ -22,6 +22,17 @@ void main() async {
   Future.microtask(() async {
     try {
       final httpSunucu = HttpSunucuServisi.instance;
+
+      // Global callback ayarla (tüm ekranlar için)
+      httpSunucu.setOnDeviceConnected((deviceInfo) {
+        print('🎉 GLOBAL: Yeni cihaz bağlandı - ${deviceInfo['clientName']}');
+        print('📱 IP: ${deviceInfo['ip']}');
+        print('💻 Platform: ${deviceInfo['platform']}');
+
+        // TODO: Burada global bildirim gösterebiliriz
+        // Şimdilik sadece log'a yazdırıyoruz
+      });
+
       await httpSunucu.sunucuyuBaslat();
       print('✅ HTTP sunucusu başarıyla başlatıldı');
     } catch (error) {

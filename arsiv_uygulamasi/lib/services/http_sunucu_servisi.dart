@@ -23,8 +23,16 @@ class HttpSunucuServisi {
   String? _platform;
   bool _calisiyorMu = false;
 
+  // Bağlantı callback'i
+  Function(Map<String, dynamic>)? _onDeviceConnected;
+
   bool get calisiyorMu => _calisiyorMu;
   String? get cihazId => _cihazId;
+
+  // Callback ayarlama metodu
+  void setOnDeviceConnected(Function(Map<String, dynamic>) callback) {
+    _onDeviceConnected = callback;
+  }
 
   Future<void> sunucuyuBaslat() async {
     if (_calisiyorMu) {
@@ -56,9 +64,12 @@ class HttpSunucuServisi {
         try {
           print('📨 HTTP İstek: ${request.method} ${request.uri.path}');
 
-          // CORS headers ekle
+          // CORS headers ekle (UTF-8 desteği ile)
           request.response.headers.add('Access-Control-Allow-Origin', '*');
-          request.response.headers.add('Content-Type', 'application/json');
+          request.response.headers.add(
+            'Content-Type',
+            'application/json; charset=utf-8',
+          );
 
           String responseBody;
           int statusCode = 200;
@@ -89,23 +100,26 @@ class HttpSunucuServisi {
               }
           }
 
+          // UTF-8 bytes olarak yaz
+          final responseBytes = utf8.encode(responseBody);
           request.response
             ..statusCode = statusCode
-            ..write(responseBody);
+            ..add(responseBytes);
 
           await request.response.close();
           print('✅ HTTP Yanıt gönderildi: $statusCode');
         } catch (e) {
           print('❌ İstek işleme hatası: $e');
           try {
+            final errorResponse = json.encode({
+              'error': 'Sunucu hatası',
+              'message': e.toString(),
+            });
+            final errorBytes = utf8.encode(errorResponse);
+
             request.response
               ..statusCode = 500
-              ..write(
-                json.encode({
-                  'error': 'Sunucu hatası',
-                  'message': e.toString(),
-                }),
-              );
+              ..add(errorBytes);
             await request.response.close();
           } catch (closeError) {
             print('❌ Response kapatma hatası: $closeError');
@@ -218,10 +232,6 @@ class HttpSunucuServisi {
     try {
       print('🔗 Yeni bağlantı isteği alındı');
 
-      // Bağlantı başarılı bildirimi
-      print('🎉 BAĞLANTI BAŞARILI! Mobil cihaz bağlandı');
-      print('📱 Bağlanan cihazın IP: ${request.connectionInfo?.remoteAddress}');
-      print('🔔 PC\'de bildirim: Mobil cihaz başarıyla bağlandı!');
       final bodyBytes = await request.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
@@ -239,14 +249,44 @@ class HttpSunucuServisi {
       // Basit token oluştur
       final token = 'token_${DateTime.now().millisecondsSinceEpoch}';
 
+      // Bağlantı başarılı bildirimi
+      print('🎉 BAĞLANTI BAŞARILI! Mobil cihaz bağlandı');
+      print('📱 Bağlanan cihaz: $clientName ($clientId)');
+      print('📱 IP: ${request.connectionInfo?.remoteAddress?.address}');
+
+      // UI'ya bildirim gönder - HEMEN
+      final deviceInfo = {
+        'clientId': clientId,
+        'clientName': clientName,
+        'ip': request.connectionInfo?.remoteAddress?.address ?? 'bilinmiyor',
+        'timestamp': DateTime.now().toIso8601String(),
+        'platform': data['platform'] ?? 'Mobil',
+        'belgeSayisi': data['belgeSayisi'] ?? 0,
+        'toplamBoyut': data['toplamBoyut'] ?? 0,
+      };
+
+      // Callback'i çağır
+      if (_onDeviceConnected != null) {
+        print('📢 Callback çağrılıyor...');
+        Future.microtask(() => _onDeviceConnected!(deviceInfo));
+      } else {
+        print('⚠️ Callback tanımlanmamış!');
+      }
+
       return json.encode({
         'success': true,
         'token': token,
         'serverId': _cihazId,
         'serverName': _cihazAdi,
         'message': 'Bağlantı kuruldu',
+        'serverInfo': {
+          'platform': _platform,
+          'belgeSayisi': await _veriTabani.toplamBelgeSayisi(),
+          'toplamBoyut': await _veriTabani.toplamDosyaBoyutu(),
+        },
       });
     } catch (e) {
+      print('❌ Connect handler hatası: $e');
       return json.encode({'error': 'Bağlantı hatası', 'message': e.toString()});
     }
   }

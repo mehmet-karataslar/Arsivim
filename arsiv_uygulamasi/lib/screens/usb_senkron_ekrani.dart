@@ -45,6 +45,54 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     _initStreams();
     _getLocalIP();
     _checkServerStatus();
+    _setupDeviceConnectionCallback();
+  }
+
+  void _setupDeviceConnectionCallback() {
+    // HTTP sunucusuna cihaz bağlantı callback'i ekle
+    _httpSunucu.setOnDeviceConnected((deviceInfo) {
+      _addLog('🎉 YENİ CİHAZ BAĞLANDI!');
+      _addLog('📱 Cihaz: ${deviceInfo['clientName']}');
+      _addLog('🌐 IP: ${deviceInfo['ip']}');
+
+      // Bağlı cihaz bilgisini güncelle
+      setState(() {
+        _bagliBulunanCihaz = SenkronCihazi(
+          id: deviceInfo['clientId'],
+          ad: deviceInfo['clientName'],
+          ip: deviceInfo['ip'],
+          mac: 'unknown',
+          platform: 'Mobil',
+          sonGorulen: DateTime.now(),
+          aktif: true,
+          belgeSayisi: 0,
+          toplamBoyut: 0,
+        );
+      });
+
+      // Başarı bildirimi göster
+      _showSuccessDialog();
+
+      // Snackbar ile de bildirim göster
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${deviceInfo['clientName']} bağlandı!',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    });
   }
 
   void _initAnimations() {
@@ -364,8 +412,8 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  // Gerçek senkronizasyon işlemi
-  Future<void> _performRealSynchronization() async {
+  // Gerçek senkronizasyon (dosya transferi ile)
+  Future<void> _performSimpleSyncWithRealData() async {
     try {
       _addLog('🔄 Senkronizasyon başlatıldı');
 
@@ -380,177 +428,76 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
       final uzakBelgeler = await _getRemoteDocuments();
       _addLog('📁 Uzak belge sayısı: ${uzakBelgeler.length}');
 
-      // 3. Karşılaştırma ve senkronizasyon
-      _addLog('🔍 Belgeler karşılaştırılıyor...');
-      int yeniBelgeSayisi = 0;
-      int guncellenmisBelgeSayisi = 0;
+      // 3. Karşılaştırma ve transfer
+      int indirilenSayi = 0;
+      int yuklenenSayi = 0;
 
+      // Uzak belgelerden eksik olanları indir
+      _addLog('📥 Eksik belgeler indiriliyor...');
       for (final uzakBelge in uzakBelgeler) {
-        final yerelBelge = yerelBelgeler.firstWhere(
-          (belge) => belge.dosyaAdi == uzakBelge['dosyaAdi'],
-          orElse:
-              () => BelgeModeli(
-                dosyaAdi: '',
-                orijinalDosyaAdi: '',
-                dosyaYolu: '',
-                dosyaBoyutu: 0,
-                dosyaTipi: '',
-                dosyaHash: '',
-                olusturmaTarihi: DateTime.now(),
-                guncellemeTarihi: DateTime.now(),
-              ),
+        final dosyaAdi = uzakBelge['dosyaAdi'];
+
+        // Bu belge yerel olarak var mı kontrol et
+        final yereldeVar = yerelBelgeler.any(
+          (belge) => belge.dosyaAdi == dosyaAdi,
         );
 
-        if (yerelBelge.dosyaAdi.isEmpty) {
-          // Yeni belge - indir
+        if (!yereldeVar) {
+          _addLog('📥 İndiriliyor: $dosyaAdi');
           await _downloadDocument(uzakBelge);
-          yeniBelgeSayisi++;
-          _addLog('📥 Yeni belge eklendi: ${uzakBelge['dosyaAdi']}');
-        } else {
-          // Mevcut belge - tarih kontrolü
-          final uzakTarih = DateTime.parse(uzakBelge['olusturmaTarihi']);
-          if (uzakTarih.isAfter(yerelBelge.olusturmaTarihi)) {
-            await _downloadDocument(uzakBelge);
-            guncellenmisBelgeSayisi++;
-            _addLog('🔄 Belge güncellendi: ${uzakBelge['dosyaAdi']}');
-          }
+          indirilenSayi++;
+
+          // UI güncellemesi için kısa bekleme
+          await Future.delayed(const Duration(milliseconds: 500));
         }
       }
 
-      // 4. Yerel belgeleri uzak cihaza gönder
-      _addLog('📤 Yerel belgeler gönderiliyor...');
-      int gonderilmiBelgeSayisi = 0;
+      // Yerel belgelerden eksik olanları yükle
+      _addLog('📤 Eksik belgeler yükleniyor...');
+      final uzakDosyaAdlari = uzakBelgeler.map((b) => b['dosyaAdi']).toSet();
 
       for (final yerelBelge in yerelBelgeler) {
-        final uzakBelgeVar = uzakBelgeler.any(
-          (uzakBelge) => uzakBelge['dosyaAdi'] == yerelBelge.dosyaAdi,
-        );
-
-        if (!uzakBelgeVar) {
+        if (!uzakDosyaAdlari.contains(yerelBelge.dosyaAdi)) {
+          _addLog('📤 Yükleniyor: ${yerelBelge.dosyaAdi}');
           await _uploadDocument(yerelBelge);
-          gonderilmiBelgeSayisi++;
-          _addLog('📤 Belge gönderildi: ${yerelBelge.dosyaAdi}');
+          yuklenenSayi++;
+
+          // UI güncellemesi için kısa bekleme
+          await Future.delayed(const Duration(milliseconds: 500));
         }
       }
 
-      // 5. Senkronizasyon tamamlandı
+      // 4. Senkronizasyon tamamlandı
       Navigator.pop(context); // Progress dialog'u kapat
 
       _addLog('✅ Senkronizasyon tamamlandı!');
       _addLog('📊 Sonuçlar:');
-      _addLog('   • Yeni belgeler: $yeniBelgeSayisi');
-      _addLog('   • Güncellenen belgeler: $guncellenmisBelgeSayisi');
-      _addLog('   • Gönderilen belgeler: $gonderilmiBelgeSayisi');
+      _addLog('   • İndirilen belgeler: $indirilenSayi');
+      _addLog('   • Yüklenen belgeler: $yuklenenSayi');
+      _addLog('   • Toplam uzak belgeler: ${uzakBelgeler.length}');
+      _addLog('   • Toplam yerel belgeler: ${yerelBelgeler.length}');
+
+      // Başarı mesajı
+      final mesaj =
+          indirilenSayi + yuklenenSayi == 0
+              ? 'Tüm belgeler zaten senkronize!'
+              : 'Senkronizasyon tamamlandı!\n'
+                  'İndirilen: $indirilenSayi, Yüklenen: $yuklenenSayi';
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Senkronizasyon tamamlandı!\n'
-            'Yeni: $yeniBelgeSayisi, Güncellenen: $guncellenmisBelgeSayisi, '
-            'Gönderilen: $gonderilmiBelgeSayisi',
-          ),
+          content: Text(mesaj),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
         ),
       );
-    } catch (e) {
-      Navigator.pop(context); // Progress dialog'u kapat
-      _addLog('❌ Senkronizasyon hatası: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Senkronizasyon hatası: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 
-  // Gerçek senkronizasyon işlemi
-  Future<void> _performRealSynchronization() async {
-    try {
-      _addLog('🔄 Senkronizasyon başlatıldı');
-
-      // 1. Yerel belgeleri al
-      _addLog('📊 Yerel belgeler kontrol ediliyor...');
-      final veriTabani = VeriTabaniServisi();
-      final yerelBelgeler = await veriTabani.belgeleriGetir();
-      _addLog('📁 Yerel belge sayısı: ${yerelBelgeler.length}');
-
-      // 2. Uzak cihazdan belgeleri al
-      _addLog('📥 Uzak cihazdan belgeler alınıyor...');
-      final uzakBelgeler = await _getRemoteDocuments();
-      _addLog('📁 Uzak belge sayısı: ${uzakBelgeler.length}');
-
-      // 3. Karşılaştırma ve senkronizasyon
-      _addLog('🔍 Belgeler karşılaştırılıyor...');
-      int yeniBelgeSayisi = 0;
-      int guncellenmisBelgeSayisi = 0;
-
-      for (final uzakBelge in uzakBelgeler) {
-        final yerelBelge = yerelBelgeler.firstWhere(
-          (belge) => belge.dosyaAdi == uzakBelge['dosyaAdi'],
-          orElse:
-              () => BelgeModeli(
-                dosyaAdi: '',
-                dosyaYolu: '',
-                dosyaBoyutu: 0,
-                olusturmaTarihi: DateTime.now(),
-                kategoriId: 1,
-              ),
-        );
-
-        if (yerelBelge.dosyaAdi.isEmpty) {
-          // Yeni belge - indir
-          await _downloadDocument(uzakBelge);
-          yeniBelgeSayisi++;
-          _addLog('📥 Yeni belge eklendi: ${uzakBelge['dosyaAdi']}');
-        } else {
-          // Mevcut belge - tarih kontrolü
-          final uzakTarih = DateTime.parse(uzakBelge['olusturmaTarihi']);
-          if (uzakTarih.isAfter(yerelBelge.olusturmaTarihi)) {
-            await _downloadDocument(uzakBelge);
-            guncellenmisBelgeSayisi++;
-            _addLog('🔄 Belge güncellendi: ${uzakBelge['dosyaAdi']}');
-          }
-        }
+      // Belge listesini yenile (eğer ana ekrandaysak)
+      if (mounted) {
+        setState(() {
+          // UI yenilenmesi için
+        });
       }
-
-      // 4. Yerel belgeleri uzak cihaza gönder
-      _addLog('📤 Yerel belgeler gönderiliyor...');
-      int gonderilmiBelgeSayisi = 0;
-
-      for (final yerelBelge in yerelBelgeler) {
-        final uzakBelgeVar = uzakBelgeler.any(
-          (uzakBelge) => uzakBelge['dosyaAdi'] == yerelBelge.dosyaAdi,
-        );
-
-        if (!uzakBelgeVar) {
-          await _uploadDocument(yerelBelge);
-          gonderilmiBelgeSayisi++;
-          _addLog('📤 Belge gönderildi: ${yerelBelge.dosyaAdi}');
-        }
-      }
-
-      // 5. Senkronizasyon tamamlandı
-      Navigator.pop(context); // Progress dialog'u kapat
-
-      _addLog('✅ Senkronizasyon tamamlandı!');
-      _addLog('📊 Sonuçlar:');
-      _addLog('   • Yeni belgeler: $yeniBelgeSayisi');
-      _addLog('   • Güncellenen belgeler: $guncellenmisBelgeSayisi');
-      _addLog('   • Gönderilen belgeler: $gonderilmiBelgeSayisi');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Senkronizasyon tamamlandı!\n'
-            'Yeni: $yeniBelgeSayisi, Güncellenen: $guncellenmisBelgeSayisi, '
-            'Gönderilen: $gonderilmiBelgeSayisi',
-          ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
-        ),
-      );
     } catch (e) {
       Navigator.pop(context); // Progress dialog'u kapat
       _addLog('❌ Senkronizasyon hatası: $e');
@@ -614,12 +561,14 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         final veriTabani = VeriTabaniServisi();
         final yeniBelge = BelgeModeli(
           dosyaAdi: dosyaAdi,
-          orijinalDosyaAdi: belgeData['dosyaAdi'] ?? dosyaAdi,
+          orijinalDosyaAdi: belgeData['orijinalDosyaAdi'] ?? dosyaAdi,
           dosyaYolu: yeniDosyaYolu,
           dosyaBoyutu: response.bodyBytes.length,
           dosyaTipi: belgeData['dosyaTipi'] ?? 'unknown',
           dosyaHash: belgeData['dosyaHash'] ?? '',
-          olusturmaTarihi: DateTime.parse(belgeData['olusturmaTarihi']),
+          olusturmaTarihi: DateTime.parse(
+            belgeData['olusturmaTarihi'] ?? DateTime.now().toIso8601String(),
+          ),
           guncellemeTarihi: DateTime.now(),
           kategoriId: belgeData['kategoriId'] ?? 1,
           baslik: belgeData['baslik'],

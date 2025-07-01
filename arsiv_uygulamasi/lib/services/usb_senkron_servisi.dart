@@ -498,6 +498,61 @@ class UsbSenkronServisi {
             'sonGorulen': DateTime.now().toIso8601String(),
           });
 
+          // Şimdi bağlantı kurma isteği gönder
+          try {
+            _logEkle('🔗 Bağlantı kurma isteği gönderiliyor...');
+            final connectResponse = await http
+                .post(
+                  Uri.parse('http://$ip:$port/connect'),
+                  headers: {
+                    'User-Agent': 'Arsivim-Client',
+                    'Content-Type': 'application/json',
+                  },
+                  body: json.encode({
+                    'clientId': _httpSunucu.cihazId,
+                    'clientName': 'Arşivim Mobil',
+                    'platform': 'Mobil',
+                    'belgeSayisi': await _veriTabani.toplamBelgeSayisi(),
+                    'toplamBoyut': await _veriTabani.toplamDosyaBoyutu(),
+                  }),
+                )
+                .timeout(const Duration(seconds: 10));
+
+            if (connectResponse.statusCode == 200) {
+              final connectData = json.decode(connectResponse.body);
+              _logEkle('✅ Bağlantı kuruldu: ${connectData['message']}');
+
+              // Server bilgilerini güncelle
+              if (connectData['serverInfo'] != null) {
+                final serverInfo = connectData['serverInfo'];
+                final updatedCihaz = SenkronCihazi(
+                  id: cihaz.id,
+                  ad: cihaz.ad,
+                  ip: cihaz.ip,
+                  mac: cihaz.mac,
+                  platform: cihaz.platform,
+                  sonGorulen: cihaz.sonGorulen,
+                  aktif: cihaz.aktif,
+                  belgeSayisi: serverInfo['belgeSayisi'] ?? cihaz.belgeSayisi,
+                  toplamBoyut: serverInfo['toplamBoyut'] ?? cihaz.toplamBoyut,
+                );
+                _bagliBulunanCihaz = updatedCihaz;
+                _cihazDurumuGuncelle(CihazDurumu.BAGLI);
+                _logEkle('🎉 BAĞLANTI BAŞARILI! Cihaz: ${updatedCihaz.ad}');
+                _basariBildirimiGonder(updatedCihaz);
+                return true;
+              }
+            } else {
+              _logEkle(
+                '⚠️ Bağlantı kurma yanıtı: ${connectResponse.statusCode}',
+              );
+            }
+          } catch (e) {
+            _logEkle('⚠️ Bağlantı kurma hatası: $e');
+            // Yine de devam et, info endpoint'i çalışıyor
+          }
+
+          // Eğer connect başarısız olduysa veya serverInfo yoksa, basit bağlantı kur
           _bagliBulunanCihaz = cihaz;
           _cihazDurumuGuncelle(CihazDurumu.BAGLI);
           _logEkle('🎉 BAĞLANTI BAŞARILI! Cihaz: ${cihaz.ad}');
