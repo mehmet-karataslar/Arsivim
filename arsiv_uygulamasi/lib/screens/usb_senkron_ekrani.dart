@@ -4,15 +4,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:network_info_plus/network_info_plus.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:http/http.dart' as http;
 import '../services/usb_senkron_servisi.dart';
 import '../services/http_sunucu_servisi.dart';
-import '../services/veritabani_servisi.dart';
-import '../services/dosya_servisi.dart';
 import '../services/tema_yoneticisi.dart';
-import '../models/belge_modeli.dart';
+import '../services/senkron_manager.dart';
+import '../models/senkron_cihazi.dart' as models;
+import '../widgets/qr_scanner_widget.dart';
+import '../widgets/senkron_dialogs.dart';
+import '../widgets/senkron_cards.dart';
 
 class UsbSenkronEkrani extends StatefulWidget {
   const UsbSenkronEkrani({Key? key}) : super(key: key);
@@ -25,6 +24,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     with TickerProviderStateMixin {
   final UsbSenkronServisi _senkronServisi = UsbSenkronServisi.instance;
   final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
+  final SenkronManager _senkronManager = SenkronManager.instance;
   final TextEditingController _ipController = TextEditingController();
   final NetworkInfo _networkInfo = NetworkInfo();
 
@@ -36,7 +36,13 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
   String? _localIP;
   bool _sunucuCalisiyorMu = false;
   bool _baglantiDeneniyor = false;
-  SenkronCihazi? _bagliBulunanCihaz;
+  models.SenkronCihazi? _bagliBulunanCihaz;
+
+  // Progress tracking için ValueNotifier'lar
+  final ValueNotifier<double> _progressNotifier = ValueNotifier<double>(0.0);
+  final ValueNotifier<String> _currentOperationNotifier = ValueNotifier<String>(
+    '',
+  );
 
   @override
   void initState() {
@@ -46,18 +52,24 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     _getLocalIP();
     _checkServerStatus();
     _setupDeviceConnectionCallback();
+    _setupSenkronManagerCallbacks();
   }
 
   void _setupDeviceConnectionCallback() {
+    print('🔧 USB Senkron Ekranı: Callback kuruluyor...');
     // HTTP sunucusuna cihaz bağlantı callback'i ekle
     _httpSunucu.setOnDeviceConnected((deviceInfo) {
+      print('🎉 USB SENKRON CALLBACK ÇALIŞTI!');
       _addLog('🎉 YENİ CİHAZ BAĞLANDI!');
       _addLog('📱 Cihaz: ${deviceInfo['clientName']}');
       _addLog('🌐 IP: ${deviceInfo['ip']}');
+      _addLog(
+        '⏰ Bağlantı Zamanı: ${DateTime.now().toString().substring(11, 19)}',
+      );
 
       // Bağlı cihaz bilgisini güncelle
       setState(() {
-        _bagliBulunanCihaz = SenkronCihazi(
+        _bagliBulunanCihaz = models.SenkronCihazi(
           id: deviceInfo['clientId'],
           ad: deviceInfo['clientName'],
           ip: deviceInfo['ip'],
@@ -65,34 +77,82 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           platform: 'Mobil',
           sonGorulen: DateTime.now(),
           aktif: true,
-          belgeSayisi: 0,
-          toplamBoyut: 0,
+          belgeSayisi: deviceInfo['belgeSayisi'] ?? 0,
+          toplamBoyut: deviceInfo['toplamBoyut'] ?? 0,
         );
       });
 
-      // Başarı bildirimi göster
-      _showSuccessDialog();
+      // PC için sistem bildirimi ve ses ile uyarı
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        SystemSound.play(SystemSoundType.alert);
+        SenkronDialogs.showPCConnectionDialog(
+          context,
+          deviceInfo,
+          _performRealSynchronization,
+        );
+      } else {
+        SenkronDialogs.showSuccessDialog(
+          context,
+          _bagliBulunanCihaz,
+          _startSynchronization,
+        );
+      }
 
-      // Snackbar ile de bildirim göster
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${deviceInfo['clientName']} bağlandı!',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      // Enhanced Snackbar
+      _showConnectionSnackbar(deviceInfo);
     });
+  }
+
+  void _setupSenkronManagerCallbacks() {
+    _senkronManager.setCallbacks(
+      onProgress: (progress) {
+        _progressNotifier.value = progress;
+      },
+      onOperation: (operation) {
+        _currentOperationNotifier.value = operation;
+      },
+      onLog: (message) {
+        _addLog(message);
+      },
+    );
+  }
+
+  void _showConnectionSnackbar(Map<String, dynamic> deviceInfo) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.devices_rounded, color: Colors.white, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '📱 ${deviceInfo['clientName']} bağlandı!',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    'IP: ${deviceInfo['ip']} • Belgeler: ${deviceInfo['belgeSayisi'] ?? 0}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.check_circle, color: Colors.white, size: 28),
+          ],
+        ),
+        backgroundColor: Colors.green[600],
+        duration: const Duration(seconds: 8),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   void _initAnimations() {
@@ -144,8 +204,81 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         _sunucuCalisiyorMu = true;
       });
       _addLog('✅ HTTP sunucusu başlatıldı');
+      _addLog('🌐 Sunucu dinleniyor: $_localIP:8080');
+      _showServerStartedSnackbar();
     } catch (e) {
       _addLog('❌ Sunucu başlatma hatası: $e');
+      _showServerErrorSnackbar(e.toString());
+    }
+  }
+
+  void _showServerStartedSnackbar() {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.wifi, color: Colors.white, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '🌐 Sunucu Başlatıldı!',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Adres: $_localIP:8080 • Mobil cihazlar bağlanabilir',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.check_circle, color: Colors.white, size: 28),
+            ],
+          ),
+          backgroundColor: Colors.blue[600],
+          duration: const Duration(seconds: 6),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    }
+  }
+
+  void _showServerErrorSnackbar(String error) {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Sunucu başlatılamadı: $error',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red[600],
+          duration: const Duration(seconds: 8),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
     }
   }
 
@@ -173,12 +306,29 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         _addLog('🎉 BAĞLANTI BAŞARILI!');
 
         // Başarı bildirimi göster
-        _showSuccessDialog();
+        SenkronDialogs.showSuccessDialog(
+          context,
+          _bagliBulunanCihaz,
+          _startSynchronization,
+        );
 
         // Bağlı cihaz bilgisini güncelle
-        setState(() {
-          _bagliBulunanCihaz = _senkronServisi.bagliBulunanCihaz;
-        });
+        final usbCihaz = _senkronServisi.bagliBulunanCihaz;
+        if (usbCihaz != null) {
+          setState(() {
+            _bagliBulunanCihaz = models.SenkronCihazi(
+              id: usbCihaz.id,
+              ad: usbCihaz.ad,
+              ip: usbCihaz.ip,
+              mac: usbCihaz.mac,
+              platform: usbCihaz.platform,
+              sonGorulen: usbCihaz.sonGorulen,
+              aktif: usbCihaz.aktif,
+              belgeSayisi: usbCihaz.belgeSayisi,
+              toplamBoyut: usbCihaz.toplamBoyut,
+            );
+          });
+        }
       } else {
         _addLog('❌ Bağlantı başarısız');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -213,129 +363,6 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     });
   }
 
-  // Başarı bildirimi dialog'u
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle,
-                    color: Colors.green,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Bağlantı Başarılı!',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Cihaz bağlantısı başarıyla kuruldu!',
-                  style: TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.devices,
-                            color: Colors.blue,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _bagliBulunanCihaz?.ad ?? 'Bilinmeyen Cihaz',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.computer,
-                            color: Colors.grey[600],
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${_bagliBulunanCihaz?.platform ?? "Bilinmeyen"}',
-                          ),
-                          const Spacer(),
-                          Icon(Icons.folder, color: Colors.grey[600], size: 16),
-                          const SizedBox(width: 4),
-                          Text('${_bagliBulunanCihaz?.belgeSayisi ?? 0} belge'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  '🎉 Artık dosyalarınızı senkronize edebilirsiniz!',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.green,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Tamam'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _startSynchronization();
-                },
-                icon: const Icon(Icons.sync),
-                label: const Text('Şimdi Senkronize Et'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
-          ),
-    );
-  }
-
   // Senkronizasyon başlatma
   void _startSynchronization() {
     if (_bagliBulunanCihaz == null) {
@@ -364,140 +391,31 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           ),
     );
 
-    // Gerçek senkronizasyon başlat (basit versiyon)
-    _performSimpleSyncWithRealData();
+    // Gerçek senkronizasyon başlat
+    _performRealSynchronization();
   }
 
-  // Cihaz bağlantısını kesme
-  void _disconnectDevice() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Bağlantıyı Kes'),
-            content: Text(
-              '${_bagliBulunanCihaz?.ad ?? "Cihaz"} ile bağlantıyı kesmek istediğinizden emin misiniz?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('İptal'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _bagliBulunanCihaz = null;
-                  });
-                  _addLog('🔌 Cihaz bağlantısı kesildi');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Bağlantı kesildi')),
-                  );
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('Kes', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
-    );
-  }
-
-  // Dosya boyutu formatlama
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
-
-  // Gerçek senkronizasyon (dosya transferi ile)
-  Future<void> _performSimpleSyncWithRealData() async {
+  // Gerçek senkronizasyon işlemi
+  Future<void> _performRealSynchronization() async {
     try {
-      _addLog('🔄 Senkronizasyon başlatıldı');
-
-      // 1. Yerel belgeleri al
-      _addLog('📊 Yerel belgeler kontrol ediliyor...');
-      final veriTabani = VeriTabaniServisi();
-      final yerelBelgeler = await veriTabani.belgeleriGetir();
-      _addLog('📁 Yerel belge sayısı: ${yerelBelgeler.length}');
-
-      // 2. Uzak cihazdan belgeleri al
-      _addLog('📥 Uzak cihazdan belgeler alınıyor...');
-      final uzakBelgeler = await _getRemoteDocuments();
-      _addLog('📁 Uzak belge sayısı: ${uzakBelgeler.length}');
-
-      // 3. Karşılaştırma ve transfer
-      int indirilenSayi = 0;
-      int yuklenenSayi = 0;
-
-      // Uzak belgelerden eksik olanları indir
-      _addLog('📥 Eksik belgeler indiriliyor...');
-      for (final uzakBelge in uzakBelgeler) {
-        final dosyaAdi = uzakBelge['dosyaAdi'];
-
-        // Bu belge yerel olarak var mı kontrol et
-        final yereldeVar = yerelBelgeler.any(
-          (belge) => belge.dosyaAdi == dosyaAdi,
-        );
-
-        if (!yereldeVar) {
-          _addLog('📥 İndiriliyor: $dosyaAdi');
-          await _downloadDocument(uzakBelge);
-          indirilenSayi++;
-
-          // UI güncellemesi için kısa bekleme
-          await Future.delayed(const Duration(milliseconds: 500));
-        }
-      }
-
-      // Yerel belgelerden eksik olanları yükle
-      _addLog('📤 Eksik belgeler yükleniyor...');
-      final uzakDosyaAdlari = uzakBelgeler.map((b) => b['dosyaAdi']).toSet();
-
-      for (final yerelBelge in yerelBelgeler) {
-        if (!uzakDosyaAdlari.contains(yerelBelge.dosyaAdi)) {
-          _addLog('📤 Yükleniyor: ${yerelBelge.dosyaAdi}');
-          await _uploadDocument(yerelBelge);
-          yuklenenSayi++;
-
-          // UI güncellemesi için kısa bekleme
-          await Future.delayed(const Duration(milliseconds: 500));
-        }
-      }
-
-      // 4. Senkronizasyon tamamlandı
-      Navigator.pop(context); // Progress dialog'u kapat
-
-      _addLog('✅ Senkronizasyon tamamlandı!');
-      _addLog('📊 Sonuçlar:');
-      _addLog('   • İndirilen belgeler: $indirilenSayi');
-      _addLog('   • Yüklenen belgeler: $yuklenenSayi');
-      _addLog('   • Toplam uzak belgeler: ${uzakBelgeler.length}');
-      _addLog('   • Toplam yerel belgeler: ${yerelBelgeler.length}');
-
-      // Başarı mesajı
-      final mesaj =
-          indirilenSayi + yuklenenSayi == 0
-              ? 'Tüm belgeler zaten senkronize!'
-              : 'Senkronizasyon tamamlandı!\n'
-                  'İndirilen: $indirilenSayi, Yüklenen: $yuklenenSayi';
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(mesaj),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
-        ),
+      // Progress dialog'u göster
+      _progressNotifier.value = 0.0;
+      _currentOperationNotifier.value = 'Senkronizasyon başlatılıyor...';
+      SenkronDialogs.showProgressDialog(
+        context,
+        _progressNotifier,
+        _currentOperationNotifier,
       );
 
-      // Belge listesini yenile (eğer ana ekrandaysak)
-      if (mounted) {
-        setState(() {
-          // UI yenilenmesi için
-        });
-      }
+      // Senkronizasyon manager ile işlemi başlat
+      final results = await _senkronManager.performSynchronization(
+        _bagliBulunanCihaz!,
+      );
+
+      Navigator.pop(context); // Progress dialog'u kapat
+
+      // Sonuçları göster
+      _showSyncResultsSnackbar(results);
     } catch (e) {
       Navigator.pop(context); // Progress dialog'u kapat
       _addLog('❌ Senkronizasyon hatası: $e');
@@ -510,135 +428,92 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     }
   }
 
-  // Uzak cihazdan belge listesi al
-  Future<List<Map<String, dynamic>>> _getRemoteDocuments() async {
-    try {
-      final response = await http
-          .get(
-            Uri.parse('http://${_bagliBulunanCihaz!.ip}:8080/documents'),
-            headers: {'Accept': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 10));
+  void _showSyncResultsSnackbar(Map<String, int> results) {
+    final yeni = results['yeni'] ?? 0;
+    final guncellenen = results['guncellenen'] ?? 0;
+    final gonderilen = results['gonderilen'] ?? 0;
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(data['documents'] ?? []);
-      } else {
-        throw Exception('HTTP ${response.statusCode}: ${response.body}');
-      }
-    } catch (e) {
-      _addLog('❌ Uzak belgeler alınamadı: $e');
-      return [];
-    }
-  }
-
-  // Uzak cihazdan belge indir
-  Future<void> _downloadDocument(Map<String, dynamic> belgeData) async {
-    try {
-      final dosyaAdi = belgeData['dosyaAdi'];
-      _addLog('📥 İndiriliyor: $dosyaAdi');
-
-      // Belge içeriğini al
-      final response = await http
-          .get(
-            Uri.parse(
-              'http://${_bagliBulunanCihaz!.ip}:8080/download/$dosyaAdi',
-            ),
-          )
-          .timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        // Dosyayı belgeler klasörüne kaydet
-        final dosyaServisi = DosyaServisi();
-        final belgelerKlasoru = await dosyaServisi.belgelerKlasoruYolu();
-        final yeniDosyaYolu = '$belgelerKlasoru/$dosyaAdi';
-
-        // Dosyayı yaz
-        final dosya = File(yeniDosyaYolu);
-        await dosya.writeAsBytes(response.bodyBytes);
-
-        // Veritabanına ekle
-        final veriTabani = VeriTabaniServisi();
-        final yeniBelge = BelgeModeli(
-          dosyaAdi: dosyaAdi,
-          orijinalDosyaAdi: belgeData['orijinalDosyaAdi'] ?? dosyaAdi,
-          dosyaYolu: yeniDosyaYolu,
-          dosyaBoyutu: response.bodyBytes.length,
-          dosyaTipi: belgeData['dosyaTipi'] ?? 'unknown',
-          dosyaHash: belgeData['dosyaHash'] ?? '',
-          olusturmaTarihi: DateTime.parse(
-            belgeData['olusturmaTarihi'] ?? DateTime.now().toIso8601String(),
-          ),
-          guncellemeTarihi: DateTime.now(),
-          kategoriId: belgeData['kategoriId'] ?? 1,
-          baslik: belgeData['baslik'],
-          aciklama: belgeData['aciklama'],
-          kisiId: belgeData['kisiId'],
-          etiketler:
-              belgeData['etiketler'] != null
-                  ? List<String>.from(belgeData['etiketler'])
-                  : null,
-        );
-
-        await veriTabani.belgeEkle(yeniBelge);
-        _addLog('✅ İndirildi: $dosyaAdi');
-      } else {
-        throw Exception('HTTP ${response.statusCode}');
-      }
-    } catch (e) {
-      _addLog('❌ İndirme hatası (${belgeData['dosyaAdi']}): $e');
-    }
-  }
-
-  // Yerel belgeyi uzak cihaza yükle
-  Future<void> _uploadDocument(BelgeModeli belge) async {
-    try {
-      _addLog('📤 Yükleniyor: ${belge.dosyaAdi}');
-
-      // Dosya içeriğini oku
-      final dosya = File(belge.dosyaYolu);
-      if (!await dosya.exists()) {
-        throw Exception('Dosya bulunamadı: ${belge.dosyaYolu}');
-      }
-
-      final dosyaBytes = await dosya.readAsBytes();
-
-      // Multipart request oluştur
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('http://${_bagliBulunanCihaz!.ip}:8080/upload'),
-      );
-
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          dosyaBytes,
-          filename: belge.dosyaAdi,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Senkronizasyon tamamlandı!\n'
+          'Belgeler: Yeni $yeni, Güncellenen $guncellenen, '
+          'Gönderilen $gonderilen\n'
+          'Kategoriler ve kişiler de senkronize edildi',
         ),
-      );
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
 
-      // Belge metadata'sını ekle
-      request.fields['metadata'] = json.encode({
-        'dosyaAdi': belge.dosyaAdi,
-        'kategoriId': belge.kategoriId,
-        'baslik': belge.baslik,
-        'aciklama': belge.aciklama,
-        'kisiId': belge.kisiId,
-        'etiketler': belge.etiketler,
-        'olusturmaTarihi': belge.olusturmaTarihi.toIso8601String(),
+  // Cihaz bağlantısını kesme
+  void _disconnectDevice() {
+    SenkronDialogs.showDisconnectDialog(context, _bagliBulunanCihaz, () {
+      setState(() {
+        _bagliBulunanCihaz = null;
       });
+      _addLog('🔌 Cihaz bağlantısı kesildi');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Bağlantı kesildi')));
+    });
+  }
 
-      final response = await request.send().timeout(
-        const Duration(seconds: 30),
-      );
+  // Dosya boyutu formatlama
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
 
-      if (response.statusCode == 200) {
-        _addLog('✅ Yüklendi: ${belge.dosyaAdi}');
+  // QR kod tarama başlatma
+  void _startQRScan() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => QRScannerScreen(
+              onQRScanned: (String qrData) {
+                Navigator.pop(context);
+                _handleQRData(qrData);
+              },
+            ),
+      ),
+    );
+  }
+
+  // QR kod verisi işleme
+  void _handleQRData(String qrData) {
+    try {
+      final data = json.decode(qrData);
+
+      if (data['type'] == 'arsivim_connection') {
+        final ip = data['ip'];
+        final port = data['port'] ?? 8080;
+        final url = '$ip:$port';
+
+        // IP adresini otomatik doldur
+        _ipController.text = url;
+
+        // Otomatik bağlantı dene
+        _connectToDevice();
+
+        _addLog('📱 QR kod tarandı: $url');
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('QR kod tarandı: $url')));
       } else {
-        throw Exception('HTTP ${response.statusCode}');
+        throw Exception('Geçersiz QR kod formatı');
       }
     } catch (e) {
-      _addLog('❌ Yükleme hatası (${belge.dosyaAdi}): $e');
+      _addLog('❌ QR kod hatası: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Geçersiz QR kod')));
     }
   }
 
@@ -646,6 +521,8 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
   void dispose() {
     _pulseController.dispose();
     _ipController.dispose();
+    _progressNotifier.dispose();
+    _currentOperationNotifier.dispose();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -655,6 +532,20 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.of(
+              context,
+            ).pushNamedAndRemoveUntil('/', (route) => false);
+          },
+        ),
+        automaticallyImplyLeading: false,
+      ),
+      extendBodyBehindAppBar: true,
       body: Container(
         decoration: const BoxDecoration(gradient: TemaYoneticisi.anaGradient),
         child: SafeArea(
@@ -685,12 +576,33 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
       padding: const EdgeInsets.all(16.0),
       child: Row(
         children: [
-          const Expanded(
+          // Geri gelme butonu (PC için)
+          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed:
+                    () => Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/', (route) => false),
+                tooltip: 'Ana Sayfaya Dön',
+              ),
+            ),
+          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
+            const SizedBox(width: 12),
+          Expanded(
             child: Text(
               'Cihaz Senkronizasyonu',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 24,
+                fontSize:
+                    Platform.isWindows || Platform.isLinux || Platform.isMacOS
+                        ? 22
+                        : 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -754,741 +666,45 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
             _buildConnectedDeviceCard(),
             const SizedBox(height: 16),
           ],
-          _buildLogCard(),
+          SenkronCards.buildLogCard(
+            logMesajlari: _logMesajlari,
+            onClearLog: () {
+              setState(() {
+                _logMesajlari.clear();
+              });
+            },
+          ),
         ],
       ),
     );
   }
 
+  // Bu metodları daha sonra kendi kartlarına taşıyacağız
   Widget _buildServerCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  _sunucuCalisiyorMu ? Icons.wifi : Icons.wifi_off,
-                  color: _sunucuCalisiyorMu ? Colors.green : Colors.grey,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _sunucuCalisiyorMu ? 'Sunucu Aktif' : 'Sunucu Kapalı',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (_sunucuCalisiyorMu && _localIP != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Bu IP adresini telefonda girin:',
-                      style: TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      '$_localIP:8080',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Clipboard.setData(
-                              ClipboardData(text: '$_localIP:8080'),
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('IP adresi kopyalandı'),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.copy),
-                          label: const Text('Kopyala'),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () => _showQRCode(context),
-                          icon: const Icon(Icons.qr_code),
-                          label: const Text('QR Kod'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              const Text(
-                'Diğer cihazların bağlanabilmesi için sunucuyu başlatın.',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: _startServer,
-                icon: const Icon(Icons.power_settings_new),
-                label: const Text('Sunucuyu Başlat'),
-              ),
-            ],
-          ],
-        ),
-      ),
+    // Geçici implementasyon
+    return Container(
+      child: Text('Server Card - Will be moved to SenkronCards'),
     );
   }
 
   Widget _buildConnectionCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Cihaza Bağlan',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Bağlanmak istediğiniz cihazın IP adresini girin:',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _ipController,
-              decoration: const InputDecoration(
-                labelText: 'IP Adresi',
-                hintText: '192.168.1.100:8080',
-                helperText: 'Örnek: 192.168.1.100:8080 (port isteğe bağlı)',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.computer),
-              ),
-              keyboardType: TextInputType.url,
-              onChanged: (value) {
-                // Gerçek zamanlı format kontrolü
-                if (value.isNotEmpty && !value.contains('.')) {
-                  // Geçersiz format uyarısı verebiliriz
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _baglantiDeneniyor ? null : _connectToDevice,
-                icon:
-                    _baglantiDeneniyor
-                        ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : const Icon(Icons.link),
-                label: Text(_baglantiDeneniyor ? 'Bağlanıyor...' : 'Bağlan'),
-              ),
-            ),
-          ],
-        ),
-      ),
+    // Geçici implementasyon
+    return Container(
+      child: Text('Connection Card - Will be moved to SenkronCards'),
+    );
+  }
+
+  Widget _buildQRScanCard() {
+    // Geçici implementasyon
+    return Container(
+      child: Text('QR Scan Card - Will be moved to SenkronCards'),
     );
   }
 
   Widget _buildConnectedDeviceCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.devices, color: Colors.green),
-                const SizedBox(width: 8),
-                const Text(
-                  'Bağlı Cihaz',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.green.withOpacity(0.3)),
-                  ),
-                  child: const Text(
-                    'BAĞLI',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Bağlı cihaz bilgileri
-            _buildDeviceInfoRow(
-              Icons.computer,
-              'Cihaz',
-              _bagliBulunanCihaz?.ad ?? "Bilinmeyen",
-            ),
-            _buildDeviceInfoRow(
-              Icons.phone_android,
-              'Platform',
-              _bagliBulunanCihaz?.platform ?? "Bilinmeyen",
-            ),
-            _buildDeviceInfoRow(
-              Icons.wifi,
-              'IP Adresi',
-              _bagliBulunanCihaz?.ip ?? "Bilinmeyen",
-            ),
-            _buildDeviceInfoRow(
-              Icons.folder,
-              'Belgeler',
-              '${_bagliBulunanCihaz?.belgeSayisi ?? 0} adet',
-            ),
-            _buildDeviceInfoRow(
-              Icons.storage,
-              'Boyut',
-              _formatFileSize(_bagliBulunanCihaz?.toplamBoyut ?? 0),
-            ),
-
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 12),
-
-            // Senkronizasyon butonu
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _startSynchronization(),
-                icon: const Icon(Icons.sync),
-                label: const Text('Senkronizasyon Başlat'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _disconnectDevice(),
-                    icon: const Icon(Icons.link_off, size: 18),
-                    label: const Text('Bağlantıyı Kes'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDeviceInfoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.grey[600]),
-          const SizedBox(width: 8),
-          Text(
-            '$label:',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Aktivite Günlüğü',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _logMesajlari.clear();
-                    });
-                  },
-                  child: const Text('Temizle'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child:
-                  _logMesajlari.isEmpty
-                      ? const Center(
-                        child: Text(
-                          'Henüz aktivite yok',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      )
-                      : ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _logMesajlari.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              _logMesajlari[index],
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // QR Kod gösterme
-  void _showQRCode(BuildContext context) {
-    if (_localIP == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('IP adresi henüz alınamadı')),
-      );
-      return;
-    }
-
-    final qrData = json.encode({
-      'type': 'arsivim_connection',
-      'ip': _localIP,
-      'port': 8080,
-      'url': '$_localIP:8080',
-      'name': 'Arşivim Cihazı',
-      'timestamp': DateTime.now().toIso8601String(),
-    });
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('QR Kod ile Bağlantı'),
-            content: SizedBox(
-              width: 300,
-              height: 350,
-              child: Column(
-                children: [
-                  const Text(
-                    'Bu QR kodu telefon ile tarayın:',
-                    style: TextStyle(fontSize: 16),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    child: QrImageView(
-                      data: qrData,
-                      version: QrVersions.auto,
-                      size: 200,
-                      backgroundColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '$_localIP:8080',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Kapat'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  // QR Kod tarama kartı (mobil cihazlar için)
-  Widget _buildQRScanCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.qr_code_scanner, color: Colors.green),
-                SizedBox(width: 8),
-                Text(
-                  'QR Kod ile Bağlan',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Bilgisayardaki QR kodu tarayarak hızlı bağlantı kurun.',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _startQRScan(),
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('QR Kod Tara'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // QR kod tarama başlatma
-  void _startQRScan() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (context) => QRScannerScreen(
-              onQRScanned: (String qrData) {
-                Navigator.pop(context);
-                _handleQRData(qrData);
-              },
-            ),
-      ),
-    );
-  }
-
-  // QR kod verisi işleme
-  void _handleQRData(String qrData) {
-    try {
-      final data = json.decode(qrData);
-
-      if (data['type'] == 'arsivim_connection') {
-        final ip = data['ip'];
-        final port = data['port'] ?? 8080;
-        final url = '$ip:$port';
-
-        // IP adresini otomatik doldur
-        _ipController.text = url;
-
-        // Otomatik bağlantı dene
-        _connectToDevice();
-
-        _addLog('📱 QR kod tarandı: $url');
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('QR kod tarandı: $url')));
-      } else {
-        throw Exception('Geçersiz QR kod formatı');
-      }
-    } catch (e) {
-      _addLog('❌ QR kod hatası: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Geçersiz QR kod')));
-    }
-  }
-}
-
-// QR Scanner Screen
-class QRScannerScreen extends StatefulWidget {
-  final Function(String) onQRScanned;
-
-  const QRScannerScreen({Key? key, required this.onQRScanned})
-    : super(key: key);
-
-  @override
-  State<QRScannerScreen> createState() => _QRScannerScreenState();
-}
-
-class _QRScannerScreenState extends State<QRScannerScreen> {
-  MobileScannerController cameraController = MobileScannerController();
-  bool isScanning = true;
-
-  @override
-  void dispose() {
-    cameraController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('QR Kod Tara'),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: () => cameraController.toggleTorch(),
-            icon: const Icon(Icons.flash_on),
-          ),
-          IconButton(
-            onPressed: () => cameraController.switchCamera(),
-            icon: const Icon(Icons.flip_camera_android),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Stack(
-              children: [
-                MobileScanner(
-                  controller: cameraController,
-                  onDetect: (capture) {
-                    if (isScanning && capture.barcodes.isNotEmpty) {
-                      final String? code = capture.barcodes.first.rawValue;
-                      if (code != null) {
-                        isScanning = false;
-                        widget.onQRScanned(code);
-                      }
-                    }
-                  },
-                ),
-                // Custom overlay
-                Container(
-                  decoration: ShapeDecoration(
-                    shape: QRScannerOverlayShape(
-                      borderColor: Colors.green,
-                      borderRadius: 10,
-                      borderLength: 30,
-                      borderWidth: 10,
-                      cutOutSize: 250,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'QR kodu kamera ile tarayın',
-                    style: TextStyle(fontSize: 16),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Arşivim bağlantı QR kodunu tarayın',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Custom QR Scanner Overlay
-class QRScannerOverlayShape extends ShapeBorder {
-  const QRScannerOverlayShape({
-    this.borderColor = Colors.red,
-    this.borderWidth = 3.0,
-    this.overlayColor = const Color.fromRGBO(0, 0, 0, 80),
-    this.borderRadius = 0,
-    this.borderLength = 40,
-    this.cutOutSize = 250,
-  });
-
-  final Color borderColor;
-  final double borderWidth;
-  final Color overlayColor;
-  final double borderRadius;
-  final double borderLength;
-  final double cutOutSize;
-
-  @override
-  EdgeInsetsGeometry get dimensions => const EdgeInsets.all(10);
-
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
-    return Path()
-      ..fillType = PathFillType.evenOdd
-      ..addPath(getOuterPath(rect), Offset.zero);
-  }
-
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
-    Path path = Path()..addRect(rect);
-    Path holePath =
-        Path()..addRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: rect.center,
-              width: cutOutSize,
-              height: cutOutSize,
-            ),
-            Radius.circular(borderRadius),
-          ),
-        );
-    return Path.combine(PathOperation.difference, path, holePath);
-  }
-
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    final Paint paint =
-        Paint()
-          ..color = overlayColor
-          ..style = PaintingStyle.fill;
-
-    canvas.drawPath(getOuterPath(rect), paint);
-
-    // Draw border
-    final Paint borderPaint =
-        Paint()
-          ..color = borderColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = borderWidth;
-
-    final double centerX = rect.center.dx;
-    final double centerY = rect.center.dy;
-    final double halfSize = cutOutSize / 2;
-
-    // Top-left corner
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY - halfSize),
-      Offset(centerX - halfSize + borderLength, centerY - halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY - halfSize),
-      Offset(centerX - halfSize, centerY - halfSize + borderLength),
-      borderPaint,
-    );
-
-    // Top-right corner
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY - halfSize),
-      Offset(centerX + halfSize - borderLength, centerY - halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY - halfSize),
-      Offset(centerX + halfSize, centerY - halfSize + borderLength),
-      borderPaint,
-    );
-
-    // Bottom-left corner
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY + halfSize),
-      Offset(centerX - halfSize + borderLength, centerY + halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY + halfSize),
-      Offset(centerX - halfSize, centerY + halfSize - borderLength),
-      borderPaint,
-    );
-
-    // Bottom-right corner
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY + halfSize),
-      Offset(centerX + halfSize - borderLength, centerY + halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY + halfSize),
-      Offset(centerX + halfSize, centerY + halfSize - borderLength),
-      borderPaint,
-    );
-  }
-
-  @override
-  ShapeBorder scale(double t) {
-    return QRScannerOverlayShape(
-      borderColor: borderColor,
-      borderWidth: borderWidth,
-      overlayColor: overlayColor,
+    // Geçici implementasyon
+    return Container(
+      child: Text('Connected Device Card - Will be moved to SenkronCards'),
     );
   }
 }

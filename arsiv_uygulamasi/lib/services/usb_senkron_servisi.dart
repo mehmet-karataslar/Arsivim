@@ -29,7 +29,7 @@ enum CihazDurumu {
   SENKRON_EDILIYOR,
 }
 
-class SenkronCihazi {
+class USBSenkronCihazi {
   final String id;
   final String ad;
   final String ip;
@@ -40,7 +40,7 @@ class SenkronCihazi {
   final int belgeSayisi;
   final int toplamBoyut;
 
-  SenkronCihazi({
+  USBSenkronCihazi({
     required this.id,
     required this.ad,
     required this.ip,
@@ -52,8 +52,8 @@ class SenkronCihazi {
     required this.toplamBoyut,
   });
 
-  factory SenkronCihazi.fromJson(Map<String, dynamic> json) {
-    return SenkronCihazi(
+  factory USBSenkronCihazi.fromJson(Map<String, dynamic> json) {
+    return USBSenkronCihazi(
       id: json['id'] ?? '',
       ad: json['ad'] ?? '',
       ip: json['ip'] ?? '',
@@ -123,8 +123,8 @@ class UsbSenkronServisi {
   // State management
   CihazDurumu _cihazDurumu = CihazDurumu.BAGLI_DEGIL;
   UsbSenkronDurumu _senkronDurumu = UsbSenkronDurumu.BEKLEMEDE;
-  List<SenkronCihazi> _bulunanCihazlar = [];
-  SenkronCihazi? _bagliBulunanCihaz;
+  List<USBSenkronCihazi> _bulunanCihazlar = [];
+  USBSenkronCihazi? _bagliBulunanCihaz;
   SenkronIstatistik? _aktifSenkronIstatistik;
 
   // Discovery progress tracking
@@ -136,8 +136,8 @@ class UsbSenkronServisi {
       StreamController<CihazDurumu>.broadcast();
   final StreamController<UsbSenkronDurumu> _senkronDurumuController =
       StreamController<UsbSenkronDurumu>.broadcast();
-  final StreamController<List<SenkronCihazi>> _cihazlarController =
-      StreamController<List<SenkronCihazi>>.broadcast();
+  final StreamController<List<USBSenkronCihazi>> _cihazlarController =
+      StreamController<List<USBSenkronCihazi>>.broadcast();
   final StreamController<SenkronIstatistik?> _istatistikController =
       StreamController<SenkronIstatistik?>.broadcast();
   final StreamController<String> _logController =
@@ -153,15 +153,16 @@ class UsbSenkronServisi {
   // Getters
   CihazDurumu get cihazDurumu => _cihazDurumu;
   UsbSenkronDurumu get senkronDurumu => _senkronDurumu;
-  List<SenkronCihazi> get bulunanCihazlar => _bulunanCihazlar;
-  SenkronCihazi? get bagliBulunanCihaz => _bagliBulunanCihaz;
+  List<USBSenkronCihazi> get bulunanCihazlar => _bulunanCihazlar;
+  USBSenkronCihazi? get bagliBulunanCihaz => _bagliBulunanCihaz;
   SenkronIstatistik? get aktifSenkronIstatistik => _aktifSenkronIstatistik;
 
   // Streams
   Stream<CihazDurumu> get cihazDurumuStream => _cihazDurumuController.stream;
   Stream<UsbSenkronDurumu> get senkronDurumuStream =>
       _senkronDurumuController.stream;
-  Stream<List<SenkronCihazi>> get cihazlarStream => _cihazlarController.stream;
+  Stream<List<USBSenkronCihazi>> get cihazlarStream =>
+      _cihazlarController.stream;
   Stream<SenkronIstatistik?> get istatistikStream =>
       _istatistikController.stream;
   Stream<String> get logStream => _logController.stream;
@@ -347,7 +348,7 @@ class UsbSenkronServisi {
             try {
               final data = json.decode(response.body);
               if (data['app'] == 'arsivim') {
-                final cihaz = SenkronCihazi.fromJson({
+                final cihaz = USBSenkronCihazi.fromJson({
                   ...data,
                   'ip': ip,
                   'mac': '', // MAC adresi şimdilik boş
@@ -398,7 +399,7 @@ class UsbSenkronServisi {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['app'] == 'arsivim') {
-          final cihaz = SenkronCihazi.fromJson({
+          final cihaz = USBSenkronCihazi.fromJson({
             ...data,
             'ip': ip,
             'sonGorulen': DateTime.now().toIso8601String(),
@@ -413,19 +414,24 @@ class UsbSenkronServisi {
     }
   }
 
-  void _cihazBulundu(SenkronCihazi cihaz) {
+  void _cihazBulundu(USBSenkronCihazi cihaz) {
     _logEkle('Cihaz bulundu: ${cihaz.ad} (${cihaz.ip})');
 
-    // Listede varsa güncelle, yoksa ekle
-    final index = _bulunanCihazlar.indexWhere((c) => c.id == cihaz.id);
-    if (index >= 0) {
-      _bulunanCihazlar[index] = cihaz;
+    // Mevcut cihazlar listesinde var mı kontrol et
+    final mevcutIndex = _bulunanCihazlar.indexWhere((c) => c.id == cihaz.id);
+
+    if (mevcutIndex >= 0) {
+      // Mevcutsa güncelle
+      _bulunanCihazlar[mevcutIndex] = cihaz;
     } else {
+      // Yoksa ekle
       _bulunanCihazlar.add(cihaz);
     }
 
-    _cihazlarController.add(_bulunanCihazlar);
+    // Stream'i güncelle
+    _cihazlarController.add(List.from(_bulunanCihazlar));
 
+    // Durumu güncelle
     if (_cihazDurumu == CihazDurumu.ARANYOR) {
       _cihazDurumuGuncelle(CihazDurumu.BULUNDU);
     }
@@ -491,7 +497,7 @@ class UsbSenkronServisi {
           _logEkle('✅ Cihaz doğrulandı: ${data['ad']}');
 
           // Bağlı cihaz olarak kaydet
-          final cihaz = SenkronCihazi.fromJson({
+          final cihaz = USBSenkronCihazi.fromJson({
             ...data,
             'ip': ip,
             'mac': '',
@@ -525,7 +531,7 @@ class UsbSenkronServisi {
               // Server bilgilerini güncelle
               if (connectData['serverInfo'] != null) {
                 final serverInfo = connectData['serverInfo'];
-                final updatedCihaz = SenkronCihazi(
+                final updatedCihaz = USBSenkronCihazi(
                   id: cihaz.id,
                   ad: cihaz.ad,
                   ip: cihaz.ip,
@@ -576,8 +582,7 @@ class UsbSenkronServisi {
   }
 
   // Bağlantı başarı bildirimi
-  void _basariBildirimiGonder(SenkronCihazi cihaz) {
-    // Başarı bildirimi için callback ekleyebiliriz
+  void _basariBildirimiGonder(USBSenkronCihazi cihaz) {
     _logEkle('🔔 Bildirim: ${cihaz.ad} cihazı ile bağlantı kuruldu!');
     _logEkle('📊 Cihaz Bilgileri:');
     _logEkle('   • Platform: ${cihaz.platform}');
@@ -596,73 +601,48 @@ class UsbSenkronServisi {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  Future<bool> cihazaBaglan(SenkronCihazi cihaz) async {
+  Future<bool> cihazaBaglan(USBSenkronCihazi cihaz) async {
+    _logEkle('Cihaza bağlanıyor: ${cihaz.ad} (${cihaz.ip})');
     _cihazDurumuGuncelle(CihazDurumu.BAGLANIYOR);
-    _logEkle('${cihaz.ad} cihazına bağlanılıyor...');
 
     try {
-      // Önce ping testi
-      final pingResponse = await http
-          .get(
-            Uri.parse('http://${cihaz.ip}:$SENKRON_PORTU/ping'),
-            headers: {'User-Agent': 'Arsivim-Client'},
-          )
+      // Bağlantı testi
+      final response = await http
+          .get(Uri.parse('http://${cihaz.ip}:$SENKRON_PORTU/ping'))
           .timeout(const Duration(seconds: 5));
 
-      if (pingResponse.statusCode != 200) {
-        throw Exception('Ping başarısız: ${pingResponse.statusCode}');
-      }
+      if (response.statusCode == 200) {
+        _bagliBulunanCihaz = cihaz;
+        _cihazDurumuGuncelle(CihazDurumu.BAGLI);
+        _logEkle('Bağlantı başarılı: ${cihaz.ad}');
 
-      // Bağlantı kurma isteği gönder
-      final connectResponse = await http
-          .post(
-            Uri.parse('http://${cihaz.ip}:$SENKRON_PORTU/connect'),
-            headers: {
-              'User-Agent': 'Arsivim-Client',
-              'Content-Type': 'application/json',
-            },
-            body: json.encode({
-              'clientId': _httpSunucu.cihazId,
-              'clientName': 'Arşivim Cihazı',
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (connectResponse.statusCode == 200) {
-        final responseData = json.decode(connectResponse.body);
-        final token = responseData['token'] as String?;
-
-        if (token != null) {
-          // Token'ı cihaz bilgisine ekle (geçici olarak)
-          final updatedCihaz = SenkronCihazi(
-            id: cihaz.id,
-            ad: cihaz.ad,
-            ip: cihaz.ip,
-            mac: cihaz.mac,
-            platform: cihaz.platform,
-            sonGorulen: DateTime.now(),
-            aktif: true,
-            belgeSayisi: cihaz.belgeSayisi,
-            toplamBoyut: cihaz.toplamBoyut,
-          );
-
-          _bagliBulunanCihaz = updatedCihaz;
-          _cihazDurumuGuncelle(CihazDurumu.BAGLI);
-          _logEkle('${cihaz.ad} cihazına başarıyla bağlanıldı');
-          _logEkle('Güvenlik token alındı');
-
-          return true;
-        } else {
-          throw Exception('Token alınamadı');
-        }
-      } else {
-        throw Exception(
-          'Bağlantı kurma başarısız: ${connectResponse.statusCode}',
+        // Cihaz durumunu güncelle
+        final updatedCihaz = USBSenkronCihazi(
+          id: cihaz.id,
+          ad: cihaz.ad,
+          ip: cihaz.ip,
+          mac: cihaz.mac,
+          platform: cihaz.platform,
+          sonGorulen: DateTime.now(),
+          aktif: true,
+          belgeSayisi: cihaz.belgeSayisi,
+          toplamBoyut: cihaz.toplamBoyut,
         );
+
+        // Listeyi güncelle
+        final index = _bulunanCihazlar.indexWhere((c) => c.id == cihaz.id);
+        if (index >= 0) {
+          _bulunanCihazlar[index] = updatedCihaz;
+          _cihazlarController.add(List.from(_bulunanCihazlar));
+        }
+
+        return true;
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
       }
     } catch (e) {
       _logEkle('Bağlantı hatası: $e');
-      _cihazDurumuGuncelle(CihazDurumu.BULUNDU);
+      _cihazDurumuGuncelle(CihazDurumu.BAGLI_DEGIL);
       return false;
     }
   }

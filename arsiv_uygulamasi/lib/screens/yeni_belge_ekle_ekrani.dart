@@ -599,15 +599,9 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
               ],
             ),
             const SizedBox(height: 16),
-            GridView.builder(
+            ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1.2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
               itemCount: _dosyaTurleri.length,
               itemBuilder: (context, index) {
                 final entry = _dosyaTurleri.entries.elementAt(index);
@@ -616,6 +610,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 final secili = _secilenDosyaTuru == key;
 
                 return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
                     color:
                         secili
@@ -637,31 +632,61 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                         });
                       },
                       child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
                           children: [
-                            Icon(
-                              value['icon'],
-                              color: secili ? value['color'] : Colors.grey[600],
-                              size: 24,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              value['ad'],
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight:
-                                    secili
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
                                 color:
-                                    secili ? value['color'] : Colors.grey[700],
+                                    secili
+                                        ? value['color'].withOpacity(0.2)
+                                        : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                              child: Icon(
+                                value['icon'],
+                                color:
+                                    secili ? value['color'] : Colors.grey[600],
+                                size: 24,
+                              ),
                             ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    value['ad'],
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight:
+                                          secili
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
+                                      color:
+                                          secili
+                                              ? value['color']
+                                              : Colors.grey[700],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Desteklenen: ${value['uzantilar'].join(', ').toUpperCase()}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (secili)
+                              Icon(
+                                Icons.check_circle,
+                                color: value['color'],
+                                size: 20,
+                              ),
                           ],
                         ),
                       ),

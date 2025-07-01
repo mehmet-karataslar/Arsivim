@@ -88,6 +88,12 @@ class HttpSunucuServisi {
             case '/documents':
               responseBody = await _handleDocuments();
               break;
+            case '/categories':
+              responseBody = await _handleCategories();
+              break;
+            case '/people':
+              responseBody = await _handlePeople();
+              break;
             default:
               if (request.uri.path.startsWith('/download/')) {
                 responseBody = await _handleDownload(request);
@@ -358,6 +364,77 @@ class HttpSunucuServisi {
       print('❌ Download endpoint hatası: $e');
       request.response.statusCode = 500;
       return json.encode({'error': 'İndirme hatası: $e'});
+    }
+  }
+
+  // Kategori listesi endpoint'i
+  Future<String> _handleCategories() async {
+    try {
+      print('📂 Kategori listesi istendi');
+      final kategoriler = await _veriTabani.kategorileriGetir();
+
+      final kategoriListesi =
+          kategoriler
+              .map(
+                (kategori) => {
+                  'id': kategori.id,
+                  'ad': kategori.kategoriAdi,
+                  'renkKodu': kategori.renkKodu,
+                  'simgeKodu': kategori.simgeKodu,
+                  'aciklama': kategori.aciklama,
+                  'olusturmaTarihi': kategori.olusturmaTarihi.toIso8601String(),
+                  'aktif': kategori.aktif,
+                  'belgeSayisi': kategori.belgeSayisi,
+                },
+              )
+              .toList();
+
+      return json.encode({
+        'status': 'success',
+        'categories': kategoriListesi,
+        'count': kategoriListesi.length,
+      });
+    } catch (e) {
+      print('❌ Categories endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Kategoriler alınamadı: $e',
+      });
+    }
+  }
+
+  // Kişi listesi endpoint'i
+  Future<String> _handlePeople() async {
+    try {
+      print('🧑‍🤝‍🧑 Kişi listesi istendi');
+      final kisiler = await _veriTabani.kisileriGetir();
+
+      final kisiListesi =
+          kisiler
+              .map(
+                (kisi) => {
+                  'id': kisi.id,
+                  'ad': kisi.ad,
+                  'soyad': kisi.soyad,
+                  'tamAd': kisi.tamAd,
+                  'olusturmaTarihi': kisi.olusturmaTarihi.toIso8601String(),
+                  'guncellemeTarihi': kisi.guncellemeTarihi.toIso8601String(),
+                  'aktif': kisi.aktif,
+                },
+              )
+              .toList();
+
+      return json.encode({
+        'status': 'success',
+        'people': kisiListesi,
+        'count': kisiListesi.length,
+      });
+    } catch (e) {
+      print('❌ People endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Kişiler alınamadı: $e',
+      });
     }
   }
 

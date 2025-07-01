@@ -196,7 +196,7 @@ class KategoriModeli {
         olusturmaTarihi: simdi,
       ),
       KategoriModeli(
-        kategoriAdi: 'Kurum',
+        kategoriAdi: 'Resmi',
         renkKodu: '#009688',
         simgeKodu: 'business',
         aciklama: 'Resmi kurum belgeleri',
