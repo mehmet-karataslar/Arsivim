@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:network_info_plus/network_info_plus.dart';
 import '../services/usb_senkron_servisi.dart';
 import '../services/http_sunucu_servisi.dart';
-import '../services/tema_yoneticisi.dart';
 import '../services/senkron_manager.dart';
 import '../models/senkron_cihazi.dart' as models;
 import '../widgets/qr_scanner_widget.dart';
@@ -710,22 +709,15 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {
-            Navigator.of(
-              context,
-            ).pushNamedAndRemoveUntil('/', (route) => false);
-          },
-        ),
-        automaticallyImplyLeading: false,
-      ),
       extendBodyBehindAppBar: true,
       body: Container(
-        decoration: const BoxDecoration(gradient: TemaYoneticisi.anaGradient),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.blue.shade400, Colors.purple.shade400],
+          ),
+        ),
         child: SafeArea(
           child: Column(
             children: [

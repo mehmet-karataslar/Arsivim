@@ -8,7 +8,7 @@ import 'belgeler_ekrani.dart';
 import 'kategoriler_ekrani.dart';
 import 'kisiler_ekrani.dart';
 import 'yeni_belge_ekle_ekrani.dart';
-import 'ayarlar_ekrani.dart';
+
 import 'usb_senkron_ekrani.dart';
 import 'yedekleme_ekrani.dart';
 
@@ -249,29 +249,6 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             ),
             const SizedBox(width: 8),
           ],
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const AyarlarEkrani(),
-                  ),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -392,9 +369,9 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             children: [
               _buildIstatistikKartlari(),
               SizedBox(height: isDesktop ? 24 : 32),
-              _buildSonBelgeler(),
+              _buildHizliIslemler(), // Hızlı işlemler üste taşındı
               SizedBox(height: isDesktop ? 24 : 32),
-              _buildHizliIslemler(),
+              _buildSonBelgeler(), // Son belgeler alta taşındı
               const SizedBox(height: 100), // FAB için boşluk
             ],
           ),
@@ -746,17 +723,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
           Row(
             children: [
               Expanded(
-                child: _buildModulKarti(
-                  'Ayarlar',
-                  'Uygulama ayarları ve konfigürasyon',
-                  Icons.settings_rounded,
-                  [Colors.grey, Colors.blueGrey],
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const AyarlarEkrani(),
-                    ),
-                  ),
-                ),
+                child: Container(), // Boş alan için
               ),
               const SizedBox(width: 12),
               Expanded(

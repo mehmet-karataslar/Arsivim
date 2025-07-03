@@ -36,6 +36,10 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   AramaSiralamaTuru _siralamaTuru = AramaSiralamaTuru.tarihYeni;
   AramaGorunumTuru _gorunumTuru = AramaGorunumTuru.liste;
 
+  // Tarih filtresi
+  DateTime? _secilenBaslangicTarihi;
+  DateTime? _secilenBitisTarihi;
+
   final TextEditingController _aramaController = TextEditingController();
 
   @override
@@ -198,6 +202,38 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
           }).toList();
     }
 
+    // Tarih filtresi uygula
+    if (_secilenBaslangicTarihi != null || _secilenBitisTarihi != null) {
+      filtrelenmsBelgeler =
+          filtrelenmsBelgeler.where((belge) {
+            final belgeTarihi = belge.olusturmaTarihi;
+
+            // Başlangıç tarihi kontrolü
+            if (_secilenBaslangicTarihi != null) {
+              if (belgeTarihi.isBefore(_secilenBaslangicTarihi!)) {
+                return false;
+              }
+            }
+
+            // Bitiş tarihi kontrolü
+            if (_secilenBitisTarihi != null) {
+              final bitisTarihi = DateTime(
+                _secilenBitisTarihi!.year,
+                _secilenBitisTarihi!.month,
+                _secilenBitisTarihi!.day,
+                23,
+                59,
+                59,
+              ); // Gün sonuna kadar
+              if (belgeTarihi.isAfter(bitisTarihi)) {
+                return false;
+              }
+            }
+
+            return true;
+          }).toList();
+    }
+
     setState(() {
       _filtrelenmsBelgeler = filtrelenmsBelgeler;
     });
@@ -278,11 +314,20 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
                   siralamaTuru: _siralamaTuru,
                   gorunumTuru: _gorunumTuru,
                   yukleniyor: _yukleniyor,
+                  secilenBaslangicTarihi: _secilenBaslangicTarihi,
+                  secilenBitisTarihi: _secilenBitisTarihi,
                   onSiralamaSecildi: (siralama) {
                     setState(() => _siralamaTuru = siralama);
                   },
                   onGorunumSecildi: (gorunum) {
                     setState(() => _gorunumTuru = gorunum);
+                  },
+                  onTarihSecimi: (baslangic, bitis) {
+                    setState(() {
+                      _secilenBaslangicTarihi = baslangic;
+                      _secilenBitisTarihi = bitis;
+                    });
+                    _belgeleriFiltrele();
                   },
                   onBelgeDuzenle: (belge) async {
                     final sonuc = await Navigator.push(

@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:io' show Platform;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'screens/ana_ekran.dart';
 import 'services/http_sunucu_servisi.dart';
-import 'services/ayarlar_servisi.dart';
-import 'services/tema_yoneticisi.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,8 +14,6 @@ void main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
-
-  await AyarlarServisi.instance.init();
 
   // HTTP sunucusunu arka planda güvenli şekilde başlat
   Future.microtask(() async {
@@ -43,46 +40,20 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-
-  static _MyAppState? of(BuildContext context) {
-    return context.findAncestorStateOfType<_MyAppState>();
-  }
-}
-
-class _MyAppState extends State<MyApp> {
-  TemaSecenek _currentTema = TemaSecenek.sistem;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTheme();
-  }
-
-  Future<void> _loadTheme() async {
-    final tema = await AyarlarServisi.instance.getTemaSecenegi();
-    setState(() {
-      _currentTema = tema;
-    });
-  }
-
-  void changeTema(TemaSecenek yeniTema) {
-    setState(() {
-      _currentTema = yeniTema;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Arşivim',
-      theme: TemaYoneticisi.acikTema,
-      darkTheme: TemaYoneticisi.koyuTema,
-      themeMode: AyarlarServisi.instance.getThemeMode(_currentTema),
+      locale: const Locale('tr', 'TR'),
+      supportedLocales: const [Locale('tr', 'TR'), Locale('en', 'US')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const AnaEkran(),
       debugShowCheckedModeBanner: false,
     );
