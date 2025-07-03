@@ -29,11 +29,13 @@ class BelgeKartiWidget extends StatefulWidget {
 class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   String? _kisiAdi;
+  String? _kategoriAdi;
 
   @override
   void initState() {
     super.initState();
     _kisiAdiniYukle();
+    _kategoriAdiniYukle();
   }
 
   Future<void> _kisiAdiniYukle() async {
@@ -43,6 +45,23 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
         if (kisi != null && mounted) {
           setState(() {
             _kisiAdi = kisi.ad;
+          });
+        }
+      } catch (e) {
+        // Hata durumunda sessizce devam et
+      }
+    }
+  }
+
+  Future<void> _kategoriAdiniYukle() async {
+    if (widget.belge.kategoriId != null) {
+      try {
+        final kategori = await _veriTabani.kategoriGetir(
+          widget.belge.kategoriId!,
+        );
+        if (kategori != null && mounted) {
+          setState(() {
+            _kategoriAdi = kategori.kategoriAdi;
           });
         }
       } catch (e) {
@@ -154,30 +173,74 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                               ?.copyWith(color: Colors.grey[500]),
                         ),
 
-                        // Kişi bilgisi (varsa)
-                        if (_kisiAdi != null && _kisiAdi!.isNotEmpty) ...[
+                        // Kişi ve Kategori bilgisi (varsa)
+                        if ((_kisiAdi != null && _kisiAdi!.isNotEmpty) ||
+                            (_kategoriAdi != null &&
+                                _kategoriAdi!.isNotEmpty)) ...[
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              Icon(
-                                Icons.person,
-                                size: 14,
-                                color: Colors.grey[600],
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  _kisiAdi!,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                              // Kişi bilgisi
+                              if (_kisiAdi != null && _kisiAdi!.isNotEmpty) ...[
+                                Icon(
+                                  Icons.person,
+                                  size: 14,
+                                  color: Colors.grey[600],
                                 ),
-                              ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    _kisiAdi!,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+
+                              // Ayırıcı (her ikisi de varsa)
+                              if ((_kisiAdi != null && _kisiAdi!.isNotEmpty) &&
+                                  (_kategoriAdi != null &&
+                                      _kategoriAdi!.isNotEmpty)) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  width: 1,
+                                  height: 12,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+
+                              // Kategori bilgisi
+                              if (_kategoriAdi != null &&
+                                  _kategoriAdi!.isNotEmpty) ...[
+                                Icon(
+                                  Icons.folder,
+                                  size: 14,
+                                  color: Colors.grey[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    _kategoriAdi!,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall?.copyWith(
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],

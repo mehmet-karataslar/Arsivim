@@ -637,4 +637,29 @@ class VeriTabaniServisi {
       whereArgs: [belgeId],
     );
   }
+
+  // Kişinin belge sayısını getir
+  Future<int> kisiBelgeSayisi(int kisiId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM belgeler WHERE kisi_id = ? AND aktif = ?',
+      [kisiId, 1],
+    );
+    return result.first['count'] as int;
+  }
+
+  // Kişinin belgelerini getir
+  Future<List<BelgeModeli>> kisiBelyeleriniGetir(int kisiId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'belgeler',
+      where: 'kisi_id = ? AND aktif = ?',
+      whereArgs: [kisiId, 1],
+      orderBy: 'guncelleme_tarihi DESC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return BelgeModeli.fromMap(maps[i]);
+    });
+  }
 }

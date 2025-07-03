@@ -109,7 +109,7 @@ class BelgeIslemleriServisi {
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -119,9 +119,8 @@ class BelgeIslemleriServisi {
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
 }
- 

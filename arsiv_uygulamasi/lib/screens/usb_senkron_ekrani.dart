@@ -149,7 +149,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         ),
         backgroundColor: Colors.green[600],
         duration: const Duration(seconds: 8),
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
       ),
@@ -245,7 +245,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           ),
           backgroundColor: Colors.blue[600],
           duration: const Duration(seconds: 6),
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.fixed,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -273,7 +273,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           ),
           backgroundColor: Colors.red[600],
           duration: const Duration(seconds: 8),
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.fixed,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -444,6 +444,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         ),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -455,9 +456,12 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         _bagliBulunanCihaz = null;
       });
       _addLog('🔌 Cihaz bağlantısı kesildi');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Bağlantı kesildi')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bağlantı kesildi'),
+          behavior: SnackBarBehavior.fixed,
+        ),
+      );
     });
   }
 

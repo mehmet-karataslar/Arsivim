@@ -10,6 +10,7 @@ import 'kisiler_ekrani.dart';
 import 'yeni_belge_ekle_ekrani.dart';
 import 'ayarlar_ekrani.dart';
 import 'usb_senkron_ekrani.dart';
+import 'yedekleme_ekrani.dart';
 
 // Ana dashboard ve navigasyon
 class AnaEkran extends StatefulWidget {
@@ -96,7 +97,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             ],
           ),
           backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.fixed,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -728,6 +729,24 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
               const SizedBox(width: 12),
               Expanded(
                 child: _buildModulKarti(
+                  'Yedekleme',
+                  'Kişi ve kategori bazında yedekleme',
+                  Icons.backup_rounded,
+                  [Colors.green, Colors.lightGreen],
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const YedeklemeEkrani(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildModulKarti(
                   'Ayarlar',
                   'Uygulama ayarları ve konfigürasyon',
                   Icons.settings_rounded,
@@ -738,6 +757,10 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(), // Boş alan için
               ),
             ],
           ),

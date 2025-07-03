@@ -199,7 +199,7 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
       SnackBar(
         content: Text(mesaj),
         backgroundColor: TemaYoneticisi.vurguRengi,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
@@ -209,7 +209,7 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
       SnackBar(
         content: Text(mesaj),
         backgroundColor: TemaYoneticisi.hataRengi,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }

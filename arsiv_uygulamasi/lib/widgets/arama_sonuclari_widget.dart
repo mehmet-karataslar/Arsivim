@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
@@ -7,14 +9,7 @@ import '../services/veritabani_servisi.dart';
 import 'belge_karti_widget.dart';
 import 'belge_detay_dialog.dart';
 
-enum AramaSiralamaTuru {
-  tarihYeni,
-  tarihEski,
-  adAZ,
-  adZA,
-  boyutKucuk,
-  boyutBuyuk,
-}
+enum AramaSiralamaTuru { tarihYeni, tarihEski }
 
 enum AramaGorunumTuru { liste, grid, kompakt }
 
@@ -130,86 +125,196 @@ class AramaSonuclariWidget extends StatelessWidget {
   }
 
   Widget _buildSiralamaDropdown() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(8),
-        color: Colors.white,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<AramaSiralamaTuru>(
-          value: siralamaTuru,
-          onChanged: (value) {
-            if (value != null) onSiralamaSecildi(value);
-          },
-          icon: Icon(Icons.sort, color: Colors.grey[600], size: 16),
-          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-          items: [
-            DropdownMenuItem(
-              value: AramaSiralamaTuru.tarihYeni,
-              child: Row(
-                children: [
-                  Icon(Icons.schedule, size: 14, color: Colors.blue[600]),
-                  const SizedBox(width: 6),
-                  const Text('Yeni → Eski'),
-                ],
+    // Platform kontrolü: Web/PC'de dropdown, mobilde buton
+    if (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // PC/Web için detaylı dropdown
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.white,
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<AramaSiralamaTuru>(
+            value: siralamaTuru,
+            onChanged: (value) {
+              if (value != null) onSiralamaSecildi(value);
+            },
+            icon: Icon(Icons.sort, color: Colors.grey[600], size: 16),
+            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+            items: [
+              DropdownMenuItem(
+                value: AramaSiralamaTuru.tarihYeni,
+                child: Row(
+                  children: [
+                    Icon(Icons.schedule, size: 14, color: Colors.blue[600]),
+                    const SizedBox(width: 6),
+                    const Text('Yeni → Eski'),
+                  ],
+                ),
               ),
-            ),
-            DropdownMenuItem(
-              value: AramaSiralamaTuru.tarihEski,
-              child: Row(
-                children: [
-                  Icon(Icons.history, size: 14, color: Colors.blue[600]),
-                  const SizedBox(width: 6),
-                  const Text('Eski → Yeni'),
-                ],
+              DropdownMenuItem(
+                value: AramaSiralamaTuru.tarihEski,
+                child: Row(
+                  children: [
+                    Icon(Icons.history, size: 14, color: Colors.blue[600]),
+                    const SizedBox(width: 6),
+                    const Text('Eski → Yeni'),
+                  ],
+                ),
               ),
-            ),
-            DropdownMenuItem(
-              value: AramaSiralamaTuru.adAZ,
-              child: Row(
-                children: [
-                  Icon(Icons.sort_by_alpha, size: 14, color: Colors.green[600]),
-                  const SizedBox(width: 6),
-                  const Text('A → Z'),
-                ],
+            ],
+          ),
+        ),
+      );
+    } else {
+      // Mobil için basit filtreleme butonu
+      return _buildMobilFiltreleButonu();
+    }
+  }
+
+  Widget _buildMobilFiltreleButonu() {
+    return Builder(
+      builder:
+          (context) => InkWell(
+            onTap: () => _mobilSiralamaModalGoster(context),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.white,
               ),
-            ),
-            DropdownMenuItem(
-              value: AramaSiralamaTuru.adZA,
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.sort_by_alpha, size: 14, color: Colors.green[600]),
-                  const SizedBox(width: 6),
-                  const Text('Z → A'),
-                ],
-              ),
-            ),
-            DropdownMenuItem(
-              value: AramaSiralamaTuru.boyutKucuk,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.trending_down,
-                    size: 14,
-                    color: Colors.orange[600],
+                  Icon(Icons.filter_list, color: Colors.indigo[600], size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Filtrele',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.indigo[600],
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  const Text('Küçük → Büyük'),
                 ],
               ),
             ),
-            DropdownMenuItem(
-              value: AramaSiralamaTuru.boyutBuyuk,
-              child: Row(
+          ),
+    );
+  }
+
+  void _mobilSiralamaModalGoster(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder:
+          (context) => Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Sıralama Seçin',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildMobilSiralamaSecenegi(
+                  context,
+                  AramaSiralamaTuru.tarihYeni,
+                  Icons.schedule,
+                  'Yeni → Eski',
+                  'En yeni belgeler önce',
+                ),
+                _buildMobilSiralamaSecenegi(
+                  context,
+                  AramaSiralamaTuru.tarihEski,
+                  Icons.history,
+                  'Eski → Yeni',
+                  'En eski belgeler önce',
+                ),
+
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildMobilSiralamaSecenegi(
+    BuildContext context,
+    AramaSiralamaTuru tur,
+    IconData icon,
+    String baslik,
+    String aciklama,
+  ) {
+    final secili = siralamaTuru == tur;
+    return InkWell(
+      onTap: () {
+        onSiralamaSecildi(tur);
+        Navigator.of(context).pop();
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: secili ? Colors.indigo[50] : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: secili ? Colors.indigo[200]! : Colors.grey[200]!,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: secili ? Colors.indigo[100] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: secili ? Colors.indigo[600] : Colors.grey[600],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.trending_up, size: 14, color: Colors.orange[600]),
-                  const SizedBox(width: 6),
-                  const Text('Büyük → Küçük'),
+                  Text(
+                    baslik,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: secili ? Colors.indigo[800] : Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    aciklama,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secili ? Colors.indigo[600] : Colors.grey[600],
+                    ),
+                  ),
                 ],
               ),
             ),
+            if (secili)
+              Icon(Icons.check_circle, color: Colors.indigo[600], size: 20),
           ],
         ),
       ),
@@ -368,6 +473,8 @@ class AramaSonuclariWidget extends StatelessWidget {
       itemCount: belgeler.length,
       itemBuilder: (context, index) {
         final belge = belgeler[index];
+
+        // Hem mobil hem PC için detaylı kart kullan
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: BelgeKartiWidget(
@@ -385,27 +492,261 @@ class AramaSonuclariWidget extends StatelessWidget {
   }
 
   Widget _buildGridGorunumu(List<BelgeModeli> belgeler) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.8,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+    // Platform kontrolü: Web/PC'de detaylı kart, mobilde basit grid
+    if (kIsWeb) {
+      return GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.8,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: belgeler.length,
+        itemBuilder: (context, index) {
+          final belge = belgeler[index];
+          return BelgeKartiWidget(
+            belge: belge,
+            onTap: () => _belgeAc(context, belge),
+            onLongPress: () => _belgeDetayGoster(context, belge),
+            onAc: () => _belgeAc(context, belge),
+            onPaylas: () => _belgePaylas(context, belge),
+            onDuzenle: () => _belgeDuzenle(context, belge),
+            onSil: () => _belgeSil(context, belge),
+          );
+        },
+      );
+    } else {
+      // Mobil için basit grid görünümü
+      return GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.75,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+        ),
+        itemCount: belgeler.length,
+        itemBuilder: (context, index) {
+          final belge = belgeler[index];
+          return _buildMobilGridOgesi(context, belge);
+        },
+      );
+    }
+  }
+
+  // Mobil için basit grid öğesi
+  Widget _buildMobilGridOgesi(BuildContext context, BelgeModeli belge) {
+    final kategori = _getKategori(belge.kategoriId);
+
+    return InkWell(
+      onTap: () => _belgeDetayGoster(context, belge),
+      onLongPress: () => _belgeAc(context, belge),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Üst kısım - Dosya ikonu ve aksiyon butonları
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  // Dosya ikonu
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.blue[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.description,
+                      size: 24,
+                      color: Colors.blue[600],
+                    ),
+                  ),
+                  const Spacer(),
+                  // Mini aksiyon butonları
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: () => _belgeAc(context, belge),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.open_in_new,
+                            color: Colors.blue[600],
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => _belgePaylas(context, belge),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.share,
+                            color: Colors.green[600],
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // İçerik kısmı
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Belge adı
+                  Text(
+                    belge.baslik ?? belge.dosyaAdi,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Kategori
+                  if (kategori != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[100],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        kategori.kategoriAdi,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+
+                  // Boyut ve tarih
+                  Text(
+                    '${belge.formatliDosyaBoyutu}',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    belge.zamanFarki,
+                    style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+
+            // Alt kısım - Düzenle ve Sil butonları
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _belgeDuzenle(context, belge),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange[200]!),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.edit,
+                              color: Colors.orange[600],
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Düzenle',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _belgeSil(context, belge),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.red[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red[200]!),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.delete,
+                              color: Colors.red[600],
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Sil',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.red[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-      itemCount: belgeler.length,
-      itemBuilder: (context, index) {
-        final belge = belgeler[index];
-        return BelgeKartiWidget(
-          belge: belge,
-          onTap: () => _belgeAc(context, belge),
-          onLongPress: () => _belgeDetayGoster(context, belge),
-          onAc: () => _belgeAc(context, belge),
-          onPaylas: () => _belgePaylas(context, belge),
-          onDuzenle: () => _belgeDuzenle(context, belge),
-          onSil: () => _belgeSil(context, belge),
-        );
-      },
     );
   }
 
@@ -465,30 +806,39 @@ class AramaSonuclariWidget extends StatelessWidget {
                       Row(
                         children: [
                           if (kategori != null) ...[
-                            Text(
-                              kategori.kategoriAdi,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.blue[600],
+                            Flexible(
+                              child: Text(
+                                kategori.kategoriAdi,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.blue[600],
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const Text(' • ', style: TextStyle(fontSize: 11)),
                           ],
                           if (kisi != null) ...[
-                            Text(
-                              kisi.tamAd,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.green[600],
+                            Flexible(
+                              child: Text(
+                                kisi.tamAd,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green[600],
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const Text(' • ', style: TextStyle(fontSize: 11)),
                           ],
-                          Text(
-                            _formatBoyut(belge.dosyaBoyutu),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[600],
+                          Flexible(
+                            child: Text(
+                              _formatBoyut(belge.dosyaBoyutu),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -502,11 +852,293 @@ class AramaSonuclariWidget extends StatelessWidget {
                   _formatTarih(belge.olusturmaTarihi),
                   style: TextStyle(fontSize: 10, color: Colors.grey[500]),
                 ),
+
+                // Aksiyon butonları
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () => _belgeAc(context, belge),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.open_in_new,
+                          color: Colors.blue[600],
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => _belgePaylas(context, belge),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.share,
+                          color: Colors.green[600],
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => _belgeDuzenle(context, belge),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.edit,
+                          color: Colors.orange[600],
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => _belgeSil(context, belge),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.delete,
+                          color: Colors.red[600],
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  // Mobil için basit liste öğesi
+  Widget _buildMobilListeOgesi(BuildContext context, BelgeModeli belge) {
+    final kategori = _getKategori(belge.kategoriId);
+    final kisi = _getKisi(belge.kisiId);
+
+    return InkWell(
+      onTap: () => _belgeDetayGoster(context, belge),
+      onLongPress: () => _belgeAc(context, belge),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Dosya ikonu
+            Container(
+              width: 45,
+              height: 45,
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Text(
+                  belge.dosyaTipiSimgesi,
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Belge bilgileri
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    belge.baslik ?? belge.orijinalDosyaAdi,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (kategori != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[100],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            kategori.kategoriAdi,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.blue[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                        child: Text(
+                          '${belge.formatliDosyaBoyutu} • ${belge.zamanFarki}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Aksiyon butonları - Tüm butonlar yatay ve açıklamalı
+            Container(
+              padding: const EdgeInsets.only(top: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Colors.grey[200]!, width: 1),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Aç butonu
+                  InkWell(
+                    onTap: () => _belgeAc(context, belge),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.open_in_new,
+                            color: Colors.blue[600],
+                            size: 18,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Aç',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.blue[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Paylaş butonu
+                  InkWell(
+                    onTap: () => _belgePaylas(context, belge),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.share, color: Colors.green[600], size: 18),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Paylaş',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.green[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Düzenle butonu
+                  InkWell(
+                    onTap: () => _belgeDuzenle(context, belge),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit, color: Colors.orange[600], size: 18),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Düzenle',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Sil butonu
+                  InkWell(
+                    onTap: () => _belgeSil(context, belge),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.delete, color: Colors.red[600], size: 18),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Sil',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.red[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -519,26 +1151,6 @@ class AramaSonuclariWidget extends StatelessWidget {
         break;
       case AramaSiralamaTuru.tarihEski:
         liste.sort((a, b) => a.olusturmaTarihi.compareTo(b.olusturmaTarihi));
-        break;
-      case AramaSiralamaTuru.adAZ:
-        liste.sort((a, b) {
-          final aAd = a.baslik ?? a.dosyaAdi;
-          final bAd = b.baslik ?? b.dosyaAdi;
-          return aAd.toLowerCase().compareTo(bAd.toLowerCase());
-        });
-        break;
-      case AramaSiralamaTuru.adZA:
-        liste.sort((a, b) {
-          final aAd = a.baslik ?? a.dosyaAdi;
-          final bAd = b.baslik ?? b.dosyaAdi;
-          return bAd.toLowerCase().compareTo(aAd.toLowerCase());
-        });
-        break;
-      case AramaSiralamaTuru.boyutKucuk:
-        liste.sort((a, b) => a.dosyaBoyutu.compareTo(b.dosyaBoyutu));
-        break;
-      case AramaSiralamaTuru.boyutBuyuk:
-        liste.sort((a, b) => b.dosyaBoyutu.compareTo(a.dosyaBoyutu));
         break;
     }
 
@@ -650,7 +1262,7 @@ class AramaSonuclariWidget extends StatelessWidget {
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
@@ -661,7 +1273,7 @@ class AramaSonuclariWidget extends StatelessWidget {
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );

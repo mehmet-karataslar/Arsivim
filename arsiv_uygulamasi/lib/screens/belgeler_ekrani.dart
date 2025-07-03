@@ -113,7 +113,7 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
             ],
           ),
           backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.fixed,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -249,58 +249,6 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
                 tooltip: 'Belgeleri Yenile',
               ),
             ),
-          // Belge ekleme butonu
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade400, Colors.purple.shade400],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () async {
-                  final sonuc = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const YeniBelgeEkleEkrani(),
-                    ),
-                  );
-                  if (sonuc == true) {
-                    _verileriYukle();
-                  }
-                },
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add, color: Colors.white, size: 20),
-                      SizedBox(width: 4),
-                      Text(
-                        'EKLE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
       body: RefreshIndicator(
@@ -318,39 +266,7 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
               // Ana arama kutusu
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: TextField(
-                  controller: _aramaController,
-                  decoration: InputDecoration(
-                    hintText:
-                        'Belgeler arasında arama yapın (dosya adı, başlık, açıklama, etiket, kategori, kişi)...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon:
-                        _aramaMetni.isNotEmpty
-                            ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _aramaController.clear();
-                                setState(() => _aramaMetni = '');
-                                _belgeleriFiltrele();
-                              },
-                            )
-                            : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.blue[600]!),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  onChanged: (value) {
-                    setState(() => _aramaMetni = value);
-                    _belgeleriFiltrele();
-                  },
-                ),
+                child: _buildAramaKutusu(),
               ),
 
               // Arama sonuçları
@@ -390,7 +306,138 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
           ),
         ),
       ),
+      // Sağ alta belge ekleme butonu
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final sonuc = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const YeniBelgeEkleEkrani(),
+            ),
+          );
+          if (sonuc == true) {
+            _verileriYukle();
+          }
+        },
+        backgroundColor: Colors.blue.shade600,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
+  }
+
+  Widget _buildAramaKutusu() {
+    // PC için otomatik tamamlama ile arama kutusu
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // Kişi isimlerini autocomplete için hazırla
+      final kisiIsimleri = _kisiler.map((kisi) => kisi.tamAd).toList();
+      final kategoriIsimleri =
+          _kategoriler.map((kategori) => kategori.kategoriAdi).toList();
+      final tumOneriler = [...kisiIsimleri, ...kategoriIsimleri];
+
+      return Autocomplete<String>(
+        optionsBuilder: (TextEditingValue textEditingValue) {
+          if (textEditingValue.text.isEmpty) {
+            return const Iterable<String>.empty();
+          }
+          return tumOneriler.where((String option) {
+            return option.toLowerCase().contains(
+              textEditingValue.text.toLowerCase(),
+            );
+          });
+        },
+        onSelected: (String selection) {
+          _aramaController.text = selection;
+          setState(() => _aramaMetni = selection);
+          _belgeleriFiltrele();
+        },
+        fieldViewBuilder: (
+          BuildContext context,
+          TextEditingController fieldController,
+          FocusNode fieldFocusNode,
+          VoidCallback onFieldSubmitted,
+        ) {
+          // fieldController otomatik olarak Autocomplete tarafından yönetiliyor
+          return TextField(
+            controller: fieldController,
+            focusNode: fieldFocusNode,
+            decoration: InputDecoration(
+              hintText:
+                  'Belgeler arasında arama yapın (kişi, kategori, dosya adı...)...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon:
+                  _aramaMetni.isNotEmpty
+                      ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          fieldController.clear();
+                          setState(() => _aramaMetni = '');
+                          _belgeleriFiltrele();
+                        },
+                      )
+                      : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.blue[600]!),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            onChanged: (value) {
+              setState(() => _aramaMetni = value);
+              _belgeleriFiltrele();
+            },
+            onSubmitted: (value) {
+              setState(() => _aramaMetni = value);
+              _belgeleriFiltrele();
+            },
+          );
+        },
+      );
+    } else {
+      // Mobil için normal arama kutusu
+      return TextField(
+        controller: _aramaController,
+        decoration: InputDecoration(
+          hintText:
+              'Belgeler arasında arama yapın (dosya adı, başlık, açıklama, etiket, kategori, kişi)...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon:
+              _aramaMetni.isNotEmpty
+                  ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _aramaController.clear();
+                      setState(() => _aramaMetni = '');
+                      _belgeleriFiltrele();
+                    },
+                  )
+                  : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.blue[600]!),
+          ),
+          filled: true,
+          fillColor: Colors.white,
+        ),
+        onChanged: (value) {
+          setState(() => _aramaMetni = value);
+          _belgeleriFiltrele();
+        },
+        onSubmitted: (value) {
+          setState(() => _aramaMetni = value);
+          _belgeleriFiltrele();
+        },
+      );
+    }
   }
 
   void _hataGoster(String mesaj) {

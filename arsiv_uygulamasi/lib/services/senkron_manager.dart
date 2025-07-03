@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
@@ -86,28 +87,58 @@ class SenkronManager {
           'İndiriliyor: ${uzakBelge['dosyaAdi']}',
         );
 
+        // Dosya hash'ine göre karşılaştır (aynı dosya farklı adda olabilir)
         final yerelBelge = yerelBelgeler.firstWhere(
-          (belge) => belge.dosyaAdi == uzakBelge['dosyaAdi'],
-          orElse:
-              () => BelgeModeli(
-                dosyaAdi: '',
-                orijinalDosyaAdi: '',
-                dosyaYolu: '',
-                dosyaBoyutu: 0,
-                dosyaTipi: '',
-                dosyaHash: '',
-                olusturmaTarihi: DateTime.now(),
-                guncellemeTarihi: DateTime.now(),
-                kategoriId: 1,
-              ),
+          (belge) =>
+              belge.dosyaHash == uzakBelge['dosyaHash'] &&
+              uzakBelge['dosyaHash'] != null &&
+              uzakBelge['dosyaHash'].isNotEmpty,
+          orElse: () {
+            // Hash eşleşmezse, dosya boyutu ve orijinal dosya adı ile kontrol et
+            return yerelBelgeler.firstWhere(
+              (belge) =>
+                  belge.dosyaBoyutu == uzakBelge['dosyaBoyutu'] &&
+                  belge.orijinalDosyaAdi == uzakBelge['orijinalDosyaAdi'],
+              orElse:
+                  () => BelgeModeli(
+                    dosyaAdi: '',
+                    orijinalDosyaAdi: '',
+                    dosyaYolu: '',
+                    dosyaBoyutu: 0,
+                    dosyaTipi: '',
+                    dosyaHash: '',
+                    olusturmaTarihi: DateTime.now(),
+                    guncellemeTarihi: DateTime.now(),
+                    kategoriId: 1,
+                  ),
+            );
+          },
         );
 
         if (yerelBelge.dosyaAdi.isEmpty) {
           // Yeni belge - indir
-          await _downloadDocument(uzakBelge, bagliBulunanCihaz.ip);
-          yeniBelgeSayisi++;
-          _addLog('📥 Yeni belge eklendi: ${uzakBelge['dosyaAdi']}');
+          try {
+            await _downloadDocument(uzakBelge, bagliBulunanCihaz.ip);
+            yeniBelgeSayisi++;
+            _addLog('📥 Yeni belge eklendi: ${uzakBelge['dosyaAdi']}');
+          } catch (e) {
+            _addLog('❌ Yeni belge indirme başarısız: ${uzakBelge['dosyaAdi']}');
+          }
         } else {
+          // Aynı dosya tespit edildi - log mesajı
+          if (yerelBelge.dosyaHash == uzakBelge['dosyaHash']) {
+            _addLog('🔍 Aynı dosya hash ile tespit edildi:');
+            _addLog('   • Yerel: ${yerelBelge.dosyaAdi}');
+            _addLog('   • Uzak: ${uzakBelge['dosyaAdi']}');
+          } else {
+            _addLog('🔍 Aynı dosya boyut/adı ile tespit edildi:');
+            _addLog(
+              '   • Yerel: ${yerelBelge.dosyaAdi} (${yerelBelge.dosyaBoyutu} bytes)',
+            );
+            _addLog(
+              '   • Uzak: ${uzakBelge['dosyaAdi']} (${uzakBelge['dosyaBoyutu']} bytes)',
+            );
+          }
           // Mevcut belge - GÜNCELLEME TARİHİ kontrolü (conflict resolution)
           try {
             final uzakGuncellemeStr =
@@ -125,14 +156,23 @@ class SenkronManager {
             );
 
             if (uzakGuncellemeTarihi.isAfter(yerelGuncellemeTarihi)) {
-              _addLog('⬇️ Uzak versiyon daha güncel - indiriliyor');
-              await _downloadDocument(
-                uzakBelge,
-                bagliBulunanCihaz.ip,
-                isUpdate: true,
-              );
-              guncellenmisBelgeSayisi++;
-              _addLog('🔄 Belge güncellendi: ${uzakBelge['dosyaAdi']}');
+              _addLog('⬇️ Uzak versiyon daha güncel - metadata güncelleniyor');
+              try {
+                // Aynı dosya ise sadece metadata'yı güncelle, dosyayı tekrar indirme
+                await _updateDocumentMetadata(
+                  yerelBelge,
+                  uzakBelge,
+                  bagliBulunanCihaz.ip,
+                );
+                guncellenmisBelgeSayisi++;
+                _addLog(
+                  '🔄 Belge metadata güncellendi: ${yerelBelge.dosyaAdi}',
+                );
+              } catch (e) {
+                _addLog(
+                  '❌ Belge metadata güncelleme başarısız: ${uzakBelge['dosyaAdi']}',
+                );
+              }
             } else if (yerelGuncellemeTarihi.isAfter(uzakGuncellemeTarihi)) {
               _addLog('⬆️ Yerel versiyon daha güncel - gönderilecek');
               // Upload kısmında işlenecek
@@ -142,12 +182,21 @@ class SenkronManager {
           } catch (e) {
             _addLog('⚠️ Tarih karşılaştırma hatası: $e');
             _addLog('📥 Güvenli mod: belge indiriliyor');
-            await _downloadDocument(
-              uzakBelge,
-              bagliBulunanCihaz.ip,
-              isUpdate: true,
-            );
-            guncellenmisBelgeSayisi++;
+            try {
+              await _downloadDocument(
+                uzakBelge,
+                bagliBulunanCihaz.ip,
+                isUpdate: true,
+              );
+              guncellenmisBelgeSayisi++;
+              _addLog(
+                '🔄 Güvenli mod belge indirildi: ${uzakBelge['dosyaAdi']}',
+              );
+            } catch (downloadError) {
+              _addLog(
+                '❌ Güvenli mod belge indirme başarısız: ${uzakBelge['dosyaAdi']}',
+              );
+            }
           }
         }
 
@@ -166,19 +215,49 @@ class SenkronManager {
           'Gönderiliyor: ${yerelBelge.dosyaAdi}',
         );
 
-        // Uzak belgede aynı dosya var mı?
+        // Uzak belgede aynı dosya var mı? (Hash değerine göre karşılaştır)
         final uzakBelge = uzakBelgeler.firstWhere(
-          (uzakBelge) => uzakBelge['dosyaAdi'] == yerelBelge.dosyaAdi,
-          orElse: () => <String, dynamic>{},
+          (uzakBelge) =>
+              uzakBelge['dosyaHash'] == yerelBelge.dosyaHash &&
+              yerelBelge.dosyaHash.isNotEmpty &&
+              uzakBelge['dosyaHash'] != null &&
+              uzakBelge['dosyaHash'].isNotEmpty,
+          orElse: () {
+            // Hash eşleşmezse, dosya boyutu ve orijinal dosya adı ile kontrol et
+            return uzakBelgeler.firstWhere(
+              (uzakBelge) =>
+                  uzakBelge['dosyaBoyutu'] == yerelBelge.dosyaBoyutu &&
+                  uzakBelge['orijinalDosyaAdi'] == yerelBelge.orijinalDosyaAdi,
+              orElse: () => <String, dynamic>{},
+            );
+          },
         );
 
         if (uzakBelge.isEmpty) {
           // Uzakta yok - gönder
           _addLog('📤 Yeni belge gönderiliyor: ${yerelBelge.dosyaAdi}');
-          await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
-          gonderilmiBelgeSayisi++;
-          _addLog('📤 Belge gönderildi: ${yerelBelge.dosyaAdi}');
+          try {
+            await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
+            gonderilmiBelgeSayisi++;
+            _addLog('📤 Belge gönderildi: ${yerelBelge.dosyaAdi}');
+          } catch (e) {
+            _addLog('❌ Yeni belge gönderme başarısız: ${yerelBelge.dosyaAdi}');
+          }
         } else {
+          // Aynı dosya tespit edildi - log mesajı
+          if (yerelBelge.dosyaHash == uzakBelge['dosyaHash']) {
+            _addLog('🔍 Upload: Aynı dosya hash ile tespit edildi:');
+            _addLog('   • Yerel: ${yerelBelge.dosyaAdi}');
+            _addLog('   • Uzak: ${uzakBelge['dosyaAdi']}');
+          } else {
+            _addLog('🔍 Upload: Aynı dosya boyut/adı ile tespit edildi:');
+            _addLog(
+              '   • Yerel: ${yerelBelge.dosyaAdi} (${yerelBelge.dosyaBoyutu} bytes)',
+            );
+            _addLog(
+              '   • Uzak: ${uzakBelge['dosyaAdi']} (${uzakBelge['dosyaBoyutu']} bytes)',
+            );
+          }
           // Uzakta var - güncelleme tarihi kontrolü
           try {
             final yerelGuncellemeTarihi = yerelBelge.guncellemeTarihi;
@@ -197,17 +276,34 @@ class SenkronManager {
 
             if (yerelGuncellemeTarihi.isAfter(uzakGuncellemeTarihi)) {
               _addLog('⬆️ Yerel versiyon daha güncel - gönderiliyor');
-              await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
-              gonderilmiBelgeSayisi++;
-              _addLog('🔄 Belge güncelleme gönderildi: ${yerelBelge.dosyaAdi}');
+              try {
+                await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
+                gonderilmiBelgeSayisi++;
+                _addLog(
+                  '🔄 Belge güncelleme gönderildi: ${yerelBelge.dosyaAdi}',
+                );
+              } catch (e) {
+                _addLog(
+                  '❌ Belge güncelleme gönderme başarısız: ${yerelBelge.dosyaAdi}',
+                );
+              }
             } else {
               _addLog('✅ Uzak versiyon güncel: ${yerelBelge.dosyaAdi}');
             }
           } catch (e) {
             _addLog('⚠️ Upload tarih karşılaştırma hatası: $e');
             _addLog('📤 Güvenli mod: belge gönderiliyor');
-            await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
-            gonderilmiBelgeSayisi++;
+            try {
+              await _uploadDocument(yerelBelge, bagliBulunanCihaz.ip);
+              gonderilmiBelgeSayisi++;
+              _addLog(
+                '🔄 Güvenli mod belge gönderildi: ${yerelBelge.dosyaAdi}',
+              );
+            } catch (uploadError) {
+              _addLog(
+                '❌ Güvenli mod belge gönderme başarısız: ${yerelBelge.dosyaAdi}',
+              );
+            }
           }
         }
       }
@@ -281,8 +377,46 @@ class SenkronManager {
         final dosya = File(yeniDosyaYolu);
         await dosya.writeAsBytes(response.bodyBytes);
 
+        // Dosya hash'ini hesapla
+        final dosyaHashi = sha256.convert(response.bodyBytes).toString();
+        _addLog('🔐 Dosya hash hesaplandı: ${dosyaHashi.substring(0, 16)}...');
+
         // Veritabanına ekle - KİŞİ EŞLEŞTİRMESİ İLE
         final veriTabani = VeriTabaniServisi();
+
+        // Aynı hash'e sahip dosya var mı kontrol et
+        final mevcutBelgeler = await veriTabani.belgeleriGetir();
+        final ayniHashBelge = mevcutBelgeler.firstWhere(
+          (b) => b.dosyaHash == dosyaHashi && b.dosyaHash.isNotEmpty,
+          orElse:
+              () => BelgeModeli(
+                dosyaAdi: '',
+                orijinalDosyaAdi: '',
+                dosyaYolu: '',
+                dosyaBoyutu: 0,
+                dosyaTipi: '',
+                dosyaHash: '',
+                olusturmaTarihi: DateTime.now(),
+                guncellemeTarihi: DateTime.now(),
+                kategoriId: 1,
+              ),
+        );
+
+        if (ayniHashBelge.dosyaAdi.isNotEmpty) {
+          // Aynı dosya bulundu - sadece metadata'yı güncelle
+          _addLog(
+            '🔍 Aynı hash\'e sahip dosya bulundu: ${ayniHashBelge.dosyaAdi}',
+          );
+          _addLog('💾 Duplicate dosya önlendi, metadata güncelleniyor...');
+
+          // Dosyayı diskten sil (gereksiz)
+          await dosya.delete();
+          _addLog('🗑️ Duplicate dosya diskten silindi');
+
+          // Sadece metadata'yı güncelle
+          await _updateDocumentMetadata(ayniHashBelge, belgeData, ip);
+          return; // İşlemi burada sonlandır
+        }
 
         // Kişi ID'sini eşleştir (ad-soyad kombinasyonuna göre)
         int? eslestirilenKisiId;
@@ -341,7 +475,7 @@ class SenkronManager {
           dosyaYolu: yeniDosyaYolu,
           dosyaBoyutu: response.bodyBytes.length,
           dosyaTipi: belgeData['dosyaTipi'] ?? 'unknown',
-          dosyaHash: belgeData['dosyaHash'] ?? '',
+          dosyaHash: dosyaHashi, // Hesaplanan hash kullan
           olusturmaTarihi: DateTime.parse(belgeData['olusturmaTarihi']),
           guncellemeTarihi: DateTime.now(),
           kategoriId: belgeData['kategoriId'] ?? 1,
@@ -411,6 +545,7 @@ class SenkronManager {
       }
     } catch (e) {
       _addLog('❌ İndirme hatası (${belgeData['dosyaAdi']}): $e');
+      rethrow; // Hatayı üst seviyeye fırlat
     }
   }
 
@@ -484,6 +619,7 @@ class SenkronManager {
       }
     } catch (e) {
       _addLog('❌ Yükleme hatası (${belge.dosyaAdi}): $e');
+      rethrow; // Hatayı üst seviyeye fırlat
     }
   }
 
@@ -635,6 +771,74 @@ class SenkronManager {
   void _addLog(String message) {
     print('🔄 SYNC: $message'); // Console'a da yazdır
     onLogMessage?.call(message);
+  }
+
+  // Aynı dosya için sadece metadata'yı güncelle (dosyayı indirme)
+  Future<void> _updateDocumentMetadata(
+    BelgeModeli yerelBelge,
+    Map<String, dynamic> uzakBelge,
+    String ip,
+  ) async {
+    try {
+      final veriTabani = VeriTabaniServisi();
+
+      // Kişi ID'sini eşleştir
+      int? eslestirilenKisiId;
+      if (uzakBelge['kisiId'] != null) {
+        try {
+          final uzakKisiler = await _getRemotePeople(ip);
+          final uzakKisi = uzakKisiler.firstWhere(
+            (k) => k['id'] == uzakBelge['kisiId'],
+            orElse: () => <String, dynamic>{},
+          );
+
+          if (uzakKisi.isNotEmpty) {
+            final yerelKisiler = await veriTabani.kisileriGetir();
+            final eslestirilenKisi = yerelKisiler.firstWhere(
+              (k) => k.ad == uzakKisi['ad'] && k.soyad == uzakKisi['soyad'],
+              orElse:
+                  () => KisiModeli(
+                    ad: '',
+                    soyad: '',
+                    olusturmaTarihi: DateTime.now(),
+                    guncellemeTarihi: DateTime.now(),
+                  ),
+            );
+
+            if (eslestirilenKisi.ad.isNotEmpty) {
+              eslestirilenKisiId = eslestirilenKisi.id;
+            }
+          }
+        } catch (e) {
+          _addLog('⚠️ Metadata kişi eşleştirme hatası: $e');
+        }
+      }
+
+      // Güncellenen belge modelini oluştur
+      final guncelBelge = yerelBelge.copyWith(
+        baslik: uzakBelge['baslik'],
+        aciklama: uzakBelge['aciklama'],
+        kisiId: eslestirilenKisiId ?? yerelBelge.kisiId,
+        kategoriId: uzakBelge['kategoriId'] ?? yerelBelge.kategoriId,
+        etiketler:
+            uzakBelge['etiketler'] != null
+                ? List<String>.from(uzakBelge['etiketler'])
+                : yerelBelge.etiketler,
+        guncellemeTarihi: DateTime.parse(
+          uzakBelge['guncellemeTarihi'] ?? uzakBelge['olusturmaTarihi'],
+        ),
+      );
+
+      // Veritabanında güncelle
+      await veriTabani.belgeGuncelle(guncelBelge);
+
+      _addLog('📝 Metadata güncellendi: ${yerelBelge.dosyaAdi}');
+      _addLog('   • Başlık: ${uzakBelge['baslik'] ?? 'Yok'}');
+      _addLog('   • Açıklama: ${uzakBelge['aciklama'] ?? 'Yok'}');
+    } catch (e) {
+      _addLog('❌ Metadata güncelleme hatası: $e');
+      rethrow;
+    }
   }
 
   // Callback'leri ayarla

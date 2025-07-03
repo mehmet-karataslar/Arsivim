@@ -683,7 +683,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                     vertical: 8,
                   ),
                   childrenPadding: EdgeInsets.zero,
-                  initiallyExpanded: _secilenDosyaTuru == null,
+                  initiallyExpanded: false,
                   leading:
                       secilenTur != null
                           ? Container(
@@ -850,29 +850,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 ),
               ),
             ),
-
-            // Otomatik algılama butonu
-            if (_secilenDosyalar.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _otomatikDosyaTuruAlgila,
-                  icon: const Icon(Icons.auto_fix_high, size: 18),
-                  label: const Text('Otomatik Algıla'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.blue[600],
-                    backgroundColor: Colors.blue.shade50,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -924,59 +901,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         _secilenDosyaTuru = algilanaDosyaTuru;
       });
 
-      // Başarı animasyonu için snackbar göster
-      final secilenTur = _dosyaTurleri[algilanaDosyaTuru]!;
-      bool karisikTur = turSayilari.length > 1;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(secilenTur['icon'], color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${secilenTur['ad']} olarak algılandı',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    if (karisikTur)
-                      Text(
-                        'Karışık dosya türleri - en yaygın seçildi',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: secilenTur['color'],
-          duration: Duration(seconds: karisikTur ? 3 : 2),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          action:
-              karisikTur
-                  ? SnackBarAction(
-                    label: 'Değiştir',
-                    textColor: Colors.white,
-                    onPressed: () {
-                      // ExpansionTile'ı aç
-                      setState(() {
-                        _secilenDosyaTuru = null;
-                      });
-                    },
-                  )
-                  : null,
-        ),
-      );
+      // Otomatik algılama sessizce çalışır (snackbar kaldırıldı)
     }
   }
 
@@ -1738,7 +1663,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
@@ -1749,7 +1674,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.fixed,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );

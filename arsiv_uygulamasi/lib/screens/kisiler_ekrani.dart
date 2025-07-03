@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import 'kisi_ekle_ekrani.dart';
+import 'kisi_belgeleri_ekrani.dart';
 
 class KisilerEkrani extends StatefulWidget {
   const KisilerEkrani({Key? key}) : super(key: key);
@@ -140,6 +141,20 @@ class _KisilerEkraniState extends State<KisilerEkrani> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
+            FutureBuilder<int>(
+              future: _veriTabani.kisiBelgeSayisi(kisi.id!),
+              builder: (context, snapshot) {
+                final belgeSayisi = snapshot.data ?? 0;
+                return Text(
+                  '$belgeSayisi belge',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.blue[600],
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 2),
             Text(
               'Eklendi: ${kisi.formatliOlusturmaTarihi}',
               style: Theme.of(
@@ -252,8 +267,9 @@ class _KisilerEkraniState extends State<KisilerEkrani> {
   }
 
   void _kisiBelgeleriGoster(KisiModeli kisi) {
-    // Kişinin belgelerini göster - yakında gelecek
-    _hataGoster('Bu özellik yakında gelecek');
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => KisiBelgeleriEkrani(kisi: kisi)),
+    );
   }
 
   void _kisiSilOnay(KisiModeli kisi) {
