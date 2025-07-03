@@ -4,39 +4,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="sistem genel hatlarıyal toplandı">
-      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@3x.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@3x.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/main.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ayarlar_ekrani.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/belgeler_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/belgeler_ekrani.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/usb_senkron_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/usb_senkron_ekrani.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/ayarlar_servisi.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/tema_yoneticisi.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_16.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_16.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_32.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_32.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_64.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_64.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.lock" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/web/favicon.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/web/favicon.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-192.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-192.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-512.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-512.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-maskable-192.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-maskable-192.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-maskable-512.png" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/web/icons/Icon-maskable-512.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/windows/runner/resources/app_icon.ico" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/windows/runner/resources/app_icon.ico" afterDir="false" />
-    </list>
+    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="iconlar eklendi" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -118,12 +86,21 @@
       <option name="project" value="LOCAL" />
       <updated>1751387822204</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="iconlar eklendi">
+      <option name="closed" value="true" />
+      <created>1751542933328</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1751542933328</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="ilk komit yapıldı" />
     <MESSAGE value="sistem genel hatlarıyal toplandı" />
-    <option name="LAST_COMMIT_MESSAGE" value="sistem genel hatlarıyal toplandı" />
+    <MESSAGE value="iconlar eklendi" />
+    <option name="LAST_COMMIT_MESSAGE" value="iconlar eklendi" />
   </component>
 </project>
