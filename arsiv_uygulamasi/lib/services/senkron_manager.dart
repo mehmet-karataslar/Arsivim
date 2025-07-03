@@ -6,8 +6,10 @@ import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../models/senkron_cihazi.dart';
+import '../models/senkron_conflict.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
+import '../services/senkron_conflict_resolver.dart';
 
 class SenkronManager {
   static final SenkronManager _instance = SenkronManager._internal();
@@ -18,6 +20,151 @@ class SenkronManager {
   Function(double progress)? onProgressUpdate;
   Function(String operation)? onOperationUpdate;
   Function(String message)? onLogMessage;
+
+  // SHA-256 + metadata signature ile güvenli hash karşılaştırması
+  Future<bool> _compareDocuments(
+    BelgeModeli localDoc,
+    Map<String, dynamic> remoteDoc,
+  ) async {
+    try {
+      // 1. Dosya hash karşılaştırması (SHA-256)
+      final localHash = localDoc.dosyaHash;
+      final remoteHash = remoteDoc['dosyaHash'];
+
+      if (localHash == null ||
+          remoteHash == null ||
+          localHash.isEmpty ||
+          remoteHash.isEmpty) {
+        // Hash yoksa dosya boyutu ve ad ile karşılaştır
+        return _fallbackComparison(localDoc, remoteDoc);
+      }
+
+      // 2. Hash eşleşme kontrolü
+      if (localHash == remoteHash) {
+        _addLog(
+          '✅ Hash eşleşmesi: ${localDoc.dosyaAdi} == ${remoteDoc['dosyaAdi']}',
+        );
+        return true;
+      }
+
+      // 3. Metadata signature karşılaştırması
+      final localSignature = _generateMetadataSignature(localDoc);
+      final remoteSignature = _generateMetadataSignature(remoteDoc);
+
+      if (localSignature == remoteSignature) {
+        _addLog('✅ Metadata eşleşmesi: ${localDoc.dosyaAdi}');
+        return true;
+      }
+
+      _addLog(
+        '❌ Belgeler farklı: ${localDoc.dosyaAdi} vs ${remoteDoc['dosyaAdi']}',
+      );
+      return false;
+    } catch (e) {
+      _addLog('⚠️ Karşılaştırma hatası: $e');
+      return _fallbackComparison(localDoc, remoteDoc);
+    }
+  }
+
+  // Metadata signature oluştur
+  String _generateMetadataSignature(dynamic doc) {
+    final Map<String, dynamic> metadata =
+        doc is BelgeModeli
+            ? {
+              'dosyaAdi': doc.dosyaAdi,
+              'dosyaBoyutu': doc.dosyaBoyutu,
+              'dosyaTipi': doc.dosyaTipi,
+              'orijinalDosyaAdi': doc.orijinalDosyaAdi,
+              'baslik': doc.baslik ?? '',
+              'aciklama': doc.aciklama ?? '',
+            }
+            : {
+              'dosyaAdi': doc['dosyaAdi'] ?? '',
+              'dosyaBoyutu': doc['dosyaBoyutu'] ?? 0,
+              'dosyaTipi': doc['dosyaTipi'] ?? '',
+              'orijinalDosyaAdi': doc['orijinalDosyaAdi'] ?? '',
+              'baslik': doc['baslik'] ?? '',
+              'aciklama': doc['aciklama'] ?? '',
+            };
+
+    final metadataJson = json.encode(metadata);
+    return sha256.convert(utf8.encode(metadataJson)).toString();
+  }
+
+  // Fallback karşılaştırma
+  bool _fallbackComparison(
+    BelgeModeli localDoc,
+    Map<String, dynamic> remoteDoc,
+  ) {
+    return localDoc.dosyaBoyutu == remoteDoc['dosyaBoyutu'] &&
+        localDoc.orijinalDosyaAdi == remoteDoc['orijinalDosyaAdi'];
+  }
+
+  // Gelişmiş conflict detection
+  Future<Map<String, dynamic>> _detectConflicts(
+    BelgeModeli localDoc,
+    Map<String, dynamic> remoteDoc,
+  ) async {
+    try {
+      final conflictResolver = SenkronConflictResolver.instance;
+
+      // Çakışma tespit et
+      final conflict = await conflictResolver.detectConflict(
+        localDoc,
+        remoteDoc,
+      );
+
+      if (conflict == null) {
+        // Çakışma yok - normal timestamp karşılaştırması
+        final localUpdateTime = localDoc.guncellemeTarihi;
+        final remoteUpdateTime = DateTime.parse(
+          remoteDoc['guncellemeTarihi'] ?? remoteDoc['olusturmaTarihi'],
+        );
+
+        return {
+          'hasConflict': false,
+          'resolution':
+              localUpdateTime.isAfter(remoteUpdateTime) ? 'local' : 'remote',
+        };
+      }
+
+      // Çakışma var - çözüm öner
+      final resolution = await conflictResolver.resolveConflict(conflict);
+
+      String resolutionString;
+      switch (resolution) {
+        case SenkronConflictResolution.preferLocal:
+          resolutionString = 'local';
+          break;
+        case SenkronConflictResolution.preferRemote:
+          resolutionString = 'remote';
+          break;
+        case SenkronConflictResolution.manual:
+          resolutionString = 'manual';
+          break;
+        case SenkronConflictResolution.keepBoth:
+          resolutionString = 'both';
+          break;
+      }
+
+      return {
+        'hasConflict': true,
+        'conflictType': conflict.conflictType.name,
+        'severity': conflict.severity.name,
+        'resolution': resolutionString,
+        'timeDifference': conflict.timeDifference,
+        'conflict': conflict,
+      };
+    } catch (e) {
+      _addLog('⚠️ Conflict detection hatası: $e');
+      return {
+        'hasConflict': true,
+        'conflictType': 'error',
+        'resolution': 'manual',
+        'error': e.toString(),
+      };
+    }
+  }
 
   // Gerçek senkronizasyon işlemi
   Future<Map<String, int>> performSynchronization(
@@ -87,35 +234,18 @@ class SenkronManager {
           'İndiriliyor: ${uzakBelge['dosyaAdi']}',
         );
 
-        // Dosya hash'ine göre karşılaştır (aynı dosya farklı adda olabilir)
-        final yerelBelge = yerelBelgeler.firstWhere(
-          (belge) =>
-              belge.dosyaHash == uzakBelge['dosyaHash'] &&
-              uzakBelge['dosyaHash'] != null &&
-              uzakBelge['dosyaHash'].isNotEmpty,
-          orElse: () {
-            // Hash eşleşmezse, dosya boyutu ve orijinal dosya adı ile kontrol et
-            return yerelBelgeler.firstWhere(
-              (belge) =>
-                  belge.dosyaBoyutu == uzakBelge['dosyaBoyutu'] &&
-                  belge.orijinalDosyaAdi == uzakBelge['orijinalDosyaAdi'],
-              orElse:
-                  () => BelgeModeli(
-                    dosyaAdi: '',
-                    orijinalDosyaAdi: '',
-                    dosyaYolu: '',
-                    dosyaBoyutu: 0,
-                    dosyaTipi: '',
-                    dosyaHash: '',
-                    olusturmaTarihi: DateTime.now(),
-                    guncellemeTarihi: DateTime.now(),
-                    kategoriId: 1,
-                  ),
-            );
-          },
-        );
+        // Gelişmiş belge karşılaştırma ile eşleşen yerel belgeyi bul
+        BelgeModeli? yerelBelge;
 
-        if (yerelBelge.dosyaAdi.isEmpty) {
+        // Önce hash ile eşleşme ara
+        for (final belge in yerelBelgeler) {
+          if (await _compareDocuments(belge, uzakBelge)) {
+            yerelBelge = belge;
+            break;
+          }
+        }
+
+        if (yerelBelge == null) {
           // Yeni belge - indir
           try {
             await _downloadDocument(uzakBelge, bagliBulunanCihaz.ip);
@@ -125,62 +255,89 @@ class SenkronManager {
             _addLog('❌ Yeni belge indirme başarısız: ${uzakBelge['dosyaAdi']}');
           }
         } else {
-          // Aynı dosya tespit edildi - log mesajı
-          if (yerelBelge.dosyaHash == uzakBelge['dosyaHash']) {
-            _addLog('🔍 Aynı dosya hash ile tespit edildi:');
-            _addLog('   • Yerel: ${yerelBelge.dosyaAdi}');
-            _addLog('   • Uzak: ${uzakBelge['dosyaAdi']}');
-          } else {
-            _addLog('🔍 Aynı dosya boyut/adı ile tespit edildi:');
-            _addLog(
-              '   • Yerel: ${yerelBelge.dosyaAdi} (${yerelBelge.dosyaBoyutu} bytes)',
-            );
-            _addLog(
-              '   • Uzak: ${uzakBelge['dosyaAdi']} (${uzakBelge['dosyaBoyutu']} bytes)',
-            );
-          }
-          // Mevcut belge - GÜNCELLEME TARİHİ kontrolü (conflict resolution)
+          // Mevcut belge - Conflict detection ile kontrol et
+          _addLog('🔍 Mevcut belge tespit edildi: ${yerelBelge.dosyaAdi}');
+
           try {
-            final uzakGuncellemeStr =
-                uzakBelge['guncellemeTarihi'] ?? uzakBelge['olusturmaTarihi'];
-            final uzakGuncellemeTarihi =
-                uzakGuncellemeStr != null
-                    ? DateTime.parse(uzakGuncellemeStr)
-                    : DateTime.now();
-            final yerelGuncellemeTarihi = yerelBelge.guncellemeTarihi;
-
-            _addLog('📅 Tarih kontrolü: ${uzakBelge['dosyaAdi']}');
-            _addLog('   • Uzak güncelleme: ${uzakGuncellemeTarihi.toString()}');
-            _addLog(
-              '   • Yerel güncelleme: ${yerelGuncellemeTarihi.toString()}',
+            final conflictResult = await _detectConflicts(
+              yerelBelge,
+              uzakBelge,
             );
 
-            if (uzakGuncellemeTarihi.isAfter(yerelGuncellemeTarihi)) {
-              _addLog('⬇️ Uzak versiyon daha güncel - metadata güncelleniyor');
-              try {
-                // Aynı dosya ise sadece metadata'yı güncelle, dosyayı tekrar indirme
-                await _updateDocumentMetadata(
-                  yerelBelge,
-                  uzakBelge,
-                  bagliBulunanCihaz.ip,
-                );
-                guncellenmisBelgeSayisi++;
-                _addLog(
-                  '🔄 Belge metadata güncellendi: ${yerelBelge.dosyaAdi}',
-                );
-              } catch (e) {
-                _addLog(
-                  '❌ Belge metadata güncelleme başarısız: ${uzakBelge['dosyaAdi']}',
-                );
+            if (conflictResult['hasConflict'] == true) {
+              _addLog(
+                '⚠️ Çakışma tespit edildi: ${conflictResult['conflictType']}',
+              );
+              _addLog('   • Yerel: ${yerelBelge.dosyaAdi}');
+              _addLog('   • Uzak: ${uzakBelge['dosyaAdi']}');
+
+              // Çakışma çözümü
+              switch (conflictResult['resolution']) {
+                case 'local':
+                  _addLog('⬆️ Yerel versiyon tercih edildi');
+                  // Yerel versiyonu uzağa gönderilecek (upload kısmında)
+                  break;
+                case 'remote':
+                  _addLog('⬇️ Uzak versiyon tercih edildi');
+                  try {
+                    await _updateDocumentMetadata(
+                      yerelBelge,
+                      uzakBelge,
+                      bagliBulunanCihaz.ip,
+                    );
+                    guncellenmisBelgeSayisi++;
+                    _addLog('🔄 Belge güncellendi: ${yerelBelge.dosyaAdi}');
+                  } catch (e) {
+                    _addLog(
+                      '❌ Belge güncelleme başarısız: ${uzakBelge['dosyaAdi']}',
+                    );
+                  }
+                  break;
+                case 'manual':
+                  _addLog('👤 Manuel müdahale gerekli');
+                  // TODO: User interaction for manual resolution
+                  // Şimdilik uzak versiyonu tercih et
+                  try {
+                    await _downloadDocument(
+                      uzakBelge,
+                      bagliBulunanCihaz.ip,
+                      isUpdate: true,
+                    );
+                    guncellenmisBelgeSayisi++;
+                    _addLog('🔄 Manuel çözüm: uzak versiyon alındı');
+                  } catch (e) {
+                    _addLog(
+                      '❌ Manuel çözüm başarısız: ${uzakBelge['dosyaAdi']}',
+                    );
+                  }
+                  break;
               }
-            } else if (yerelGuncellemeTarihi.isAfter(uzakGuncellemeTarihi)) {
-              _addLog('⬆️ Yerel versiyon daha güncel - gönderilecek');
-              // Upload kısmında işlenecek
             } else {
-              _addLog('✅ Versiyonlar aynı: ${uzakBelge['dosyaAdi']}');
+              // Çakışma yok - normal resolution
+              switch (conflictResult['resolution']) {
+                case 'local':
+                  _addLog('✅ Yerel versiyon güncel');
+                  break;
+                case 'remote':
+                  _addLog('⬇️ Uzak versiyon daha güncel');
+                  try {
+                    await _updateDocumentMetadata(
+                      yerelBelge,
+                      uzakBelge,
+                      bagliBulunanCihaz.ip,
+                    );
+                    guncellenmisBelgeSayisi++;
+                    _addLog('🔄 Belge güncellendi: ${yerelBelge.dosyaAdi}');
+                  } catch (e) {
+                    _addLog(
+                      '❌ Belge güncelleme başarısız: ${uzakBelge['dosyaAdi']}',
+                    );
+                  }
+                  break;
+              }
             }
           } catch (e) {
-            _addLog('⚠️ Tarih karşılaştırma hatası: $e');
+            _addLog('⚠️ Conflict detection hatası: $e');
             _addLog('📥 Güvenli mod: belge indiriliyor');
             try {
               await _downloadDocument(

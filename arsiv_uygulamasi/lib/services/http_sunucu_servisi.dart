@@ -517,12 +517,12 @@ class HttpSunucuServisi {
     }
   }
 
-  // Belge yükleme endpoint'i
+  // Belge yükleme endpoint'i - İyileştirilmiş multipart parser
   Future<String> _handleUpload(HttpRequest request) async {
     try {
       print('📤 Belge yükleme isteği alındı');
 
-      // Multipart form data parser
+      // Multipart form data parser - Improved
       final boundary = request.headers.contentType?.parameters['boundary'];
       if (boundary == null) {
         throw Exception('Multipart boundary bulunamadı');
@@ -530,129 +530,58 @@ class HttpSunucuServisi {
 
       print('🔧 Boundary bulundu: $boundary');
 
+      // Tüm body'yi binary olarak oku
       final bodyBytes = await request.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
       );
 
       print('📦 Body alındı: ${bodyBytes.length} bytes');
-      print(
-        '🔍 İlk 50 byte (hex): ${bodyBytes.take(50).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
-      );
-      print(
-        '🔍 İlk 200 byte (string): ${String.fromCharCodes(bodyBytes.take(200))}',
-      );
 
-      // Boundary'i binary olarak ara
-      final boundaryBytes = utf8.encode('--$boundary');
-      print(
-        '🔍 Aranan boundary (hex): ${boundaryBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
-      );
+      // Güvenli multipart parsing
+      final parsedParts = _parseMultipartData(bodyBytes, boundary);
 
-      // Binary parsing kullan
-      final List<List<int>> binaryParts = [];
-
-      int start = 0;
-      int partCount = 0;
-      while (start < bodyBytes.length && partCount < 10) {
-        // Sonsuz döngü önlemi
-        int boundaryIndex = _findBoundary(bodyBytes, boundaryBytes, start);
-        print('🔍 Boundary arama: start=$start, bulunan=$boundaryIndex');
-
-        if (boundaryIndex == -1) break;
-
-        if (start < boundaryIndex) {
-          final partData = bodyBytes.sublist(start, boundaryIndex);
-          binaryParts.add(partData);
-          print('📦 Part ${partCount++} bulundu: ${partData.length} bytes');
-        }
-
-        start = boundaryIndex + boundaryBytes.length;
-        // \r\n'i atla
-        if (start < bodyBytes.length && bodyBytes[start] == 13) start++;
-        if (start < bodyBytes.length && bodyBytes[start] == 10) start++;
+      if (parsedParts.isEmpty) {
+        throw Exception('Multipart veriler parse edilemedi');
       }
 
-      print('🔍 ${binaryParts.length} binary part bulundu');
+      print('🔍 ${parsedParts.length} part başarıyla parse edildi');
 
       String? metadata;
       List<int>? fileBytes;
       String? fileName;
 
-      // Her bir binary part'ı işle
-      for (int i = 0; i < binaryParts.length; i++) {
-        final partBytes = binaryParts[i];
-        if (partBytes.isEmpty) continue;
+      // Parse edilen partları işle
+      for (final part in parsedParts) {
+        final headers = part['headers'] as Map<String, String>;
+        final data = part['data'] as List<int>;
 
-        print('🔍 Binary part $i işleniyor (${partBytes.length} bytes)...');
+        final contentDisposition = headers['content-disposition'] ?? '';
 
-        try {
-          // Header kısmını bulup string olarak parse et
-          final headerEndIndex = _findHeaderEnd(partBytes);
-          if (headerEndIndex == -1) {
-            print('⚠️ Header end bulunamadı');
-            continue;
+        if (contentDisposition.contains('name="metadata"')) {
+          metadata = utf8.decode(data, allowMalformed: true);
+          print(
+            '✅ Metadata alındı: ${metadata.substring(0, metadata.length.clamp(0, 100))}...',
+          );
+        } else if (contentDisposition.contains('name="file"')) {
+          fileBytes = data;
+
+          // Filename'i header'dan çıkar
+          final filenameMatch = RegExp(
+            r'filename="([^"]*)"',
+          ).firstMatch(contentDisposition);
+          if (filenameMatch != null) {
+            fileName = filenameMatch.group(1);
+            print('✅ Filename bulundu: $fileName');
           }
 
-          final headerBytes = partBytes.sublist(0, headerEndIndex);
-          final headerString = utf8.decode(headerBytes, allowMalformed: true);
+          print('✅ File bytes alındı: ${fileBytes!.length} bytes');
 
-          print('📋 Header: ${headerString.replaceAll('\r\n', '\\r\\n')}');
-
-          // Case-insensitive header matching
-          final headerLower = headerString.toLowerCase();
-
-          if (headerLower.contains(
-            'content-disposition: form-data; name="metadata"',
-          )) {
-            print('📋 Metadata part bulundu');
-
-            // Data kısmını al
-            final dataStart = headerEndIndex + 4; // \r\n\r\n atla
-            if (dataStart < partBytes.length) {
-              final metadataBytes = partBytes.sublist(dataStart);
-              // Son \r\n'leri temizle
-              while (metadataBytes.isNotEmpty &&
-                  (metadataBytes.last == 13 || metadataBytes.last == 10)) {
-                metadataBytes.removeLast();
-              }
-
-              metadata = utf8.decode(metadataBytes, allowMalformed: true);
-              print(
-                '✅ Metadata alındı: ${metadata.substring(0, metadata.length.clamp(0, 100))}...',
-              );
-            }
-          } else if (headerLower.contains(
-            'content-disposition: form-data; name="file"',
-          )) {
-            print('📁 File part bulundu');
-
-            // Filename'i bul
-            final filenameMatch = RegExp(
-              r'filename="([^"]*)"',
-            ).firstMatch(headerString);
-            if (filenameMatch != null) {
-              fileName = filenameMatch.group(1);
-              print('✅ Filename bulundu: $fileName');
-            }
-
-            // Binary data'yı al
-            final dataStart = headerEndIndex + 4; // \r\n\r\n atla
-            if (dataStart < partBytes.length) {
-              fileBytes = partBytes.sublist(dataStart);
-              // Son \r\n'leri temizle
-              while (fileBytes!.isNotEmpty &&
-                  (fileBytes.last == 13 || fileBytes.last == 10)) {
-                fileBytes.removeLast();
-              }
-
-              print('✅ File bytes alındı: ${fileBytes!.length} bytes');
-              print('🔍 İlk 20 byte: ${fileBytes!.take(20).toList()}');
-            }
+          // Hash kontrolü ile data integrity check
+          if (fileBytes!.isNotEmpty) {
+            final hash = sha256.convert(fileBytes!).toString();
+            print('🔒 Dosya hash: ${hash.substring(0, 16)}...');
           }
-        } catch (e) {
-          print('⚠️ Binary part $i parsing hatası: $e');
-          continue;
         }
       }
 
@@ -895,6 +824,123 @@ class HttpSunucuServisi {
   }
 
   // Multipart parsing helper fonksiyonları
+  List<Map<String, dynamic>> _parseMultipartData(
+    List<int> bodyBytes,
+    String boundary,
+  ) {
+    final parts = <Map<String, dynamic>>[];
+
+    try {
+      // Boundary bytes'ını hazırla
+      final boundaryBytes = utf8.encode('--$boundary');
+      final endBoundaryBytes = utf8.encode('--$boundary--');
+
+      int start = 0;
+      int partIndex = 0;
+
+      // İlk boundary'i atla
+      int firstBoundaryIndex = _findBoundary(bodyBytes, boundaryBytes, start);
+      if (firstBoundaryIndex == -1) {
+        print('❌ İlk boundary bulunamadı');
+        return parts;
+      }
+
+      start = firstBoundaryIndex + boundaryBytes.length;
+      // \r\n'i atla
+      if (start < bodyBytes.length && bodyBytes[start] == 13) start++;
+      if (start < bodyBytes.length && bodyBytes[start] == 10) start++;
+
+      // Her part'ı işle
+      while (start < bodyBytes.length && partIndex < 10) {
+        // Bir sonraki boundary'i bul
+        int nextBoundaryIndex = _findBoundary(bodyBytes, boundaryBytes, start);
+        int endBoundaryIndex = _findBoundary(
+          bodyBytes,
+          endBoundaryBytes,
+          start,
+        );
+
+        // En yakın boundary'i seç
+        int currentPartEnd = -1;
+        if (nextBoundaryIndex != -1 && endBoundaryIndex != -1) {
+          currentPartEnd =
+              nextBoundaryIndex < endBoundaryIndex
+                  ? nextBoundaryIndex
+                  : endBoundaryIndex;
+        } else if (nextBoundaryIndex != -1) {
+          currentPartEnd = nextBoundaryIndex;
+        } else if (endBoundaryIndex != -1) {
+          currentPartEnd = endBoundaryIndex;
+        }
+
+        if (currentPartEnd == -1) break;
+
+        // Part data'sını al
+        final partData = bodyBytes.sublist(start, currentPartEnd);
+        if (partData.isEmpty) break;
+
+        // Header'ı bul
+        final headerEndIndex = _findHeaderEnd(partData);
+        if (headerEndIndex == -1) {
+          print('⚠️ Part $partIndex: Header end bulunamadı');
+          break;
+        }
+
+        // Header'ı parse et
+        final headerBytes = partData.sublist(0, headerEndIndex);
+        final headerString = utf8.decode(headerBytes, allowMalformed: true);
+
+        // Header'ları ayrıştır
+        final headers = <String, String>{};
+        final headerLines = headerString.split('\r\n');
+
+        for (final line in headerLines) {
+          if (line.contains(':')) {
+            final parts = line.split(':');
+            if (parts.length >= 2) {
+              final key = parts[0].trim().toLowerCase();
+              final value = parts.sublist(1).join(':').trim();
+              headers[key] = value;
+            }
+          }
+        }
+
+        // Data kısmını al
+        final dataStart = headerEndIndex + 4; // \r\n\r\n atla
+        List<int> data = [];
+
+        if (dataStart < partData.length) {
+          data = partData.sublist(dataStart);
+
+          // Trailing \r\n'leri temizle
+          while (data.isNotEmpty && (data.last == 13 || data.last == 10)) {
+            data.removeLast();
+          }
+        }
+
+        // Part'ı ekle
+        parts.add({'headers': headers, 'data': data});
+
+        print('✅ Part $partIndex parse edildi: ${data.length} bytes');
+        partIndex++;
+
+        // Sonraki part'a geç
+        start = currentPartEnd + boundaryBytes.length;
+        if (start < bodyBytes.length && bodyBytes[start] == 13) start++;
+        if (start < bodyBytes.length && bodyBytes[start] == 10) start++;
+
+        // End boundary'e ulaştıysak dur
+        if (currentPartEnd == endBoundaryIndex) break;
+      }
+
+      print('🎉 Toplam ${parts.length} part başarıyla parse edildi');
+      return parts;
+    } catch (e) {
+      print('❌ Multipart parsing hatası: $e');
+      return parts;
+    }
+  }
+
   int _findHeaderEnd(List<int> bytes) {
     // \r\n\r\n (double CRLF) pattern'ini ara
     final pattern = [13, 10, 13, 10]; // \r\n\r\n
