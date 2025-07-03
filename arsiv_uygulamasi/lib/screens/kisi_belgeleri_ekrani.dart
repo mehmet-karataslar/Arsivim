@@ -648,8 +648,9 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
           ],
         ),
         backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.fixed,
+        behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
@@ -665,8 +666,9 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
           ],
         ),
         backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.fixed,
+        behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }

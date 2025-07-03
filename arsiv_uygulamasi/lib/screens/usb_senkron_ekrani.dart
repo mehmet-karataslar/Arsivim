@@ -148,7 +148,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         ),
         backgroundColor: Colors.green[600],
         duration: const Duration(seconds: 8),
-        behavior: SnackBarBehavior.fixed,
+        behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
       ),
@@ -244,7 +244,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           ),
           backgroundColor: Colors.blue[600],
           duration: const Duration(seconds: 6),
-          behavior: SnackBarBehavior.fixed,
+          behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -272,7 +272,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           ),
           backgroundColor: Colors.red[600],
           duration: const Duration(seconds: 8),
-          behavior: SnackBarBehavior.fixed,
+          behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

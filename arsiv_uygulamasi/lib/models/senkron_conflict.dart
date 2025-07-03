@@ -56,6 +56,7 @@ class SenkronConflict {
   final int? timeDifference; // dakika cinsinden
   final String? errorMessage;
   final Map<String, dynamic>? additionalData;
+  final bool isResolved;
 
   SenkronConflict({
     required this.localDocument,
@@ -66,6 +67,7 @@ class SenkronConflict {
     this.timeDifference,
     this.errorMessage,
     this.additionalData,
+    this.isResolved = false,
   });
 
   /// JSON'a dönüştür
@@ -79,6 +81,7 @@ class SenkronConflict {
       'timeDifference': timeDifference,
       'errorMessage': errorMessage,
       'additionalData': additionalData,
+      'isResolved': isResolved,
     };
   }
 
@@ -93,6 +96,7 @@ class SenkronConflict {
       timeDifference: json['timeDifference'],
       errorMessage: json['errorMessage'],
       additionalData: json['additionalData'],
+      isResolved: json['isResolved'] ?? false,
     );
   }
 

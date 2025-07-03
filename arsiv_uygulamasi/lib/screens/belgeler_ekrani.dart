@@ -117,10 +117,11 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
             ],
           ),
           backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.fixed,
+          behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
+          margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 2),
         ),
       );

@@ -1663,8 +1663,9 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.fixed,
+        behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
@@ -1674,8 +1675,9 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       SnackBar(
         content: Text(mesaj),
         backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.fixed,
+        behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }

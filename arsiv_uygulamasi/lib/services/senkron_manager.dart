@@ -7,9 +7,11 @@ import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../models/senkron_cihazi.dart';
 import '../models/senkron_conflict.dart';
+import '../models/senkron_operation.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
 import '../services/senkron_conflict_resolver.dart';
+import '../services/senkron_state_manager.dart';
 
 class SenkronManager {
   static final SenkronManager _instance = SenkronManager._internal();
@@ -174,7 +176,16 @@ class SenkronManager {
     int guncellenmisBelgeSayisi = 0;
     int gonderilmiBelgeSayisi = 0;
 
+    // State manager'ı al
+    final stateManager = SenkronStateManager.instance;
+
     try {
+      // Session başlat
+      await stateManager.startSession(
+        localDeviceId: 'local_device', // Bu değer gerçek cihaz ID'si olmalı
+        remoteDeviceId: bagliBulunanCihaz.id,
+      );
+
       // Progress başlangıcı
       _updateProgress(0.0, 'Senkronizasyon başlatılıyor...');
       _addLog('🔄 Senkronizasyon başlatıldı');
@@ -476,6 +487,9 @@ class SenkronManager {
       _addLog('   • Gönderilen belgeler: $gonderilmiBelgeSayisi');
       _addLog('   • Kategoriler ve kişiler de senkronize edildi');
 
+      // Session'ı başarıyla sonlandır
+      await stateManager.endSession();
+
       return {
         'yeni': yeniBelgeSayisi,
         'guncellenen': guncellenmisBelgeSayisi,
@@ -483,6 +497,10 @@ class SenkronManager {
       };
     } catch (e) {
       _addLog('❌ Senkronizasyon hatası: $e');
+
+      // Session'ı hata ile sonlandır
+      await stateManager.endSession(reason: 'Senkronizasyon hatası: $e');
+
       rethrow;
     }
   }
