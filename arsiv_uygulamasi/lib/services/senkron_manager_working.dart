@@ -84,7 +84,7 @@ class SenkronManagerWorking {
     _addLog('📁 Belgeler senkronize ediliyor...');
 
     try {
-        final veriTabani = VeriTabaniServisi();
+      final veriTabani = VeriTabaniServisi();
 
       // Remote belgeleri al
       final remoteDocuments = await _fetchRemoteDocuments(cihaz.ip);
@@ -206,7 +206,7 @@ class SenkronManagerWorking {
   Future<void> _syncCategories(
     List<Map<String, dynamic>> remoteCategories,
   ) async {
-      final veriTabani = VeriTabaniServisi();
+    final veriTabani = VeriTabaniServisi();
     final localCategories = await veriTabani.kategorileriGetir();
 
     for (final remoteCategory in remoteCategories) {
@@ -292,7 +292,7 @@ class SenkronManagerWorking {
     await file.writeAsBytes(response.bodyBytes);
 
     // Veritabanına kaydet
-      final veriTabani = VeriTabaniServisi();
+    final veriTabani = VeriTabaniServisi();
     final belge = BelgeModeli(
       dosyaAdi: fileName,
       orijinalDosyaAdi: fileName,

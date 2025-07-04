@@ -100,6 +100,9 @@ class HttpSunucuServisi {
             case '/people':
               responseBody = await _handlePeople();
               break;
+            case '/sync/deltas':
+              responseBody = await _handleSyncDeltas();
+              break;
             default:
               if (request.uri.path.startsWith('/download/')) {
                 responseBody = await _handleDownload(request);
@@ -119,6 +122,10 @@ class HttpSunucuServisi {
                 } catch (e) {
                   // JSON parse edilemezse default 200 kullan
                 }
+              } else if (request.uri.path.startsWith('/document/')) {
+                responseBody = await _handleDocumentById(request);
+              } else if (request.uri.path.startsWith('/person/')) {
+                responseBody = await _handlePersonById(request);
               } else {
                 statusCode = 404;
                 responseBody = json.encode({'error': 'Endpoint bulunamadı'});
@@ -1005,6 +1012,142 @@ class HttpSunucuServisi {
       print('❌ People sync hatası: $e');
       request.response.statusCode = 500;
       return json.encode({'error': 'Kişi sync hatası: $e'});
+    }
+  }
+
+  // ============== YENİ SYNC ENDPOINT'LERİ ==============
+
+  /// Delta listesini döndüren endpoint
+  Future<String> _handleSyncDeltas() async {
+    try {
+      print('🔄 Delta sync endpoint\'i çağrıldı');
+
+      // Son 24 saat içindeki değişiklikleri al
+      final cutoffTime = DateTime.now().subtract(Duration(hours: 24));
+      final belgeler = await _veriTabani.belgeleriGetir();
+
+      // Değişen belgeleri tespit et
+      final deltas = <Map<String, dynamic>>[];
+
+      for (final belge in belgeler) {
+        if (belge.guncellemeTarihi.isAfter(cutoffTime) ||
+            belge.olusturmaTarihi.isAfter(cutoffTime)) {
+          // Delta objesi oluştur
+          final deltaType =
+              belge.olusturmaTarihi.isAfter(cutoffTime) ? 'CREATE' : 'UPDATE';
+
+          deltas.add({
+            'id': 'delta_${belge.id}_${DateTime.now().millisecondsSinceEpoch}',
+            'documentId': belge.id.toString(),
+            'deltaType': deltaType,
+            'timestamp': belge.guncellemeTarihi.toIso8601String(),
+            'hash': belge.dosyaHash,
+            'fileSize': belge.dosyaBoyutu,
+            'filePath': belge.dosyaYolu,
+            'metadata': {
+              'title': belge.baslik,
+              'description': belge.aciklama,
+              'categoryId': belge.kategoriId,
+              'personId': belge.kisiId,
+              'fileName': belge.dosyaAdi,
+              'fileType': belge.dosyaTipi,
+              'createdAt': belge.olusturmaTarihi.toIso8601String(),
+              'updatedAt': belge.guncellemeTarihi.toIso8601String(),
+            },
+          });
+        }
+      }
+
+      print('📊 ${deltas.length} delta gönderiliyor');
+
+      return json.encode({
+        'deltas': deltas,
+        'timestamp': DateTime.now().toIso8601String(),
+        'deviceId': _cihazId,
+        'totalCount': deltas.length,
+      });
+    } catch (e) {
+      print('❌ Delta sync hatası: $e');
+      return json.encode({
+        'error': 'Delta sync hatası',
+        'message': e.toString(),
+        'deltas': [],
+      });
+    }
+  }
+
+  /// Belge ID'sine göre belge detaylarını döndüren endpoint
+  Future<String> _handleDocumentById(HttpRequest request) async {
+    try {
+      final pathSegments = request.uri.pathSegments;
+      if (pathSegments.length < 2) {
+        return json.encode({'error': 'Belge ID gerekli'});
+      }
+
+      final documentId = pathSegments[1];
+      print('📄 Belge detayı isteniyor: $documentId');
+
+      final belge = await _veriTabani.belgeGetir(int.parse(documentId));
+      if (belge == null) {
+        return json.encode({'error': 'Belge bulunamadı'});
+      }
+
+      return json.encode({
+        'id': belge.id,
+        'fileName': belge.dosyaAdi,
+        'originalFileName': belge.orijinalDosyaAdi,
+        'fileType': belge.dosyaTipi,
+        'fileSize': belge.dosyaBoyutu,
+        'filePath': belge.dosyaYolu,
+        'hash': belge.dosyaHash,
+        'title': belge.baslik,
+        'description': belge.aciklama,
+        'categoryId': belge.kategoriId,
+        'personId': belge.kisiId,
+        'tags': belge.etiketler,
+        'createdAt': belge.olusturmaTarihi.toIso8601String(),
+        'updatedAt': belge.guncellemeTarihi.toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Belge detayı hatası: $e');
+      return json.encode({
+        'error': 'Belge detayı alınamadı',
+        'message': e.toString(),
+      });
+    }
+  }
+
+  /// Kişi ID'sine göre kişi detaylarını döndüren endpoint
+  Future<String> _handlePersonById(HttpRequest request) async {
+    try {
+      final pathSegments = request.uri.pathSegments;
+      if (pathSegments.length < 2) {
+        return json.encode({'error': 'Kişi ID gerekli'});
+      }
+
+      final personId = pathSegments[1];
+      print('👤 Kişi detayı isteniyor: $personId');
+
+      final kisi = await _veriTabani.kisiGetir(int.parse(personId));
+      if (kisi == null) {
+        return json.encode({'error': 'Kişi bulunamadı'});
+      }
+
+      return json.encode({
+        'id': kisi.id,
+        'firstName': kisi.ad,
+        'lastName': kisi.soyad,
+        'fullName': kisi.tamAd,
+        'active': kisi.aktif,
+        'createdAt': kisi.olusturmaTarihi.toIso8601String(),
+        'updatedAt': kisi.guncellemeTarihi.toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Kişi detayı hatası: $e');
+      return json.encode({
+        'error': 'Kişi detayı alınamadı',
+        'message': e.toString(),
+      });
     }
   }
 }

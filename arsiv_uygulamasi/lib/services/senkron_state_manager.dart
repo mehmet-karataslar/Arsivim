@@ -242,6 +242,31 @@ class SenkronStateManager {
     _logController.close();
     _statusController.close();
   }
+
+  /// Session'ı zorla sonlandır
+  Future<void> terminateSession(String sessionId, {String? reason}) async {
+    if (_currentSession?.sessionId == sessionId) {
+      await endSession(reason: reason);
+    }
+  }
+
+  /// Geçmişi temizle
+  Future<void> clearHistory() async {
+    _operations.clear();
+    _conflicts.clear();
+  }
+
+  /// Session'ı tamamla
+  Future<SenkronSession> completeSession(String sessionId) async {
+    if (_currentSession?.sessionId == sessionId) {
+      _currentSession = _currentSession!.copyWith(
+        status: SenkronSessionStatus.completed,
+        endTime: DateTime.now(),
+      );
+      return _currentSession!;
+    }
+    throw Exception('Session bulunamadı: $sessionId');
+  }
 }
 
 /// Senkronizasyon durumu enum'u

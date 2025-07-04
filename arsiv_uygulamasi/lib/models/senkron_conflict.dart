@@ -9,6 +9,9 @@ enum SenkronConflictType {
   /// İçerik farklılığı
   contentDifference,
 
+  /// İçerik uyuşmazlığı
+  contentMismatch,
+
   /// Metadata çakışması
   metadataConflict,
 
@@ -68,6 +71,8 @@ class SenkronConflict {
     this.errorMessage,
     this.additionalData,
     this.isResolved = false,
+    // Backward compatibility
+    String? conflictId,
   });
 
   /// JSON'a dönüştür
@@ -107,6 +112,8 @@ class SenkronConflict {
         return 'Aynı anda düzenleme çakışması';
       case SenkronConflictType.contentDifference:
         return 'İçerik farklılığı';
+      case SenkronConflictType.contentMismatch:
+        return 'İçerik uyuşmazlığı';
       case SenkronConflictType.metadataConflict:
         return 'Metadata çakışması';
       case SenkronConflictType.metadataIncomplete:

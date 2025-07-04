@@ -54,7 +54,6 @@ class VeriTabaniServisi {
       CREATE TABLE kategoriler (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         kategori_adi TEXT NOT NULL UNIQUE,
-        ust_kategori_id INTEGER,
         renk_kodu TEXT DEFAULT '#2196F3',
         simge_kodu TEXT DEFAULT 'folder',
         aciklama TEXT,
@@ -407,7 +406,9 @@ class VeriTabaniServisi {
   // Kategori ekleme
   Future<int> kategoriEkle(KategoriModeli kategori) async {
     final db = await database;
-    return await db.insert('kategoriler', kategori.toMap());
+    final map = kategori.toMap();
+    print('DEBUG: Veritabanına eklenecek map: $map');
+    return await db.insert('kategoriler', map);
   }
 
   // Tüm kategorileri getir

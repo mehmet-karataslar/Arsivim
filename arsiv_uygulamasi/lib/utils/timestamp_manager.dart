@@ -346,6 +346,14 @@ class TimestampComparisonResult {
     this.isNewer,
   });
 
+  // Backward compatibility
+  String get relationship {
+    if (isEqual) return 'equal';
+    if (isNewer == true) return 'newer';
+    if (isNewer == false) return 'older';
+    return 'unknown';
+  }
+
   @override
   String toString() {
     return 'TimestampComparisonResult(equal: $isEqual, diff: ${difference.inSeconds}s, tolerance: $withinTolerance)';

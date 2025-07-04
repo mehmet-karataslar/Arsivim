@@ -7,7 +7,6 @@ class KategoriKartiWidget extends StatelessWidget {
   final VoidCallback onLongPress;
   final VoidCallback onDuzenle;
   final VoidCallback onSil;
-  final VoidCallback? onAltKategoriler;
 
   const KategoriKartiWidget({
     Key? key,
@@ -16,7 +15,6 @@ class KategoriKartiWidget extends StatelessWidget {
     required this.onLongPress,
     required this.onDuzenle,
     required this.onSil,
-    this.onAltKategoriler,
   }) : super(key: key);
 
   @override
@@ -113,29 +111,6 @@ class KategoriKartiWidget extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
-
-                        // Alt kategori göstergesi
-                        if (kategori.altKategoriVarMi) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.folder_open,
-                                size: 14,
-                                color: Colors.grey[500],
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${kategori.altKategoriler!.length} alt kategori',
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -147,9 +122,6 @@ class KategoriKartiWidget extends StatelessWidget {
                       switch (value) {
                         case 'duzenle':
                           onDuzenle();
-                          break;
-                        case 'alt_kategoriler':
-                          if (onAltKategoriler != null) onAltKategoriler!();
                           break;
                         case 'sil':
                           onSil();
@@ -168,17 +140,6 @@ class KategoriKartiWidget extends StatelessWidget {
                               ],
                             ),
                           ),
-                          if (kategori.anaKategoriMi)
-                            const PopupMenuItem(
-                              value: 'alt_kategoriler',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.folder_open, size: 18),
-                                  SizedBox(width: 12),
-                                  Text('Alt Kategoriler'),
-                                ],
-                              ),
-                            ),
                           const PopupMenuItem(
                             value: 'sil',
                             child: Row(
@@ -196,46 +157,6 @@ class KategoriKartiWidget extends StatelessWidget {
                   ),
                 ],
               ),
-
-              // Alt kategori hızlı erişim (varsa)
-              if (kategori.altKategoriVarMi &&
-                  kategori.altKategoriler!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 32,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: kategori.altKategoriler!.length,
-                    itemBuilder: (context, index) {
-                      final altKategori = kategori.altKategoriler![index];
-                      return Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        child: Chip(
-                          avatar: Icon(
-                            _getIconData(altKategori.simgeKodu),
-                            size: 16,
-                            color: _hexToColor(altKategori.renkKodu),
-                          ),
-                          label: Text(
-                            altKategori.kategoriAdi,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          backgroundColor: _hexToColor(
-                            altKategori.renkKodu,
-                          ).withOpacity(0.1),
-                          side: BorderSide(
-                            color: _hexToColor(
-                              altKategori.renkKodu,
-                            ).withOpacity(0.3),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
             ],
           ),
         ),

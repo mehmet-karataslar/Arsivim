@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 import 'dart:async';
+import 'package:http/http.dart' as http;
 
 /// Ağ optimizasyonu ve network performance utilities
 class NetworkOptimizer {
@@ -370,6 +371,17 @@ class NetworkOptimizer {
     _latency = 0;
     _packetLoss = 0.0;
     _lastQualityCheck = null;
+  }
+
+  /// Bağlantı testi yap
+  Future<bool> testConnection(String remoteIP) async {
+    try {
+      final uri = Uri.parse('http://$remoteIP:8080/status');
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
   }
 }
 

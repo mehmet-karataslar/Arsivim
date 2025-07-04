@@ -171,10 +171,6 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
                               onLongPress: () => _kategoriDuzenle(kategori),
                               onDuzenle: () => _kategoriDuzenle(kategori),
                               onSil: () => _kategoriSil(kategori),
-                              onAltKategoriler:
-                                  kategori.anaKategoriMi
-                                      ? () => _altKategorileriGoster(kategori)
-                                      : null,
                             );
                           },
                         ),
@@ -194,8 +190,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
   }
 
   Widget _buildIstatistikler() {
-    final anaKategoriler = _kategoriler.where((k) => k.anaKategoriMi).length;
-    final altKategoriler = _kategoriler.where((k) => !k.anaKategoriMi).length;
+    final toplamKategori = _kategoriler.length;
     final toplamBelge = _kategoriler.fold(
       0,
       (sum, k) => sum + (k.belgeSayisi ?? 0),
@@ -218,17 +213,10 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
       child: Row(
         children: [
           _buildIstatistikKarti(
-            'Ana Kategori',
-            anaKategoriler.toString(),
-            Icons.folder,
-            Colors.blue,
-          ),
-          const SizedBox(width: 16),
-          _buildIstatistikKarti(
-            'Alt Kategori',
-            altKategoriler.toString(),
-            Icons.folder_open,
-            Colors.green,
+            'Toplam Kategori',
+            toplamKategori.toString(),
+            Icons.category,
+            Colors.purple,
           ),
           const SizedBox(width: 16),
           _buildIstatistikKarti(
@@ -326,34 +314,28 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
   }
 
   Future<void> _yeniKategoriEkle() async {
-    final anaKategoriler = _kategoriler.where((k) => k.anaKategoriMi).toList();
-
     final sonuc = await showDialog<KategoriModeli>(
       context: context,
-      builder: (context) => KategoriFormDialog(anaKategoriler: anaKategoriler),
+      builder: (context) => const KategoriFormDialog(),
     );
 
     if (sonuc != null) {
       try {
+        print('DEBUG: Kategori eklenecek: ${sonuc.toMap()}');
         await _veriTabaniServisi.kategoriEkle(sonuc);
         _basariGoster('Kategori başarıyla eklendi');
         _kategorileriYukle();
       } catch (e) {
+        print('DEBUG: Kategori ekleme hatası: $e');
         _hataGoster('Kategori eklenirken hata oluştu: $e');
       }
     }
   }
 
   Future<void> _kategoriDuzenle(KategoriModeli kategori) async {
-    final anaKategoriler = _kategoriler.where((k) => k.anaKategoriMi).toList();
-
     final sonuc = await showDialog<KategoriModeli>(
       context: context,
-      builder:
-          (context) => KategoriFormDialog(
-            kategori: kategori,
-            anaKategoriler: anaKategoriler,
-          ),
+      builder: (context) => KategoriFormDialog(kategori: kategori),
     );
 
     if (sonuc != null) {
@@ -401,22 +383,6 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
         _hataGoster('Kategori silinirken hata oluştu: $e');
       }
     }
-  }
-
-  void _altKategorileriGoster(KategoriModeli anaKategori) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (context) => KategorilerEkrani(
-              // Bu ekranın kendisi alt kategorileri filtrelemek için kullanılabilir.
-              // Veya ayrı bir alt kategori listeleme ekranı oluşturulabilir.
-              // Şimdilik, sadece ana kategori ID'sini geçiyoruz, bu ekranın içinde
-              // alt kategorilerin nasıl filtreleneceği belirlenmeli.
-            ),
-      ),
-    );
-    _basariGoster('${anaKategori.kategoriAdi} alt kategorileri');
   }
 
   void _basariGoster(String mesaj) {

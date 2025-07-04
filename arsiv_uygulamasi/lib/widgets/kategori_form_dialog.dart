@@ -5,17 +5,8 @@ import '../widgets/simge_secici_widget.dart';
 
 class KategoriFormDialog extends StatefulWidget {
   final KategoriModeli? kategori; // null ise yeni kategori, değilse düzenleme
-  final List<KategoriModeli> anaKategoriler; // Üst kategori seçimi için
-  final bool altKategoriMi; // Alt kategori oluşturuluyor mu?
-  final int? ustKategoriId; // Eğer alt kategori ise üst kategori ID'si
 
-  const KategoriFormDialog({
-    Key? key,
-    this.kategori,
-    this.anaKategoriler = const [],
-    this.altKategoriMi = false,
-    this.ustKategoriId,
-  }) : super(key: key);
+  const KategoriFormDialog({Key? key, this.kategori}) : super(key: key);
 
   @override
   State<KategoriFormDialog> createState() => _KategoriFormDialogState();
@@ -33,7 +24,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
   // Seçim durumları
   String _secilenRenk = '#2196F3';
   String _secilenSimge = 'folder';
-  int? _secilenUstKategoriId;
 
   @override
   void initState() {
@@ -46,9 +36,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
       _aciklamaController.text = widget.kategori!.aciklama ?? '';
       _secilenRenk = widget.kategori!.renkKodu;
       _secilenSimge = widget.kategori!.simgeKodu;
-      _secilenUstKategoriId = widget.kategori!.ustKategoriId;
-    } else if (widget.altKategoriMi && widget.ustKategoriId != null) {
-      _secilenUstKategoriId = widget.ustKategoriId;
     }
   }
 
@@ -90,8 +77,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
                   child: Text(
                     widget.kategori != null
                         ? 'Kategori Düzenle'
-                        : widget.altKategoriMi
-                        ? 'Alt Kategori Ekle'
                         : 'Yeni Kategori',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -237,75 +222,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
             ),
             const SizedBox(height: 16),
 
-            // Üst kategori seçimi (ana kategori oluşturuluyorsa)
-            if (!widget.altKategoriMi && widget.anaKategoriler.isNotEmpty) ...[
-              DropdownButtonFormField<int?>(
-                value: _secilenUstKategoriId,
-                decoration: InputDecoration(
-                  labelText: 'Üst Kategori (İsteğe Bağlı)',
-                  hintText: 'Ana kategori için boş bırakın',
-                  prefixIcon: const Icon(Icons.folder_open),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Ana Kategori'),
-                  ),
-                  ...widget.anaKategoriler.map((kategori) {
-                    return DropdownMenuItem<int?>(
-                      value: kategori.id,
-                      child: Row(
-                        children: [
-                          Icon(
-                            _getIconData(kategori.simgeKodu),
-                            size: 16,
-                            color: _hexToColor(kategori.renkKodu),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(kategori.kategoriAdi),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _secilenUstKategoriId = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // Alt kategori için üst kategori gösterimi
-            if (widget.altKategoriMi && widget.ustKategoriId != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info, color: Colors.blue, size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Bu kategori bir alt kategori olacak',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
             // Açıklama
             TextFormField(
               controller: _aciklamaController,
@@ -353,15 +269,40 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
   }
 
   void _kaydet() {
-    if (!_formKey.currentState!.validate()) {
-      _tabController.animateTo(0); // Bilgiler tab'ına git
+    final kategoriAdi = _kategoriAdiController.text.trim();
+
+    // Manuel validasyon - kategori adı kontrolü
+    if (kategoriAdi.isEmpty) {
+      // Bilgiler tab'ına geç ve hata göster
+      _tabController.animateTo(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kategori adı gereklidir'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
+    if (kategoriAdi.length < 2) {
+      // Bilgiler tab'ına geç ve hata göster
+      _tabController.animateTo(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kategori adı en az 2 karakter olmalıdır'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    print('DEBUG: Kategori adı: "$kategoriAdi"');
+    print('DEBUG: Kategori adı boş mu: ${kategoriAdi.isEmpty}');
+
     final kategori = KategoriModeli(
       id: widget.kategori?.id,
-      kategoriAdi: _kategoriAdiController.text.trim(),
-      ustKategoriId: _secilenUstKategoriId,
+      kategoriAdi: kategoriAdi,
+      ustKategoriId: null,
       renkKodu: _secilenRenk,
       simgeKodu: _secilenSimge,
       aciklama:
@@ -371,6 +312,7 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
       olusturmaTarihi: widget.kategori?.olusturmaTarihi ?? DateTime.now(),
     );
 
+    print('DEBUG: Kategori toMap: ${kategori.toMap()}');
     Navigator.of(context).pop(kategori);
   }
 

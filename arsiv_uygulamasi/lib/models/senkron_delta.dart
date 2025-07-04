@@ -25,6 +25,7 @@ class SenkronDelta {
   final int priority;
   final String? deviceId;
   final String? sessionId;
+  final String? filePath;
   final Map<String, dynamic>? additionalData;
 
   SenkronDelta({
@@ -38,6 +39,7 @@ class SenkronDelta {
     required this.priority,
     this.deviceId,
     this.sessionId,
+    this.filePath,
     this.additionalData,
   });
 
@@ -54,6 +56,7 @@ class SenkronDelta {
       'priority': priority,
       'deviceId': deviceId,
       'sessionId': sessionId,
+      'filePath': filePath,
       'additionalData': additionalData,
     };
   }
@@ -71,6 +74,7 @@ class SenkronDelta {
       priority: json['priority'],
       deviceId: json['deviceId'],
       sessionId: json['sessionId'],
+      filePath: json['filePath'],
       additionalData: json['additionalData'],
     );
   }
@@ -87,6 +91,7 @@ class SenkronDelta {
     int? priority,
     String? deviceId,
     String? sessionId,
+    String? filePath,
     Map<String, dynamic>? additionalData,
   }) {
     return SenkronDelta(
@@ -100,6 +105,7 @@ class SenkronDelta {
       priority: priority ?? this.priority,
       deviceId: deviceId ?? this.deviceId,
       sessionId: sessionId ?? this.sessionId,
+      filePath: filePath ?? this.filePath,
       additionalData: additionalData ?? this.additionalData,
     );
   }

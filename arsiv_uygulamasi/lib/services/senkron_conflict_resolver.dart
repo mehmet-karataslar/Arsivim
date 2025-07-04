@@ -100,31 +100,32 @@ class SenkronConflictResolver {
   }
 
   /// Çakışmayı otomatik çöz
-  Future<SenkronConflictResolution> resolveConflict(
-    SenkronConflict conflict,
-  ) async {
+  Future<Map<String, dynamic>> resolveConflict(SenkronConflict conflict) async {
     try {
       _log('🔧 Çakışma çözümü: ${conflict.conflictType.name}');
 
       switch (conflict.conflictType) {
         case SenkronConflictType.simultaneousEdit:
-          return _resolveSimultaneousEdit(conflict);
+          return {'resolution': 'preferLocal', 'autoResolved': true};
 
         case SenkronConflictType.contentDifference:
-          return _resolveContentDifference(conflict);
+          return {'resolution': 'preferRemote', 'autoResolved': true};
 
         case SenkronConflictType.metadataConflict:
-          return _resolveMetadataConflict(conflict);
+          return {'resolution': 'keepBoth', 'autoResolved': true};
 
         case SenkronConflictType.metadataIncomplete:
-          return _resolveIncompleteMetadata(conflict);
+          return {'resolution': 'preferLocal', 'autoResolved': true};
 
         case SenkronConflictType.analysisError:
-          return SenkronConflictResolution.manual;
+          return {'resolution': 'manual', 'autoResolved': false};
+
+        case SenkronConflictType.contentMismatch:
+          return {'resolution': 'manual', 'autoResolved': false};
       }
     } catch (e) {
       _log('❌ Çakışma çözüm hatası: $e');
-      return SenkronConflictResolution.manual;
+      return {'resolution': 'manual', 'autoResolved': false};
     }
   }
 

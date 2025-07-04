@@ -371,6 +371,12 @@ class DocumentHashComparisonResult {
   final bool metadataHashMatch;
   final bool contentSignatureMatch;
   final Map<String, dynamic> details;
+  final bool isIdentical;
+  final String localHash;
+  final String remoteHash;
+  final DateTime comparisonTime;
+  final String? error;
+  final int? fileSize;
 
   DocumentHashComparisonResult({
     required this.isMatch,
@@ -378,7 +384,19 @@ class DocumentHashComparisonResult {
     required this.metadataHashMatch,
     required this.contentSignatureMatch,
     required this.details,
-  });
+    bool? isIdentical,
+    String? localHash,
+    String? remoteHash,
+    DateTime? comparisonTime,
+    this.error,
+    this.fileSize,
+  }) : isIdentical = isIdentical ?? isMatch,
+       localHash = localHash ?? '',
+       remoteHash = remoteHash ?? '',
+       comparisonTime = comparisonTime ?? DateTime.now();
+
+  // Convenience getters
+  bool get identical => isIdentical;
 }
 
 /// Batch hash karşılaştırma sonucu

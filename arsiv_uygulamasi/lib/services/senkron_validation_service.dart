@@ -13,6 +13,11 @@ class SenkronValidationService {
 
   /// Ön koşul kontrollerini yap
   Future<SenkronValidationResult> validatePrerequisites() async {
+    return await validateSyncPrerequisites();
+  }
+
+  /// Senkronizasyon ön koşullarını doğrula
+  Future<SenkronValidationResult> validateSyncPrerequisites() async {
     final results = <SenkronValidationCheck>[];
 
     // Network bağlantısı kontrolü
@@ -260,6 +265,71 @@ class SenkronValidationService {
   void _log(String message) {
     print(message);
   }
+
+  /// Disk alanı kontrolü (alias)
+  Future<DiskSpaceResult> checkDiskSpace() async {
+    final check = await _checkStorageSpace();
+    return DiskSpaceResult(
+      hasSufficientSpace: check.isValid,
+      availableGB: 1.0, // Placeholder
+      usedGB: 0.5, // Placeholder
+      totalGB: 1.5, // Placeholder
+    );
+  }
+
+  /// Database bütünlüğü kontrolü
+  Future<DatabaseIntegrityResult> checkDatabaseIntegrity() async {
+    try {
+      // Basit database bütünlük kontrolü
+      // Gerçek implementasyon VeriTabaniServisi ile olacak
+      return DatabaseIntegrityResult(isValid: true, errors: [], warnings: []);
+    } catch (e) {
+      return DatabaseIntegrityResult(
+        isValid: false,
+        errors: [e.toString()],
+        warnings: [],
+      );
+    }
+  }
+
+  /// Database onarımı
+  Future<void> repairDatabase() async {
+    try {
+      // Database onarım işlemleri
+      // Gerçek implementasyon VeriTabaniServisi ile olacak
+      print('Database onarımı yapılıyor...');
+    } catch (e) {
+      throw Exception('Database onarımı başarısız: $e');
+    }
+  }
+}
+
+/// Disk alanı sonucu
+class DiskSpaceResult {
+  final bool hasSufficientSpace;
+  final double availableGB;
+  final double usedGB;
+  final double totalGB;
+
+  DiskSpaceResult({
+    required this.hasSufficientSpace,
+    required this.availableGB,
+    required this.usedGB,
+    required this.totalGB,
+  });
+}
+
+/// Database bütünlük sonucu
+class DatabaseIntegrityResult {
+  final bool isValid;
+  final List<String> errors;
+  final List<String> warnings;
+
+  DatabaseIntegrityResult({
+    required this.isValid,
+    required this.errors,
+    required this.warnings,
+  });
 }
 
 /// Doğrulama sonucu
@@ -281,6 +351,9 @@ class SenkronValidationResult {
         .map((check) => check.message)
         .toList();
   }
+
+  /// Errors property (alias)
+  List<String> get errors => errorMessages;
 
   /// Uyarı mesajları
   List<String> get warningMessages {

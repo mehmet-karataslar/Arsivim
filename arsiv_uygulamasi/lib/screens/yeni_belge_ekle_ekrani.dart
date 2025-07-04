@@ -36,64 +36,75 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   bool _dosyalarIsleniyor = false;
 
   late AnimationController _animationController;
+  late AnimationController _pulseController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  late Animation<double> _pulseAnimation;
 
   // Dosya türleri
   final Map<String, Map<String, dynamic>> _dosyaTurleri = {
     'pdf': {
       'ad': 'PDF Belgesi',
-      'icon': Icons.picture_as_pdf,
-      'color': Colors.red,
+      'icon': Icons.picture_as_pdf_rounded,
+      'color': Colors.red.shade600,
       'uzantilar': ['pdf'],
+      'gradient': [Colors.red.shade400, Colors.red.shade600],
     },
     'doc': {
       'ad': 'Word Belgesi',
-      'icon': Icons.description,
-      'color': Colors.blue,
+      'icon': Icons.description_rounded,
+      'color': Colors.blue.shade600,
       'uzantilar': ['doc', 'docx'],
+      'gradient': [Colors.blue.shade400, Colors.blue.shade600],
     },
     'xls': {
       'ad': 'Excel Tablosu',
-      'icon': Icons.table_chart,
-      'color': Colors.green,
+      'icon': Icons.table_chart_rounded,
+      'color': Colors.green.shade600,
       'uzantilar': ['xls', 'xlsx'],
+      'gradient': [Colors.green.shade400, Colors.green.shade600],
     },
     'ppt': {
       'ad': 'PowerPoint Sunumu',
-      'icon': Icons.slideshow,
-      'color': Colors.orange,
+      'icon': Icons.slideshow_rounded,
+      'color': Colors.orange.shade600,
       'uzantilar': ['ppt', 'pptx'],
+      'gradient': [Colors.orange.shade400, Colors.orange.shade600],
     },
     'jpg': {
       'ad': 'Resim Dosyası',
-      'icon': Icons.image,
-      'color': Colors.purple,
+      'icon': Icons.image_rounded,
+      'color': Colors.purple.shade600,
       'uzantilar': ['jpg', 'jpeg', 'png', 'gif', 'bmp'],
+      'gradient': [Colors.purple.shade400, Colors.purple.shade600],
     },
     'video': {
       'ad': 'Video Dosyası',
-      'icon': Icons.video_library,
-      'color': Colors.indigo,
+      'icon': Icons.video_library_rounded,
+      'color': Colors.indigo.shade600,
       'uzantilar': ['mp4', 'avi', 'mkv', 'mov'],
+      'gradient': [Colors.indigo.shade400, Colors.indigo.shade600],
     },
     'audio': {
       'ad': 'Ses Dosyası',
-      'icon': Icons.audiotrack,
-      'color': Colors.teal,
+      'icon': Icons.audiotrack_rounded,
+      'color': Colors.teal.shade600,
       'uzantilar': ['mp3', 'wav', 'flac', 'aac'],
+      'gradient': [Colors.teal.shade400, Colors.teal.shade600],
     },
     'archive': {
       'ad': 'Arşiv Dosyası',
-      'icon': Icons.archive,
-      'color': Colors.brown,
+      'icon': Icons.archive_rounded,
+      'color': Colors.brown.shade600,
       'uzantilar': ['zip', 'rar', '7z', 'tar'],
+      'gradient': [Colors.brown.shade400, Colors.brown.shade600],
     },
     'other': {
       'ad': 'Diğer',
-      'icon': Icons.insert_drive_file,
-      'color': Colors.grey,
+      'icon': Icons.insert_drive_file_rounded,
+      'color': Colors.grey.shade600,
       'uzantilar': ['txt', 'csv', 'json', 'xml'],
+      'gradient': [Colors.grey.shade400, Colors.grey.shade600],
     },
   };
 
@@ -103,7 +114,12 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
 
@@ -118,6 +134,12 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
     );
 
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _pulseController.repeat(reverse: true);
+
     _verileriYukle();
     _duzenlemeVerileriniYukle();
   }
@@ -128,6 +150,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     _aciklamaController.dispose();
     _etiketlerController.dispose();
     _animationController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -138,8 +161,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       _aciklamaController.text = belge.aciklama ?? '';
       _etiketler = belge.etiketler ?? [];
       _etiketlerController.text = _etiketler.join(', ');
-
-      // Dosya türünü belirle
       _secilenDosyaTuru = _dosyaTurunuBelirle(belge.dosyaTipi);
     }
   }
@@ -168,7 +189,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         _yukleniyor = false;
       });
 
-      // Düzenleme modunda seçili değerleri ayarla
       if (_duzenlemeModundaMi) {
         final belge = widget.duzenlenecekBelge!;
         _secilenKategori =
@@ -195,15 +215,16 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
             end: Alignment.bottomRight,
             colors: [
               Colors.blue.shade50,
+              Colors.indigo.shade50,
               Colors.purple.shade50,
-              Colors.pink.shade50,
             ],
+            stops: const [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
-              _buildAppBar(),
+              _buildModernAppBar(),
               Expanded(
                 child: _yukleniyor ? _buildYukleniyorWidget() : _buildForm(),
               ),
@@ -214,26 +235,44 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     );
   }
 
-  Widget _buildAppBar() {
+  Widget _buildModernAppBar() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
       child: Row(
         children: [
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              gradient: LinearGradient(
+                colors: [Colors.grey.shade200, Colors.grey.shade100],
+              ),
+              borderRadius: BorderRadius.circular(15),
             ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(15),
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.arrow_back_ios_rounded,
+                    color: Colors.grey.shade700,
+                    size: 20,
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 16),
@@ -244,7 +283,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 Text(
                   _duzenlemeModundaMi ? 'Belge Düzenle' : 'Yeni Belge Ekle',
                   style: const TextStyle(
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
@@ -252,46 +291,68 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 Text(
                   _duzenlemeModundaMi
                       ? 'Belge bilgilerini güncelleyin'
-                      : 'Yeni belgelerinizi arşivleyin',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      : 'Belgelerinizi organize edin',
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 ),
               ],
             ),
           ),
           if ((_secilenDosyalar.isNotEmpty || _duzenlemeModundaMi) &&
               !_dosyalarIsleniyor)
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.blue.shade400, Colors.purple.shade400],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: _belgelerEkle,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    child: Text(
-                      'KAYDET',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+            AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _pulseAnimation.value,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.blue.shade400, Colors.purple.shade400],
+                      ),
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.withOpacity(0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(15),
+                        onTap: _belgelerEkle,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.save_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'KAYDET',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
         ],
       ),
@@ -304,28 +365,51 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(30),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(16),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 4),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
-            child: const CircularProgressIndicator(),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 4,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.blue.shade400,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.cloud_download_rounded,
+                  size: 30,
+                  color: Colors.blue.shade400,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           Text(
             'Veriler yükleniyor...',
             style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[700],
-              fontWeight: FontWeight.w500,
+              fontSize: 18,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w600,
             ),
+          ),
+          Text(
+            'Lütfen bekleyiniz',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
           ),
         ],
       ),
@@ -341,29 +425,23 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // Dosya seçme kartı (sadece yeni ekleme modunda)
               if (!_duzenlemeModundaMi) _buildDosyaSecmeKarti(),
               if (!_duzenlemeModundaMi) const SizedBox(height: 20),
 
-              // Seçilen dosyalar
               if (_secilenDosyalar.isNotEmpty) _buildSecilenDosyalarKarti(),
               if (_secilenDosyalar.isNotEmpty) const SizedBox(height: 20),
 
-              // Dosya türü seçimi
               if (!_duzenlemeModundaMi) _buildDosyaTuruSecimi(),
               if (!_duzenlemeModundaMi) const SizedBox(height: 20),
 
-              // Belge bilgileri kartı
               _buildBelgeBilgileriKarti(),
               const SizedBox(height: 20),
 
-              // Kategori ve kişi seçimi kartı
               _buildKategoriVeKisiKarti(),
               const SizedBox(height: 20),
 
-              // Etiketler kartı
               _buildEtiketlerKarti(),
-              const SizedBox(height: 100), // Alt boşluk
+              const SizedBox(height: 100),
             ],
           ),
         ),
@@ -378,53 +456,41 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         gradient: LinearGradient(
           colors: [Colors.blue.shade400, Colors.purple.shade400],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.blue.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           onTap: _dosyaEkle,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.cloud_upload,
-                    size: 48,
-                    color: Colors.white,
-                  ),
+                Icon(
+                  _secilenDosyalar.isEmpty
+                      ? Icons.cloud_upload_rounded
+                      : Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 18,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(width: 8),
                 Text(
                   _secilenDosyalar.isEmpty
                       ? 'Dosya Seçin'
                       : '${_secilenDosyalar.length} Dosya Seçildi',
                   style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
                     color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Birden fazla dosya seçebilirsiniz',
-                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
                     fontSize: 14,
-                    color: Colors.white.withOpacity(0.8),
                   ),
                 ),
               ],
@@ -438,75 +504,97 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   Widget _buildSecilenDosyalarKarti() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 25,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                    gradient: LinearGradient(
+                      colors: [Colors.green.shade400, Colors.green.shade600],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    Icons.check_circle,
-                    color: Colors.green.shade600,
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.white,
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'Seçilen Dosyalar (${_secilenDosyalar.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Seçilen Dosyalar',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        '${_secilenDosyalar.length} dosya hazır',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _secilenDosyalar.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final dosya = _secilenDosyalar[index];
                 return Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.grey.shade200),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          borderRadius: BorderRadius.circular(8),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.blue.shade400,
+                              Colors.blue.shade600,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(
-                          Icons.insert_drive_file,
-                          color: Colors.blue.shade600,
+                        child: const Icon(
+                          Icons.insert_drive_file_rounded,
+                          color: Colors.white,
                           size: 20,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,16 +603,29 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                               dosya.name,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                                fontSize: 15,
+                                color: Colors.black87,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              '${(dosya.size / 1024).toStringAsFixed(1)} KB',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${(dosya.size / 1024).toStringAsFixed(1)} KB',
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ],
@@ -533,34 +634,37 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.red.shade100,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.close,
-                            color: Colors.red.shade600,
-                            size: 18,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _secilenDosyalar.removeAt(index);
-                            });
-
-                            // Dosya silindikten sonra otomatik algılamayı tetikle
-                            if (_secilenDosyalar.isNotEmpty) {
-                              Future.delayed(
-                                const Duration(milliseconds: 100),
-                                () {
-                                  _otomatikDosyaTuruAlgila();
-                                },
-                              );
-                            } else {
-                              // Tüm dosyalar silinirse dosya türü seçimini sıfırla
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
                               setState(() {
-                                _secilenDosyaTuru = null;
+                                _secilenDosyalar.removeAt(index);
                               });
-                            }
-                          },
+
+                              if (_secilenDosyalar.isNotEmpty) {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () => _otomatikDosyaTuruAlgila(),
+                                );
+                              } else {
+                                setState(() {
+                                  _secilenDosyaTuru = null;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(
+                                Icons.close_rounded,
+                                color: Colors.red.shade600,
+                                size: 18,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -575,7 +679,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   }
 
   Widget _buildDosyaTuruSecimi() {
-    // Otomatik dosya türü algılama
     if (_secilenDosyalar.isNotEmpty && _secilenDosyaTuru == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _otomatikDosyaTuruAlgila();
@@ -587,47 +690,80 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 25,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                    gradient: LinearGradient(
+                      colors:
+                          secilenTur != null
+                              ? secilenTur['gradient']
+                              : [
+                                Colors.orange.shade400,
+                                Colors.orange.shade600,
+                              ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    Icons.category,
-                    color: Colors.orange.shade600,
+                    secilenTur?['icon'] ?? Icons.category_rounded,
+                    color: Colors.white,
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Dosya Türü',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dosya Türü',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        secilenTur != null
+                            ? '${secilenTur['ad']} (Otomatik algılandı)'
+                            : 'Dosya türünü seçin',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color:
+                              secilenTur != null
+                                  ? secilenTur['color']
+                                  : Colors.grey.shade600,
+                          fontWeight:
+                              secilenTur != null
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 if (secilenTur != null)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 12,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
                       color: secilenTur['color'].withOpacity(0.1),
@@ -640,17 +776,17 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.auto_awesome,
+                          Icons.auto_awesome_rounded,
                           size: 14,
                           color: secilenTur['color'],
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Otomatik',
+                          'Auto',
                           style: TextStyle(
                             fontSize: 12,
                             color: secilenTur['color'],
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -658,19 +794,17 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                   ),
               ],
             ),
-            const SizedBox(height: 16),
-
-            // Şık Dropdown Container
+            const SizedBox(height: 20),
             Container(
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color:
                       secilenTur != null
                           ? secilenTur['color'].withOpacity(0.3)
                           : Colors.grey.shade300,
-                  width: 1,
+                  width: 1.5,
                 ),
               ),
               child: Theme(
@@ -679,75 +813,58 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 ).copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
                   tilePadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                    horizontal: 20,
+                    vertical: 12,
                   ),
                   childrenPadding: EdgeInsets.zero,
-                  initiallyExpanded: false,
-                  leading:
-                      secilenTur != null
-                          ? Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: secilenTur['color'].withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              secilenTur['icon'],
-                              color: secilenTur['color'],
-                              size: 20,
-                            ),
-                          )
-                          : Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.folder_open,
-                              color: Colors.grey[600],
-                              size: 20,
-                            ),
-                          ),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors:
+                            secilenTur != null
+                                ? secilenTur['gradient']
+                                : [Colors.grey.shade300, Colors.grey.shade400],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      secilenTur?['icon'] ?? Icons.folder_open_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
                   title: Text(
-                    secilenTur != null ? secilenTur['ad'] : 'Dosya türü seçin',
+                    secilenTur?['ad'] ?? 'Dosya türü seçin',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color:
                           secilenTur != null
                               ? secilenTur['color']
-                              : Colors.grey[700],
+                              : Colors.grey.shade700,
                     ),
                   ),
-                  subtitle:
-                      secilenTur != null
-                          ? Text(
-                            'Desteklenen: ${secilenTur['uzantilar'].join(', ').toUpperCase()}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          )
-                          : const Text(
-                            'Dosya türünü belirlemek için tıklayın',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
+                  subtitle: Text(
+                    secilenTur != null
+                        ? 'Desteklenen: ${secilenTur['uzantilar'].join(', ').toUpperCase()}'
+                        : 'Dosya türünü belirlemek için tıklayın',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
                   trailing: Icon(
-                    Icons.keyboard_arrow_down,
+                    Icons.keyboard_arrow_down_rounded,
                     color:
                         secilenTur != null
                             ? secilenTur['color']
-                            : Colors.grey[600],
+                            : Colors.grey.shade600,
                   ),
                   children: [
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(12),
-                          bottomRight: Radius.circular(12),
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
                         ),
                       ),
                       child: Column(
@@ -767,13 +884,13 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
+                                      horizontal: 20,
+                                      vertical: 16,
                                     ),
                                     decoration: BoxDecoration(
                                       color:
                                           secili
-                                              ? value['color'].withOpacity(0.05)
+                                              ? value['color'].withOpacity(0.08)
                                               : Colors.transparent,
                                       border: Border(
                                         top: BorderSide(
@@ -785,22 +902,22 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                                     child: Row(
                                       children: [
                                         Container(
-                                          padding: const EdgeInsets.all(6),
+                                          padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: value['color'].withOpacity(
-                                              0.1,
+                                            gradient: LinearGradient(
+                                              colors: value['gradient'],
                                             ),
                                             borderRadius: BorderRadius.circular(
-                                              6,
+                                              8,
                                             ),
                                           ),
                                           child: Icon(
                                             value['icon'],
-                                            color: value['color'],
+                                            color: Colors.white,
                                             size: 18,
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
+                                        const SizedBox(width: 16),
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment:
@@ -809,7 +926,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                                               Text(
                                                 value['ad'],
                                                 style: TextStyle(
-                                                  fontSize: 14,
+                                                  fontSize: 15,
                                                   fontWeight:
                                                       secili
                                                           ? FontWeight.w600
@@ -817,7 +934,9 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                                                   color:
                                                       secili
                                                           ? value['color']
-                                                          : Colors.grey[700],
+                                                          : Colors
+                                                              .grey
+                                                              .shade700,
                                                 ),
                                               ),
                                               Text(
@@ -826,17 +945,25 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                                                     .toUpperCase(),
                                                 style: TextStyle(
                                                   fontSize: 11,
-                                                  color: Colors.grey[500],
+                                                  color: Colors.grey.shade500,
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
                                         if (secili)
-                                          Icon(
-                                            Icons.check_circle,
-                                            color: value['color'],
-                                            size: 18,
+                                          Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: value['color'],
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: const Icon(
+                                              Icons.check_rounded,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
                                           ),
                                       ],
                                     ),
@@ -856,11 +983,9 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     );
   }
 
-  // Otomatik dosya türü algılama metodu
   void _otomatikDosyaTuruAlgila() {
     if (_secilenDosyalar.isEmpty) return;
 
-    // Tüm dosyaların uzantılarını analiz et
     Map<String, int> uzantiSayilari = {};
     Map<String, String> uzantiTurleri = {};
 
@@ -869,7 +994,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         String uzanti = dosya.name.split('.').last.toLowerCase();
         uzantiSayilari[uzanti] = (uzantiSayilari[uzanti] ?? 0) + 1;
 
-        // Bu uzantının hangi dosya türüne ait olduğunu bul
         for (final entry in _dosyaTurleri.entries) {
           if (entry.value['uzantilar'].contains(uzanti)) {
             uzantiTurleri[uzanti] = entry.key;
@@ -881,7 +1005,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
 
     if (uzantiTurleri.isEmpty) return;
 
-    // En yaygın dosya türünü bul
     Map<String, int> turSayilari = {};
     for (final uzanti in uzantiSayilari.keys) {
       String? tur = uzantiTurleri[uzanti];
@@ -892,7 +1015,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
 
     if (turSayilari.isEmpty) return;
 
-    // En çok tekrar eden dosya türünü al
     String algilanaDosyaTuru =
         turSayilari.entries.reduce((a, b) => a.value > b.value ? a : b).key;
 
@@ -900,63 +1022,80 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       setState(() {
         _secilenDosyaTuru = algilanaDosyaTuru;
       });
-
-      // Otomatik algılama sessizce çalışır (snackbar kaldırıldı)
     }
   }
 
   Widget _buildBelgeBilgileriKarti() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 25,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade400, Colors.blue.shade600],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    Icons.edit,
-                    color: Colors.blue.shade600,
+                  child: const Icon(
+                    Icons.edit_rounded,
+                    color: Colors.white,
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Belge Bilgileri',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Belge Bilgileri',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Belge detaylarını girin',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             _buildModernTextField(
               controller: _baslikController,
               label: 'Belge Başlığı',
               hint: 'Belge için açıklayıcı bir başlık girin',
-              icon: Icons.title,
+              icon: Icons.title_rounded,
+              iconColor: Colors.blue.shade600,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             _buildModernTextField(
               controller: _aciklamaController,
               label: 'Açıklama',
               hint: 'Belge hakkında detaylar',
-              icon: Icons.description,
+              icon: Icons.description_rounded,
+              iconColor: Colors.blue.shade600,
               maxLines: 3,
             ),
           ],
@@ -968,48 +1107,66 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   Widget _buildKategoriVeKisiKarti() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 25,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.purple.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                    gradient: LinearGradient(
+                      colors: [Colors.purple.shade400, Colors.purple.shade600],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    Icons.category,
-                    color: Colors.purple.shade600,
+                  child: const Icon(
+                    Icons.category_rounded,
+                    color: Colors.white,
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Kategori & Kişi',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Kategori & Kişi',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Belgeyi organize edin',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             _buildModernDropdown<KategoriModeli>(
               value: _secilenKategori,
               label: 'Kategori',
               hint: 'Bir kategori seçin',
-              icon: Icons.folder,
+              icon: Icons.folder_rounded,
+              iconColor: Colors.purple.shade600,
               items:
                   _kategoriler.map((kategori) {
                     return DropdownMenuItem(
@@ -1017,19 +1174,30 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                       child: Row(
                         children: [
                           Container(
-                            width: 12,
-                            height: 12,
+                            width: 16,
+                            height: 16,
                             decoration: BoxDecoration(
                               color: Color(
                                 int.parse(
                                   kategori.renkKodu.replaceFirst('#', '0xFF'),
                                 ),
                               ),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(kategori.kategoriAdi),
+                          const SizedBox(width: 12),
+                          Text(
+                            kategori.kategoriAdi,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
                         ],
                       ),
                     );
@@ -1040,17 +1208,40 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 });
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             _buildModernDropdown<KisiModeli>(
               value: _secilenKisi,
               label: 'Kişi *',
               hint: 'Bir kişi seçin',
-              icon: Icons.person,
+              icon: Icons.person_rounded,
+              iconColor: Colors.purple.shade600,
               items:
                   _kisiler.map((kisi) {
                     return DropdownMenuItem(
                       value: kisi,
-                      child: Text(kisi.tamAd),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.purple.shade100,
+                            child: Text(
+                              kisi.ad.isNotEmpty
+                                  ? kisi.ad[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                color: Colors.purple.shade600,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            kisi.tamAd,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
                     );
                   }).toList(),
               onChanged: (kisi) {
@@ -1059,103 +1250,173 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 });
               },
             ),
-            // Kişi yönetimi butonları
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _hizliKisiEkle,
-                    icon: const Icon(Icons.person_add, size: 18),
-                    label: const Text('Hızlı Kişi Ekle'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.green.shade400, Colors.green.shade600],
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.green.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: _hizliKisiEkle,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.person_add_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Hızlı Kişi Ekle',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _kisileriYenile,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Yenile'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade400, Colors.blue.shade600],
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _kisileriYenile,
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        child: const Icon(
+                          Icons.refresh_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
 
             if (_kisiler.isEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
+                  gradient: LinearGradient(
+                    colors: [Colors.orange.shade50, Colors.orange.shade100],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.orange.shade300),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.warning, color: Colors.orange.shade600),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade200,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.warning_rounded,
+                            color: Colors.orange.shade700,
+                            size: 20,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             'Kişi listesi boş!',
                             style: TextStyle(
-                              color: Colors.orange.shade700,
-                              fontWeight: FontWeight.w600,
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Text(
-                      'Belge eklemek için bir kişi seçmelisiniz. Yukarıdaki "Hızlı Kişi Ekle" butonunu kullanarak hemen kişi ekleyebilir veya "Yenile" butonuyla kişi listesini güncelleyebilirsiniz.',
+                      'Belge eklemek için bir kişi seçmelisiniz. "Hızlı Kişi Ekle" butonunu kullanarak hemen kişi ekleyebilir veya "Yenile" butonuyla kişi listesini güncelleyebilirsiniz.',
                       style: TextStyle(
-                        color: Colors.orange.shade600,
-                        fontSize: 13,
+                        color: Colors.orange.shade700,
+                        fontSize: 14,
+                        height: 1.4,
                       ),
                     ),
                   ],
                 ),
               ),
             ] else ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade200),
+                  gradient: LinearGradient(
+                    colors: [Colors.green.shade50, Colors.green.shade100],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.shade300),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: Colors.green.shade600,
-                      size: 16,
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade200,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.green.shade700,
+                        size: 16,
+                      ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     Text(
                       '${_kisiler.length} kişi mevcut',
                       style: TextStyle(
-                        color: Colors.green.shade700,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        color: Colors.green.shade800,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -1171,81 +1432,124 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   Widget _buildEtiketlerKarti() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 25,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                    gradient: LinearGradient(
+                      colors: [Colors.green.shade400, Colors.green.shade600],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    Icons.label,
-                    color: Colors.green.shade600,
+                  child: const Icon(
+                    Icons.label_rounded,
+                    color: Colors.white,
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Etiketler',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Etiketler',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'Belgeyi etiketleyin',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             _buildModernTextField(
               controller: _etiketlerController,
               label: 'Etiketler',
               hint: 'Virgülle ayırarak etiket ekleyin (örn: önemli, iş, proje)',
-              icon: Icons.local_offer,
+              icon: Icons.local_offer_rounded,
+              iconColor: Colors.green.shade600,
               onChanged: (value) {
-                _etiketler =
-                    value
-                        .split(',')
-                        .map((e) => e.trim())
-                        .where((e) => e.isNotEmpty)
-                        .toList();
+                setState(() {
+                  _etiketler =
+                      value
+                          .split(',')
+                          .map((e) => e.trim())
+                          .where((e) => e.isNotEmpty)
+                          .toList();
+                });
               },
             ),
             if (_etiketler.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 10,
+                runSpacing: 10,
                 children:
                     _etiketler.map((etiket) {
                       return Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                          horizontal: 16,
+                          vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.blue.shade300),
-                        ),
-                        child: Text(
-                          etiket,
-                          style: TextStyle(
-                            color: Colors.blue.shade700,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.blue.shade100,
+                              Colors.blue.shade200,
+                            ],
                           ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.blue.shade300),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.withOpacity(0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.tag_rounded,
+                              size: 14,
+                              color: Colors.blue.shade700,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              etiket,
+                              style: TextStyle(
+                                color: Colors.blue.shade800,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }).toList(),
@@ -1262,14 +1566,15 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     required String label,
     required String hint,
     required IconData icon,
+    required Color iconColor,
     int maxLines = 1,
     Function(String)? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200, width: 1.5),
       ),
       child: TextField(
         controller: controller,
@@ -1280,21 +1585,25 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
           hintText: hint,
           prefixIcon: Container(
             margin: const EdgeInsets.all(8),
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.blue.shade100,
-              borderRadius: BorderRadius.circular(8),
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: Colors.blue.shade600, size: 20),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
+            horizontal: 20,
+            vertical: 18,
           ),
-          labelStyle: TextStyle(color: Colors.grey[700]),
-          hintStyle: TextStyle(color: Colors.grey[500]),
+          labelStyle: TextStyle(
+            color: Colors.grey.shade700,
+            fontWeight: FontWeight.w500,
+          ),
+          hintStyle: TextStyle(color: Colors.grey.shade500),
         ),
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -1304,14 +1613,15 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     required String label,
     required String hint,
     required IconData icon,
+    required Color iconColor,
     required List<DropdownMenuItem<T>> items,
     required Function(T?) onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200, width: 1.5),
       ),
       child: DropdownButtonFormField<T>(
         value: value,
@@ -1320,23 +1630,33 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
           hintText: hint,
           prefixIcon: Container(
             margin: const EdgeInsets.all(8),
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.purple.shade100,
-              borderRadius: BorderRadius.circular(8),
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: Colors.purple.shade600, size: 20),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
+            horizontal: 20,
+            vertical: 18,
           ),
-          labelStyle: TextStyle(color: Colors.grey[700]),
-          hintStyle: TextStyle(color: Colors.grey[500]),
+          labelStyle: TextStyle(
+            color: Colors.grey.shade700,
+            fontWeight: FontWeight.w500,
+          ),
+          hintStyle: TextStyle(color: Colors.grey.shade500),
+        ),
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
         ),
         items: items,
         onChanged: onChanged,
+        dropdownColor: Colors.white,
+        icon: Icon(Icons.keyboard_arrow_down_rounded, color: iconColor),
       ),
     );
   }
@@ -1350,7 +1670,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
           _secilenDosyalar.addAll(dosyalar);
         });
 
-        // Otomatik dosya türü algılamasını tetikle
         Future.delayed(const Duration(milliseconds: 100), () {
           _otomatikDosyaTuruAlgila();
         });
@@ -1361,7 +1680,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   }
 
   Future<void> _belgelerEkle() async {
-    // Validasyon
     if (!_duzenlemeModundaMi && _secilenDosyalar.isEmpty) {
       _hataGoster('En az bir dosya seçmelisiniz');
       return;
@@ -1383,7 +1701,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     }
   }
 
-  // Hızlı kişi ekleme
   Future<void> _hizliKisiEkle() async {
     final TextEditingController adController = TextEditingController();
     final TextEditingController soyadController = TextEditingController();
@@ -1391,85 +1708,147 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     final result = await showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: const Text('Hızlı Kişi Ekle'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: adController,
-                  decoration: const InputDecoration(
-                    labelText: 'Ad *',
-                    hintText: 'Kişinin adını girin',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: soyadController,
-                  decoration: const InputDecoration(
-                    labelText: 'Soyad *',
-                    hintText: 'Kişinin soyadını girin',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('İptal'),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade50, Colors.purple.shade50],
+                ),
               ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (adController.text.trim().isEmpty ||
-                      soyadController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Ad ve soyad alanları gereklidir'),
-                        backgroundColor: Colors.red,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.green.shade400, Colors.green.shade600],
                       ),
-                    );
-                    return;
-                  }
-
-                  try {
-                    final yeniKisi = KisiModeli(
-                      ad: adController.text.trim(),
-                      soyad: soyadController.text.trim(),
-                      olusturmaTarihi: DateTime.now(),
-                      guncellemeTarihi: DateTime.now(),
-                    );
-
-                    await _veriTabani.kisiEkle(yeniKisi);
-                    Navigator.of(context).pop(true);
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Kişi eklenirken hata oluştu: $e'),
-                        backgroundColor: Colors.red,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.person_add_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Hızlı Kişi Ekle',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Yeni kişi bilgilerini girin',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: adController,
+                    decoration: InputDecoration(
+                      labelText: 'Ad *',
+                      hintText: 'Kişinin adını girin',
+                      prefixIcon: const Icon(Icons.person_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    );
-                  }
-                },
-                child: const Text('Ekle'),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: soyadController,
+                    decoration: InputDecoration(
+                      labelText: 'Soyad *',
+                      hintText: 'Kişinin soyadını girin',
+                      prefixIcon: const Icon(Icons.person_outline_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () async {
+                                if (adController.text.trim().isEmpty ||
+                                    soyadController.text.trim().isEmpty) {
+                                  _hataGoster(
+                                    'Ad ve soyad alanları gereklidir',
+                                  );
+                                  return;
+                                }
+
+                                try {
+                                  final yeniKisi = KisiModeli(
+                                    ad: adController.text.trim(),
+                                    soyad: soyadController.text.trim(),
+                                    olusturmaTarihi: DateTime.now(),
+                                    guncellemeTarihi: DateTime.now(),
+                                  );
+
+                                  await _veriTabani.kisiEkle(yeniKisi);
+                                  Navigator.of(context).pop(true);
+                                } catch (e) {
+                                  _hataGoster(
+                                    'Kişi eklenirken hata oluştu: $e',
+                                  );
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                child: const Text(
+                                  'Ekle',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
     );
 
     if (result == true) {
       await _kisileriYenile();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kişi başarıyla eklendi'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _basariMesajiGoster('Kişi başarıyla eklendi');
     }
   }
 
-  // Kişi listesini yenile
   Future<void> _kisileriYenile() async {
     try {
       final kisiler = await _veriTabani.kisileriGetir();
@@ -1477,7 +1856,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         _kisiler = kisiler;
       });
 
-      // Eski seçimi kontrol et
       if (_secilenKisi != null) {
         final mevcutKisi = _kisiler.firstWhere(
           (k) => k.id == _secilenKisi!.id,
@@ -1491,16 +1869,11 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         );
 
         if (mevcutKisi.ad.isEmpty) {
-          _secilenKisi = null; // Seçili kişi artık yok
+          _secilenKisi = null;
         }
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${_kisiler.length} kişi yüklendi'),
-          backgroundColor: Colors.blue,
-        ),
-      );
+      _basariMesajiGoster('${_kisiler.length} kişi yüklendi');
     } catch (e) {
       _hataGoster('Kişiler yüklenirken hata oluştu: $e');
     }
@@ -1524,7 +1897,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       );
 
       await _veriTabani.belgeGuncelle(guncelBelge);
-
       _basariMesajiGoster('Belge başarıyla güncellendi');
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -1537,19 +1909,18 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   }
 
   Future<void> _yeniBelgelerEkle() async {
-    // Progress dialog göster
     showDialog(
       context: context,
       barrierDismissible: false,
       builder:
           (context) => Dialog(
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 gradient: LinearGradient(
                   colors: [Colors.blue.shade50, Colors.purple.shade50],
                 ),
@@ -1558,25 +1929,53 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: const CircularProgressIndicator(),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          height: 60,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 4,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.blue.shade400,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.cloud_upload_rounded,
+                          size: 28,
+                          color: Colors.blue.shade400,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Text(
                     '${_secilenDosyalar.length} dosya işleniyor...',
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Lütfen bekleyin',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    'Dosyalar kaydediliyor, lütfen bekleyin',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
@@ -1590,21 +1989,18 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     try {
       for (var platformFile in _secilenDosyalar) {
         try {
-          // Dosyayı işle ve hash hesapla
           BelgeModeli belge = await _dosyaServisi.dosyaKopyalaVeHashHesapla(
             platformFile,
           );
 
-          // Aynı hash'e sahip belge var mı kontrol et
           BelgeModeli? mevcutBelge = await _veriTabani.belgeGetirByHash(
             belge.dosyaHash,
           );
           if (mevcutBelge != null) {
             hataliSayisi++;
-            continue; // Aynı dosya zaten var
+            continue;
           }
 
-          // Belge bilgilerini güncelle
           DateTime simdi = DateTime.now();
           belge = belge.copyWith(
             baslik:
@@ -1621,7 +2017,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
             guncellemeTarihi: simdi,
           );
 
-          // Veritabanına kaydet
           await _veriTabani.belgeEkle(belge);
           basariliSayisi++;
         } catch (e) {
@@ -1630,26 +2025,25 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
         }
       }
 
-      Navigator.of(context).pop(); // Progress dialog'u kapat
+      Navigator.of(context).pop();
 
-      // Sonuç mesajı
       String mesaj = '';
       if (basariliSayisi > 0) {
         mesaj += '$basariliSayisi dosya başarıyla eklendi';
       }
       if (hataliSayisi > 0) {
         if (mesaj.isNotEmpty) mesaj += ', ';
-        mesaj += '$hataliSayisi dosya eklenemedi (Aynı dosya zaten mevcut)';
+        mesaj += '$hataliSayisi dosya eklenemedi';
       }
 
       if (basariliSayisi > 0) {
         _basariMesajiGoster(mesaj);
-        Navigator.of(context).pop(true); // true = başarılı
+        Navigator.of(context).pop(true);
       } else {
         _hataGoster(mesaj.isEmpty ? 'Hiçbir dosya eklenemedi' : mesaj);
       }
     } catch (e) {
-      Navigator.of(context).pop(); // Progress dialog'u kapat
+      Navigator.of(context).pop();
       _hataGoster('Belgeler eklenirken hata oluştu: $e');
     } finally {
       setState(() {
@@ -1661,11 +2055,37 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   void _hataGoster(String mesaj) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(mesaj),
-        backgroundColor: Colors.red,
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                mesaj,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red.shade600,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         margin: const EdgeInsets.all(16),
+        elevation: 8,
       ),
     );
   }
@@ -1673,11 +2093,37 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   void _basariMesajiGoster(String mesaj) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(mesaj),
-        backgroundColor: Colors.green,
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                mesaj,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         margin: const EdgeInsets.all(16),
+        elevation: 8,
       ),
     );
   }

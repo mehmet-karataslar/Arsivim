@@ -11,18 +11,35 @@ class KisiEkleEkrani extends StatefulWidget {
   State<KisiEkleEkrani> createState() => _KisiEkleEkraniState();
 }
 
-class _KisiEkleEkraniState extends State<KisiEkleEkrani> {
+class _KisiEkleEkraniState extends State<KisiEkleEkrani>
+    with SingleTickerProviderStateMixin {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _adController = TextEditingController();
   final TextEditingController _soyadController = TextEditingController();
 
+  final FocusNode _adFocusNode = FocusNode();
+  final FocusNode _soyadFocusNode = FocusNode();
+
   bool _kayitEdiliyor = false;
+  late AnimationController _animationController;
+  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _slideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _animationController.forward();
 
     // Eğer düzenleme modundaysa mevcut verileri yükle
     if (widget.kisi != null) {
@@ -35,18 +52,45 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani> {
   void dispose() {
     _adController.dispose();
     _soyadController.dispose();
+    _adFocusNode.dispose();
+    _soyadFocusNode.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
   void _hataGoster(String mesaj) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(mesaj), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(mesaj)),
+          ],
+        ),
+        backgroundColor: Colors.red.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   void _basariMesajiGoster(String mesaj) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mesaj), backgroundColor: Colors.green),
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(mesaj)),
+          ],
+        ),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+      ),
     );
   }
 
@@ -55,173 +99,425 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani> {
     bool duzenlemeModundaMi = widget.kisi != null;
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: Text(duzenlemeModundaMi ? 'Kişiyi Düzenle' : 'Yeni Kişi Ekle'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text(
+          duzenlemeModundaMi ? 'Kişiyi Düzenle' : 'Yeni Kişi Ekle',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_ios),
+        ),
         actions: [
           if (!_kayitEdiliyor)
-            TextButton(
-              onPressed: _kisiKaydet,
-              child: Text(
-                duzenlemeModundaMi ? 'GÜNCELLE' : 'KAYDET',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+            Container(
+              margin: const EdgeInsets.only(right: 16),
+              child: Material(
+                color: Theme.of(context).primaryColor,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: _kisiKaydet,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      duzenlemeModundaMi ? 'GÜNCELLE' : 'KAYDET',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
         ],
       ),
-      body:
-          _kayitEdiliyor
-              ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Kişi kaydediliyor...'),
-                  ],
+      body: _kayitEdiliyor ? _buildYuklemeEkrani() : _buildForm(),
+    );
+  }
+
+  Widget _buildYuklemeEkrani() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Theme.of(context).primaryColor,
+                  ),
                 ),
-              )
-              : _buildForm(),
+              ),
+              Icon(
+                Icons.person_add,
+                size: 32,
+                color: Theme.of(context).primaryColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            widget.kisi != null
+                ? 'Kişi güncelleniyor...'
+                : 'Kişi kaydediliyor...',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Lütfen bekleyiniz',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildForm() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Bilgi kartı
-            Card(
-              color: Colors.blue.withOpacity(0.1),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
+    return AnimatedBuilder(
+      animation: _slideAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - _slideAnimation.value)),
+          child: Opacity(
+            opacity: _slideAnimation.value,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue[700]),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Kişi bilgilerini girin. Bu kişiye ait belgeler organize edilecektir.',
-                        style: TextStyle(color: Colors.blue[700]),
+                    // Başlık kartı
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Theme.of(context).primaryColor.withOpacity(0.1),
+                            Theme.of(context).primaryColor.withOpacity(0.05),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).primaryColor.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).primaryColor.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              widget.kisi != null
+                                  ? Icons.edit
+                                  : Icons.person_add,
+                              size: 32,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            widget.kisi != null
+                                ? 'Kişi Bilgilerini Düzenle'
+                                : 'Yeni Kişi Ekle',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Kişi bilgilerini girin. Bu kişiye ait belgeler organize edilecektir.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Ad alanı
+                    Text(
+                      'Ad',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _adController,
+                      focusNode: _adFocusNode,
+                      decoration: InputDecoration(
+                        hintText: 'Kişinin adını girin',
+                        prefixIcon: const Icon(Icons.person),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 2,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.all(16),
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) {
+                        FocusScope.of(context).requestFocus(_soyadFocusNode);
+                      },
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Ad alanı boş olamaz';
+                        }
+                        if (value.trim().length < 2) {
+                          return 'Ad en az 2 karakter olmalıdır';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Soyad alanı
+                    Text(
+                      'Soyad',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _soyadController,
+                      focusNode: _soyadFocusNode,
+                      decoration: InputDecoration(
+                        hintText: 'Kişinin soyadını girin',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).primaryColor,
+                            width: 2,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.all(16),
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) {
+                        _kisiKaydet();
+                      },
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Soyad alanı boş olamaz';
+                        }
+                        if (value.trim().length < 2) {
+                          return 'Soyad en az 2 karakter olmalıdır';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // Kaydet butonu
+                    Container(
+                      width: double.infinity,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Theme.of(context).primaryColor,
+                            Theme.of(context).primaryColor.withOpacity(0.8),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Theme.of(
+                              context,
+                            ).primaryColor.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _kayitEdiliyor ? null : _kisiKaydet,
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  widget.kisi != null
+                                      ? Icons.edit
+                                      : Icons.person_add,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  widget.kisi != null
+                                      ? 'Kişiyi Güncelle'
+                                      : 'Kişiyi Kaydet',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // İptal butonu
+                    Container(
+                      width: double.infinity,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade300),
+                        color: Colors.white,
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap:
+                              _kayitEdiliyor
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.close,
+                                  color: Colors.grey.shade600,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'İptal',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Bilgi notu
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.amber.shade700,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Tüm alanlar zorunludur ve en az 2 karakter içermelidir.',
+                              style: TextStyle(
+                                color: Colors.amber.shade800,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            // Ad alanı
-            TextFormField(
-              controller: _adController,
-              decoration: const InputDecoration(
-                labelText: 'Ad *',
-                hintText: 'Kişinin adını girin',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
-              ),
-              textCapitalization: TextCapitalization.words,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Ad alanı boş olamaz';
-                }
-                if (value.trim().length < 2) {
-                  return 'Ad en az 2 karakter olmalıdır';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 16),
-
-            // Soyad alanı
-            TextFormField(
-              controller: _soyadController,
-              decoration: const InputDecoration(
-                labelText: 'Soyad *',
-                hintText: 'Kişinin soyadını girin',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person_outline),
-              ),
-              textCapitalization: TextCapitalization.words,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Soyad alanı boş olamaz';
-                }
-                if (value.trim().length < 2) {
-                  return 'Soyad en az 2 karakter olmalıdır';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 32),
-
-            // Kaydet butonu (alternatif)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _kayitEdiliyor ? null : _kisiKaydet,
-                icon: Icon(widget.kisi != null ? Icons.edit : Icons.person_add),
-                label: Text(
-                  widget.kisi != null ? 'Kişiyi Güncelle' : 'Kişiyi Kaydet',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // İptal butonu
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed:
-                    _kayitEdiliyor ? null : () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.cancel),
-                label: const Text('İptal', style: TextStyle(fontSize: 16)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Zorunlu alan uyarısı
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info, color: Colors.grey[600], size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '* işaretli alanlar zorunludur',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -229,6 +525,9 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    // Klavyeyi kapat
+    FocusScope.of(context).unfocus();
 
     setState(() {
       _kayitEdiliyor = true;

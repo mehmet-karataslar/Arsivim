@@ -117,6 +117,9 @@ class KategoriModeli {
       YardimciFonksiyonlar.tarihFormatla(olusturmaTarihi);
   String get zamanFarki => YardimciFonksiyonlar.zamanFarki(olusturmaTarihi);
 
+  /// Alias for kategoriAdi
+  String get ad => kategoriAdi;
+
   // Ana kategori mi kontrolü
   bool get anaKategoriMi => ustKategoriId == null;
 

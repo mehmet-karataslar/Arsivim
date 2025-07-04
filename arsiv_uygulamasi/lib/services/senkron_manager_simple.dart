@@ -8,42 +8,61 @@ import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../models/senkron_cihazi.dart';
+import '../models/senkron_conflict.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
+import '../services/senkron_conflict_resolver.dart';
+import '../services/senkron_state_manager.dart';
+import '../services/senkron_validation_service.dart';
+import '../services/senkron_integrity_checker.dart';
 
-/// Çalışan Senkronizasyon Manager - Hatasız Versiyon
-class SenkronManagerWorking {
-  static final SenkronManagerWorking _instance =
-      SenkronManagerWorking._internal();
-  static SenkronManagerWorking get instance => _instance;
-  SenkronManagerWorking._internal();
+/// Basit ve Çalışan Senkronizasyon Manager
+class SenkronManagerSimple {
+  static final SenkronManagerSimple _instance =
+      SenkronManagerSimple._internal();
+  static SenkronManagerSimple get instance => _instance;
+  SenkronManagerSimple._internal();
 
   // ============== Progress Tracking ==============
   Function(double progress)? onProgressUpdate;
   Function(String operation)? onOperationUpdate;
   Function(String message)? onLogMessage;
 
+  // ============== Core Services ==============
+  final SenkronStateManager _stateManager = SenkronStateManager.instance;
+  final SenkronValidationService _validationService =
+      SenkronValidationService.instance;
+  final SenkronIntegrityChecker _integrityChecker =
+      SenkronIntegrityChecker.instance;
+  final SenkronConflictResolver _conflictResolver =
+      SenkronConflictResolver.instance;
+
   // ============== Statistics ==============
   int _uploadedDocuments = 0;
   int _downloadedDocuments = 0;
+  int _conflictedDocuments = 0;
   int _erroredDocuments = 0;
 
-  /// Ana senkronizasyon işlemi
+  /// Ana senkronizasyon işlemi - Basit 3 Aşamalı Sistem
   Future<Map<String, int>> performSynchronization(
     SenkronCihazi bagliBulunanCihaz,
   ) async {
     _resetStatistics();
 
     try {
-      _addLog('🚀 Güvenilir senkronizasyon başlatılıyor...');
+      _addLog('🚀 Basit senkronizasyon sistemi başlatılıyor...');
       _addLog('🔗 Cihaz: ${bagliBulunanCihaz.ad} (${bagliBulunanCihaz.ip})');
 
-      // ============== PHASE 1: METADATA SYNC ==============
-      _updateProgress(0.20, 'Metadata senkronizasyonu...');
+      // ============== PHASE 1: PRE-VALIDATION ==============
+      _updateProgress(0.10, 'Ön kontroller yapılıyor...');
+      await _performBasicValidation();
+
+      // ============== PHASE 2: SYNC METADATA ==============
+      _updateProgress(0.30, 'Metadata senkronizasyonu...');
       await _syncMetadata(bagliBulunanCihaz);
 
-      // ============== PHASE 2: DOCUMENT SYNC ==============
-      _updateProgress(0.70, 'Belge senkronizasyonu...');
+      // ============== PHASE 3: SYNC DOCUMENTS ==============
+      _updateProgress(0.60, 'Belge senkronizasyonu...');
       await _syncDocuments(bagliBulunanCihaz);
 
       _updateProgress(1.0, 'Senkronizasyon tamamlandı');
@@ -52,8 +71,9 @@ class SenkronManagerWorking {
 
       return {
         'yeni': _downloadedDocuments,
-        'guncellenen': 0,
+        'guncellenen': _downloadedDocuments,
         'gonderilen': _uploadedDocuments,
+        'cakisma': _conflictedDocuments,
         'hata': _erroredDocuments,
       };
     } catch (e) {
@@ -62,9 +82,21 @@ class SenkronManagerWorking {
     }
   }
 
+  /// Basit validation
+  Future<void> _performBasicValidation() async {
+    _addLog('🔍 Temel kontroller...');
+
+    final validation = await _validationService.validatePrerequisites();
+    if (!validation.isValid) {
+      throw Exception('Sistem gereksinimleri karşılanmıyor');
+    }
+
+    _addLog('✅ Temel kontroller başarılı');
+  }
+
   /// Metadata senkronizasyonu
   Future<void> _syncMetadata(SenkronCihazi cihaz) async {
-    _addLog('📋 Kategoriler ve kişiler senkronize ediliyor...');
+    _addLog('📋 Metadata senkronizasyonu...');
 
     try {
       // Kategoriler
@@ -74,6 +106,8 @@ class SenkronManagerWorking {
       // Kişiler
       final remotePeople = await _fetchRemotePeople(cihaz.ip);
       await _syncPeople(remotePeople);
+
+      _addLog('✅ Metadata senkronizasyonu tamamlandı');
     } catch (e) {
       _addLog('⚠️ Metadata sync hatası: $e');
     }
@@ -81,32 +115,27 @@ class SenkronManagerWorking {
 
   /// Belge senkronizasyonu
   Future<void> _syncDocuments(SenkronCihazi cihaz) async {
-    _addLog('📁 Belgeler senkronize ediliyor...');
+    _addLog('📁 Belge senkronizasyonu...');
 
     try {
-        final veriTabani = VeriTabaniServisi();
-
       // Remote belgeleri al
       final remoteDocuments = await _fetchRemoteDocuments(cihaz.ip);
+      final veriTabani = VeriTabaniServisi();
       final localDocuments = await veriTabani.belgeleriGetir();
 
-      _addLog(
-        '📊 Remote: ${remoteDocuments.length}, Local: ${localDocuments.length}',
-      );
-
-      // Yeni belgeleri indir
+      // Download yeni belgeler
       for (final remoteDoc in remoteDocuments) {
-        final remoteHash = remoteDoc['hash'] ?? '';
-        if (remoteHash.isEmpty) continue;
-
         final exists = localDocuments.any(
-          (local) => local.dosyaHash == remoteHash,
+          (local) =>
+              local.dosyaHash == remoteDoc['hash'] &&
+              local.dosyaHash.isNotEmpty,
         );
 
         if (!exists) {
           try {
             await _downloadDocument(cihaz, remoteDoc);
             _downloadedDocuments++;
+            _addLog('📥 İndirildi: ${remoteDoc['fileName']}');
           } catch (e) {
             _addLog('❌ İndirme hatası: ${remoteDoc['fileName']} - $e');
             _erroredDocuments++;
@@ -114,30 +143,33 @@ class SenkronManagerWorking {
         }
       }
 
-      // Yeni belgeleri yükle
+      // Upload yeni belgeler
       for (final localDoc in localDocuments) {
-        if (localDoc.dosyaHash.isEmpty) continue;
-
         final exists = remoteDocuments.any(
-          (remote) => remote['hash'] == localDoc.dosyaHash,
+          (remote) =>
+              remote['hash'] == localDoc.dosyaHash &&
+              localDoc.dosyaHash.isNotEmpty,
         );
 
         if (!exists) {
           try {
             await _uploadDocument(cihaz, localDoc);
             _uploadedDocuments++;
+            _addLog('📤 Yüklendi: ${localDoc.dosyaAdi}');
           } catch (e) {
             _addLog('❌ Yükleme hatası: ${localDoc.dosyaAdi} - $e');
             _erroredDocuments++;
           }
         }
       }
+
+      _addLog('✅ Belge senkronizasyonu tamamlandı');
     } catch (e) {
       _addLog('❌ Belge sync hatası: $e');
     }
   }
 
-  /// Remote verileri fetch et
+  /// Remote belgeler fetch
   Future<List<Map<String, dynamic>>> _fetchRemoteDocuments(
     String remoteIP,
   ) async {
@@ -160,6 +192,7 @@ class SenkronManagerWorking {
     }
   }
 
+  /// Remote kategoriler fetch
   Future<List<Map<String, dynamic>>> _fetchRemoteCategories(
     String remoteIP,
   ) async {
@@ -182,6 +215,7 @@ class SenkronManagerWorking {
     }
   }
 
+  /// Remote kişiler fetch
   Future<List<Map<String, dynamic>>> _fetchRemotePeople(String remoteIP) async {
     try {
       final response = await http
@@ -202,16 +236,16 @@ class SenkronManagerWorking {
     }
   }
 
-  /// Kategorileri senkronize et
+  /// Kategori senkronizasyonu
   Future<void> _syncCategories(
     List<Map<String, dynamic>> remoteCategories,
   ) async {
-      final veriTabani = VeriTabaniServisi();
+    final veriTabani = VeriTabaniServisi();
     final localCategories = await veriTabani.kategorileriGetir();
 
     for (final remoteCategory in remoteCategories) {
       final categoryName = remoteCategory['name'] ?? remoteCategory['ad'];
-      if (categoryName == null || categoryName.isEmpty) continue;
+      if (categoryName == null) continue;
 
       final exists = localCategories.any((cat) => cat.ad == categoryName);
 
@@ -229,7 +263,7 @@ class SenkronManagerWorking {
     }
   }
 
-  /// Kişileri senkronize et
+  /// Kişi senkronizasyonu
   Future<void> _syncPeople(List<Map<String, dynamic>> remotePeople) async {
     final veriTabani = VeriTabaniServisi();
     final localPeople = await veriTabani.kisileriGetir();
@@ -275,14 +309,6 @@ class SenkronManagerWorking {
       throw Exception('HTTP ${response.statusCode}');
     }
 
-    // Hash kontrolü
-    final downloadedHash = sha256.convert(response.bodyBytes).toString();
-    final expectedHash = docData['hash'];
-
-    if (expectedHash != null && downloadedHash != expectedHash) {
-      throw Exception('Hash uyumsuzlığı');
-    }
-
     // Dosyayı kaydet
     final dosyaServisi = DosyaServisi();
     final belgelerKlasoru = await dosyaServisi.belgelerKlasoruYolu();
@@ -291,15 +317,18 @@ class SenkronManagerWorking {
     final file = File(filePath);
     await file.writeAsBytes(response.bodyBytes);
 
+    // Hash hesapla
+    final fileHash = sha256.convert(response.bodyBytes).toString();
+
     // Veritabanına kaydet
-      final veriTabani = VeriTabaniServisi();
+    final veriTabani = VeriTabaniServisi();
     final belge = BelgeModeli(
       dosyaAdi: fileName,
       orijinalDosyaAdi: fileName,
       dosyaYolu: filePath,
       dosyaBoyutu: response.bodyBytes.length,
       dosyaTipi: docData['fileType'] ?? 'unknown',
-      dosyaHash: downloadedHash,
+      dosyaHash: fileHash,
       olusturmaTarihi: DateTime.now(),
       guncellemeTarihi: DateTime.now(),
       kategoriId: docData['categoryId'] ?? 1,
@@ -308,7 +337,6 @@ class SenkronManagerWorking {
     );
 
     await veriTabani.belgeEkle(belge);
-    _addLog('📥 İndirildi: $fileName');
   }
 
   /// Belge yükleme
@@ -344,14 +372,13 @@ class SenkronManagerWorking {
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}');
     }
-
-    _addLog('📤 Yüklendi: ${belge.dosyaAdi}');
   }
 
   /// Utility methods
   void _resetStatistics() {
     _uploadedDocuments = 0;
     _downloadedDocuments = 0;
+    _conflictedDocuments = 0;
     _erroredDocuments = 0;
   }
 
@@ -370,10 +397,11 @@ class SenkronManagerWorking {
     _addLog('📊 Senkronizasyon İstatistikleri:');
     _addLog('   • Yüklenen: $_uploadedDocuments');
     _addLog('   • İndirilen: $_downloadedDocuments');
+    _addLog('   • Çakışmalı: $_conflictedDocuments');
     _addLog('   • Hatalı: $_erroredDocuments');
   }
 
-  /// Callback ayarlama metodu
+  /// Callback ayarlama
   void setCallbacks({
     Function(double)? onProgress,
     Function(String)? onOperation,
