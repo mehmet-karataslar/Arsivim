@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 
 /// Zaman damgası yönetimi ve synchronization timing utilities
 class TimestampManager {
@@ -11,6 +12,101 @@ class TimestampManager {
   Duration? _timezoneOffset;
   DateTime? _lastServerSync;
   Duration _serverTimeDrift = Duration.zero;
+
+  /// Mevcut zaman damgasını al
+  DateTime getCurrentTimestamp() {
+    return DateTime.now();
+  }
+
+  /// ISO 8601 formatında zaman damgası
+  String getCurrentTimestampIso() {
+    return DateTime.now().toIso8601String();
+  }
+
+  /// UTC zaman damgası
+  DateTime getCurrentTimestampUtc() {
+    return DateTime.now().toUtc();
+  }
+
+  /// Zaman damgalarını karşılaştır
+  int compareTimestamps(DateTime timestamp1, DateTime timestamp2) {
+    return timestamp1.compareTo(timestamp2);
+  }
+
+  /// Zaman damgası farkını hesapla
+  Duration getTimestampDifference(DateTime timestamp1, DateTime timestamp2) {
+    return timestamp1.difference(timestamp2);
+  }
+
+  /// Zaman damgasını formatlı string'e çevir
+  String formatTimestamp(
+    DateTime timestamp, {
+    String format = 'yyyy-MM-dd HH:mm:ss',
+  }) {
+    return timestamp.toIso8601String().substring(0, 19).replaceAll('T', ' ');
+  }
+
+  /// String'den zaman damgasını parse et
+  DateTime parseTimestamp(String timestampString) {
+    try {
+      return DateTime.parse(timestampString);
+    } catch (e) {
+      throw FormatException('Geçersiz zaman damgası formatı: $timestampString');
+    }
+  }
+
+  /// Zaman damgasını normalize et (milisaniyeleri sıfırla)
+  DateTime normalizeTimestamp(DateTime timestamp) {
+    return DateTime(
+      timestamp.year,
+      timestamp.month,
+      timestamp.day,
+      timestamp.hour,
+      timestamp.minute,
+      timestamp.second,
+    );
+  }
+
+  /// İki zaman damgasının aynı olup olmadığını kontrol et
+  bool areTimestampsEqual(
+    DateTime timestamp1,
+    DateTime timestamp2, {
+    Duration? tolerance,
+  }) {
+    if (tolerance == null) {
+      return timestamp1.isAtSameMomentAs(timestamp2);
+    }
+
+    final difference = timestamp1.difference(timestamp2).abs();
+    return difference <= tolerance;
+  }
+
+  /// Zaman damgasının belirli bir süre içinde olup olmadığını kontrol et
+  bool isTimestampWithinRange(
+    DateTime timestamp,
+    DateTime rangeStart,
+    DateTime rangeEnd,
+  ) {
+    return timestamp.isAfter(rangeStart) && timestamp.isBefore(rangeEnd);
+  }
+
+  /// En son zaman damgasını bul
+  DateTime getLatestTimestamp(List<DateTime> timestamps) {
+    if (timestamps.isEmpty) {
+      throw ArgumentError('Timestamp listesi boş olamaz');
+    }
+
+    return timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  /// En eski zaman damgasını bul
+  DateTime getEarliestTimestamp(List<DateTime> timestamps) {
+    if (timestamps.isEmpty) {
+      throw ArgumentError('Timestamp listesi boş olamaz');
+    }
+
+    return timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
+  }
 
   /// UTC zaman damgası oluştur
   DateTime createUtcTimestamp() {
@@ -24,7 +120,7 @@ class TimestampManager {
   }
 
   /// Timestamp'i normalize et (UTC'ye çevir)
-  DateTime normalizeTimestamp(DateTime timestamp) {
+  DateTime normalizeToUtc(DateTime timestamp) {
     if (timestamp.isUtc) {
       return timestamp;
     }
@@ -39,7 +135,7 @@ class TimestampManager {
   }
 
   /// Timestamp'leri karşılaştır (tolerance ile)
-  TimestampComparisonResult compareTimestamps(
+  TimestampComparisonResult compareTimestampsWithTolerance(
     DateTime timestamp1,
     DateTime timestamp2, {
     Duration tolerance = const Duration(seconds: 5),

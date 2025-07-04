@@ -1,4 +1,4 @@
-import 'dart:convert';
+
 import 'belge_modeli.dart';
 
 /// Senkronizasyon çakışması türleri

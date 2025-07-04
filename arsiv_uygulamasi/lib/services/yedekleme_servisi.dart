@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
-import '../models/kisi_modeli.dart';
+
 import '../models/kategori_modeli.dart';
 import '../models/belge_modeli.dart';
 import '../services/veritabani_servisi.dart';

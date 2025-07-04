@@ -1,4 +1,4 @@
-import 'dart:convert';
+
 import 'senkron_metadata.dart';
 
 /// Senkronizasyon delta türleri

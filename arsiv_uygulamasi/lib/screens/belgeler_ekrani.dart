@@ -5,7 +5,6 @@ import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/belge_islemleri_servisi.dart';
-import '../widgets/belge_detay_dialog.dart';
 import '../widgets/arama_sonuclari_widget.dart';
 import 'yeni_belge_ekle_ekrani.dart';
 

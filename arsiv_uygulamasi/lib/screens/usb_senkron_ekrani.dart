@@ -11,7 +11,6 @@ import '../services/senkron_manager_working.dart';
 import '../models/senkron_cihazi.dart' as models;
 import '../widgets/qr_scanner_widget.dart';
 import '../widgets/senkron_dialogs.dart';
-import '../widgets/senkron_cards.dart';
 
 class UsbSenkronEkrani extends StatefulWidget {
   const UsbSenkronEkrani({Key? key}) : super(key: key);

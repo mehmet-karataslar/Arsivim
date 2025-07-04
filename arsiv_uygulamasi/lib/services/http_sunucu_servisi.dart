@@ -5,9 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
 import 'veritabani_servisi.dart';
 import 'dosya_servisi.dart';
-import 'belge_islemleri_servisi.dart';
 import '../models/belge_modeli.dart';
-import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 
 class HttpSunucuServisi {

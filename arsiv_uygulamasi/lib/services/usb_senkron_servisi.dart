@@ -1,13 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:network_info_plus/network_info_plus.dart';
-import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import '../models/belge_modeli.dart';
-import '../models/senkron_log_modeli.dart';
 import 'veritabani_servisi.dart';
 import 'dosya_servisi.dart';
 import 'http_sunucu_servisi.dart';

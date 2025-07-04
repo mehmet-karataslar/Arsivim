@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
 import 'dart:convert';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../models/senkron_cihazi.dart';
