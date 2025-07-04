@@ -102,5 +102,6 @@ Sorun yaşıyorsanız veya öneriniz varsa:
 ---
 
 **Geliştirici**: Mehmet  
-**Lisans**: MIT  
-**Repo**: https://github.com/[username]/arsiv 
+- **Email**: mehmetkarataslar@gmail.com
+- **GitHub**: [@mehmet-karataslar](https://github.com/umehmet-karataslar)
+**Repo**: https://github.com/mehmet-karataslar/Arsivim
