@@ -279,8 +279,8 @@ Herhangi bir hata veya öneriniz varsa, lütfen [Issues](https://github.com/user
 
 ## 📧 İletişim
 
-- **Email**: developer@example.com
-- **GitHub**: [@username](https://github.com/username)
+- **Email**: mehmetkarataslar@gmail.com
+- **GitHub**: [@mehmet-karataslar](https://github.com/umehmet-karataslar)
 
 ---
 
