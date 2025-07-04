@@ -120,10 +120,23 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
                   _kategorileriYukle();
                   _basariGoster('Veritabanı sıfırlandı');
                 }
+              } else if (value == 'toplu_sil') {
+                _topluSilmeDialogGoster();
               }
             },
             itemBuilder:
                 (context) => [
+                  const PopupMenuItem(
+                    value: 'toplu_sil',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_sweep, color: Colors.orange),
+                        SizedBox(width: 8),
+                        Text('Toplu Silme İşlemleri'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
                   const PopupMenuItem(
                     value: 'reset_db',
                     child: Row(
@@ -171,6 +184,9 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
                               onLongPress: () => _kategoriDuzenle(kategori),
                               onDuzenle: () => _kategoriDuzenle(kategori),
                               onSil: () => _kategoriSil(kategori),
+                              onSilmeSecimi:
+                                  (secimTipi) =>
+                                      _hizliSilmeSecimi(secimTipi, kategori),
                             );
                           },
                         ),
@@ -350,13 +366,139 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
   }
 
   Future<void> _kategoriSil(KategoriModeli kategori) async {
-    final onay = await showDialog<bool>(
+    final secim = await showDialog<String>(
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Kategoriyi Sil'),
-            content: Text(
-              '${kategori.kategoriAdi} kategorisi ve bu kategoriye ait tüm belgeler silinecektir. Emin misiniz?',
+            title: Row(
+              children: [
+                Icon(Icons.delete_outline, color: Colors.red[700]),
+                const SizedBox(width: 8),
+                Text('${kategori.kategoriAdi} Kategorisi'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bu kategoride ${kategori.belgeSayisi ?? 0} belge bulunuyor.',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Hangi verileri silmek istiyorsunuz?',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '• Kişileri Sil: Sadece kategoriye ait kişileri siler\n'
+                  '• Belgeleri Sil: Sadece kategoriye ait belgeleri siler\n'
+                  '• Hepsini Sil: Hem kişileri hem belgeleri siler',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('İptal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('kisiler'),
+                style: TextButton.styleFrom(foregroundColor: Colors.orange),
+                child: const Text('Kişileri Sil'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('belgeler'),
+                style: TextButton.styleFrom(foregroundColor: Colors.blue),
+                child: const Text('Belgeleri Sil'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('hepsi'),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Hepsini Sil'),
+              ),
+            ],
+          ),
+    );
+
+    if (secim != null) {
+      // Onay dialog'u göster
+      final onay = await _onayDialog(secim, kategori);
+      if (onay == true) {
+        try {
+          await _silmeIsleminiGerceklestir(secim, kategori);
+          _kategorileriYukle();
+        } catch (e) {
+          _hataGoster('Silme işlemi sırasında hata oluştu: $e');
+        }
+      }
+    }
+  }
+
+  Future<bool?> _onayDialog(String secim, KategoriModeli kategori) async {
+    String baslik = '';
+    String mesaj = '';
+    Color renk = Colors.red;
+
+    switch (secim) {
+      case 'kisiler':
+        baslik = 'Kişileri Sil';
+        mesaj =
+            '${kategori.kategoriAdi} kategorisindeki kişiler silinecek. Emin misiniz?';
+        renk = Colors.orange;
+        break;
+      case 'belgeler':
+        baslik = 'Belgeleri Sil';
+        mesaj =
+            '${kategori.kategoriAdi} kategorisindeki belgeler silinecek. Emin misiniz?';
+        renk = Colors.blue;
+        break;
+      case 'hepsi':
+        baslik = 'Hepsini Sil';
+        mesaj =
+            '${kategori.kategoriAdi} kategorisindeki hem kişiler hem belgeler silinecek. Emin misiniz?';
+        renk = Colors.red;
+        break;
+    }
+
+    return await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: renk),
+                const SizedBox(width: 8),
+                Text(baslik),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(mesaj),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: renk.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: renk, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Bu işlem geri alınamaz!',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             actions: [
               TextButton(
@@ -365,23 +507,50 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                style: TextButton.styleFrom(foregroundColor: renk),
                 child: const Text('Sil'),
               ),
             ],
           ),
     );
+  }
 
+  // Hızlı silme seçimi (karttan direkt silme)
+  Future<void> _hizliSilmeSecimi(String secim, KategoriModeli kategori) async {
+    // Onay dialog'u göster
+    final onay = await _onayDialog(secim, kategori);
     if (onay == true) {
       try {
-        await _veriTabaniServisi.kategoriSil(kategori.id!);
-        // Kategoriye ait belgeleri de sil
-        // TODO: Belge silme servisi üzerinden belgelerin de silinmesi sağlanmalı.
-        _basariGoster('Kategori başarıyla silindi');
+        await _silmeIsleminiGerceklestir(secim, kategori);
         _kategorileriYukle();
       } catch (e) {
-        _hataGoster('Kategori silinirken hata oluştu: $e');
+        _hataGoster('Silme işlemi sırasında hata oluştu: $e');
       }
+    }
+  }
+
+  Future<void> _silmeIsleminiGerceklestir(
+    String secim,
+    KategoriModeli kategori,
+  ) async {
+    switch (secim) {
+      case 'kisiler':
+        final silinenKisiSayisi = await _veriTabaniServisi.kategoriKisileriSil(
+          kategori.id!,
+        );
+        _basariGoster('$silinenKisiSayisi kişi başarıyla silindi');
+        break;
+      case 'belgeler':
+        final silinenBelgeSayisi = await _veriTabaniServisi
+            .kategoriBelgeleriSil(kategori.id!);
+        _basariGoster('$silinenBelgeSayisi belge başarıyla silindi');
+        break;
+      case 'hepsi':
+        final sonuc = await _veriTabaniServisi.kategoriHepsiniSil(kategori.id!);
+        _basariGoster(
+          '${sonuc['kisiSayisi']} kişi ve ${sonuc['belgeSayisi']} belge başarıyla silindi',
+        );
+        break;
     }
   }
 
@@ -395,5 +564,234 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(mesaj), backgroundColor: Colors.red));
+  }
+
+  // Toplu silme dialog'u
+  Future<void> _topluSilmeDialogGoster() async {
+    final secim = await showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.delete_sweep, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Toplu Silme İşlemleri'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tüm kategorilerdeki verileri silmek istediğiniz alanları seçin:',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '• Tüm Kişileri Sil: Bütün kategorilerdeki kişileri siler\n'
+                  '• Tüm Belgeleri Sil: Bütün kategorilerdeki belgeleri siler\n'
+                  '• Tüm Verileri Sil: Hem kişileri hem belgeleri siler',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Bu işlemler geri alınamaz ve tüm kategorileri etkiler!',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('İptal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('tum_kisiler'),
+                style: TextButton.styleFrom(foregroundColor: Colors.orange),
+                child: const Text('Tüm Kişileri Sil'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('tum_belgeler'),
+                style: TextButton.styleFrom(foregroundColor: Colors.blue),
+                child: const Text('Tüm Belgeleri Sil'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('tum_veriler'),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Tüm Verileri Sil'),
+              ),
+            ],
+          ),
+    );
+
+    if (secim != null) {
+      await _topluSilmeOnayDialog(secim);
+    }
+  }
+
+  // Toplu silme onay dialog'u
+  Future<void> _topluSilmeOnayDialog(String secim) async {
+    String baslik = '';
+    String mesaj = '';
+    Color renk = Colors.red;
+    IconData icon = Icons.warning;
+
+    switch (secim) {
+      case 'tum_kisiler':
+        baslik = 'Tüm Kişileri Sil';
+        mesaj =
+            'Tüm kategorilerdeki kişiler silinecek. Bu işlem geri alınamaz!';
+        renk = Colors.orange;
+        icon = Icons.person_remove;
+        break;
+      case 'tum_belgeler':
+        baslik = 'Tüm Belgeleri Sil';
+        mesaj =
+            'Tüm kategorilerdeki belgeler silinecek. Bu işlem geri alınamaz!';
+        renk = Colors.blue;
+        icon = Icons.delete_sweep;
+        break;
+      case 'tum_veriler':
+        baslik = 'Tüm Verileri Sil';
+        mesaj =
+            'Tüm kategorilerdeki kişiler ve belgeler silinecek. Bu işlem geri alınamaz!';
+        renk = Colors.red;
+        icon = Icons.delete_forever;
+        break;
+    }
+
+    final onay = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(icon, color: renk),
+                const SizedBox(width: 8),
+                Text(baslik),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(mesaj),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: renk.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: renk.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: renk, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Bu işlem TÜM kategorileri etkiler ve geri alınamaz!',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('İptal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: renk,
+                ),
+                child: const Text('Sil'),
+              ),
+            ],
+          ),
+    );
+
+    if (onay == true) {
+      await _topluSilmeIslemiGerceklestir(secim);
+    }
+  }
+
+  // Toplu silme işlemini gerçekleştir
+  Future<void> _topluSilmeIslemiGerceklestir(String secim) async {
+    try {
+      setState(() => _yukleniyor = true);
+
+      int toplamKisiSayisi = 0;
+      int toplamBelgeSayisi = 0;
+
+      switch (secim) {
+        case 'tum_kisiler':
+          // Tüm kategorilerdeki kişileri sil
+          for (final kategori in _kategoriler) {
+            final silinenKisiSayisi = await _veriTabaniServisi
+                .kategoriKisileriSil(kategori.id!);
+            toplamKisiSayisi += silinenKisiSayisi;
+          }
+          _basariGoster('Toplam $toplamKisiSayisi kişi başarıyla silindi');
+          break;
+
+        case 'tum_belgeler':
+          // Tüm kategorilerdeki belgeleri sil
+          for (final kategori in _kategoriler) {
+            final silinenBelgeSayisi = await _veriTabaniServisi
+                .kategoriBelgeleriSil(kategori.id!);
+            toplamBelgeSayisi += silinenBelgeSayisi;
+          }
+          _basariGoster('Toplam $toplamBelgeSayisi belge başarıyla silindi');
+          break;
+
+        case 'tum_veriler':
+          // Tüm kategorilerdeki hem kişileri hem belgeleri sil
+          for (final kategori in _kategoriler) {
+            final sonuc = await _veriTabaniServisi.kategoriHepsiniSil(
+              kategori.id!,
+            );
+            toplamKisiSayisi += sonuc['kisiSayisi'] ?? 0;
+            toplamBelgeSayisi += sonuc['belgeSayisi'] ?? 0;
+          }
+          _basariGoster(
+            'Toplam $toplamKisiSayisi kişi ve $toplamBelgeSayisi belge başarıyla silindi',
+          );
+          break;
+      }
+
+      // Kategorileri yeniden yükle
+      await _kategorileriYukle();
+    } catch (e) {
+      _hataGoster('Toplu silme işlemi sırasında hata oluştu: $e');
+    } finally {
+      setState(() => _yukleniyor = false);
+    }
   }
 }

@@ -7,6 +7,7 @@ class KategoriKartiWidget extends StatelessWidget {
   final VoidCallback onLongPress;
   final VoidCallback onDuzenle;
   final VoidCallback onSil;
+  final Function(String)? onSilmeSecimi; // Yeni parametre
 
   const KategoriKartiWidget({
     Key? key,
@@ -15,6 +16,7 @@ class KategoriKartiWidget extends StatelessWidget {
     required this.onLongPress,
     required this.onDuzenle,
     required this.onSil,
+    this.onSilmeSecimi, // Opsiyonel parametre
   }) : super(key: key);
 
   @override
@@ -126,6 +128,15 @@ class KategoriKartiWidget extends StatelessWidget {
                         case 'sil':
                           onSil();
                           break;
+                        case 'sil_kisiler':
+                          onSilmeSecimi?.call('kisiler');
+                          break;
+                        case 'sil_belgeler':
+                          onSilmeSecimi?.call('belgeler');
+                          break;
+                        case 'sil_hepsi':
+                          onSilmeSecimi?.call('hepsi');
+                          break;
                       }
                     },
                     itemBuilder:
@@ -140,19 +151,79 @@ class KategoriKartiWidget extends StatelessWidget {
                               ],
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'sil',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, color: Colors.red, size: 18),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Sil',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ],
+                          // Eğer onSilmeSecimi callback'i varsa, gelişmiş silme seçeneklerini göster
+                          if (onSilmeSecimi != null) ...[
+                            const PopupMenuItem(
+                              value: 'sil_kisiler',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.person_remove,
+                                    color: Colors.orange,
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Kişileri Sil',
+                                    style: TextStyle(color: Colors.orange),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                            const PopupMenuItem(
+                              value: 'sil_belgeler',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete_sweep,
+                                    color: Colors.blue,
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Belgeleri Sil',
+                                    style: TextStyle(color: Colors.blue),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'sil_hepsi',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete_forever,
+                                    color: Colors.red,
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Hepsini Sil',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            // Eski basit silme seçeneği
+                            const PopupMenuItem(
+                              value: 'sil',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Sil',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                   ),
                 ],

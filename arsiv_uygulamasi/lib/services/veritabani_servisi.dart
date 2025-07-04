@@ -486,6 +486,84 @@ class VeriTabaniServisi {
     );
   }
 
+  // Kategoriye ait kişileri sil
+  Future<int> kategoriKisileriSil(int kategoriId) async {
+    final db = await database;
+
+    // Önce kategoriye ait belgelerdeki kişi bağlantılarını al
+    final belgelerResult = await db.query(
+      'belgeler',
+      columns: ['kisi_id'],
+      where: 'kategori_id = ? AND aktif = ? AND kisi_id IS NOT NULL',
+      whereArgs: [kategoriId, 1],
+    );
+
+    // Kategoriye ait belgelerin kişi bağlantılarını kaldır
+    await db.update(
+      'belgeler',
+      {'kisi_id': null},
+      where: 'kategori_id = ? AND aktif = ?',
+      whereArgs: [kategoriId, 1],
+    );
+
+    // Başka belgelerde kullanılmayan kişileri sil
+    final kisiIdleri =
+        belgelerResult
+            .map((e) => e['kisi_id'] as int?)
+            .where((id) => id != null)
+            .toSet();
+
+    int silinenKisiSayisi = 0;
+    for (int? kisiId in kisiIdleri) {
+      if (kisiId != null) {
+        // Bu kişinin başka belgelerde kullanılıp kullanılmadığını kontrol et
+        final kullaniliyorMu = await db.query(
+          'belgeler',
+          where: 'kisi_id = ? AND aktif = ?',
+          whereArgs: [kisiId, 1],
+          limit: 1,
+        );
+
+        if (kullaniliyorMu.isEmpty) {
+          // Kişi başka yerde kullanılmıyorsa sil
+          await db.update(
+            'kisiler',
+            {'aktif': 0},
+            where: 'id = ?',
+            whereArgs: [kisiId],
+          );
+          silinenKisiSayisi++;
+        }
+      }
+    }
+
+    return silinenKisiSayisi;
+  }
+
+  // Kategoriye ait belgeleri sil
+  Future<int> kategoriBelgeleriSil(int kategoriId) async {
+    final db = await database;
+    return await db.update(
+      'belgeler',
+      {'aktif': 0},
+      where: 'kategori_id = ? AND aktif = ?',
+      whereArgs: [kategoriId, 1],
+    );
+  }
+
+  // Kategoriye ait hem kişileri hem belgeleri sil
+  Future<Map<String, int>> kategoriHepsiniSil(int kategoriId) async {
+    final db = await database;
+
+    // Önce kişileri sil
+    final silinenKisiSayisi = await kategoriKisileriSil(kategoriId);
+
+    // Sonra belgeleri sil
+    final silinenBelgeSayisi = await kategoriBelgeleriSil(kategoriId);
+
+    return {'kisiSayisi': silinenKisiSayisi, 'belgeSayisi': silinenBelgeSayisi};
+  }
+
   // Kategoriye ait belge sayılarını getir
   Future<Map<int, int>> kategoriBelgeSayilari() async {
     final db = await database;

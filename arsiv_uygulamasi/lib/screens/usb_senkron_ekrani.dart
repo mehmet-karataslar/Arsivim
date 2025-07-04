@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:network_info_plus/network_info_plus.dart';
 import '../services/usb_senkron_servisi.dart';
 import '../services/http_sunucu_servisi.dart';
-import '../services/senkron_manager_working.dart';
+import '../services/senkron_manager_coordinator.dart';
 import '../models/senkron_cihazi.dart' as models;
 import '../widgets/qr_scanner_widget.dart';
 import '../widgets/senkron_dialogs.dart';
@@ -23,7 +23,8 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     with TickerProviderStateMixin {
   final UsbSenkronServisi _senkronServisi = UsbSenkronServisi.instance;
   final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
-  final SenkronManagerWorking _senkronManager = SenkronManagerWorking.instance;
+  final SenkronManagerCoordinator _senkronCoordinator =
+      SenkronManagerCoordinator.instance;
   final TextEditingController _ipController = TextEditingController();
   final NetworkInfo _networkInfo = NetworkInfo();
 
@@ -47,6 +48,10 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     '',
   );
 
+  // YENİ: Sync Manager seçimi için
+  SyncManagerType _selectedSyncManager = SyncManagerType.enhanced;
+  bool _autoFallbackEnabled = true;
+
   @override
   void initState() {
     super.initState();
@@ -55,7 +60,28 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     _getLocalIP();
     _checkServerStatus();
     _setupDeviceConnectionCallback();
-    _setupSenkronManagerCallbacks();
+    _setupSenkronCoordinatorCallbacks();
+  }
+
+  // YENİ: Coordinator callback'lerini ayarla
+  void _setupSenkronCoordinatorCallbacks() {
+    print('🔧 USB Senkron Ekranı: Coordinator callback kuruluyor...');
+
+    _senkronCoordinator.onProgressUpdate = (progress) {
+      _progressNotifier.value = progress;
+    };
+
+    _senkronCoordinator.onOperationUpdate = (operation) {
+      _currentOperationNotifier.value = operation;
+    };
+
+    _senkronCoordinator.onLogMessage = (message) {
+      _addLog(message);
+    };
+
+    // İlk ayarları yap
+    _senkronCoordinator.setSyncManagerType(_selectedSyncManager);
+    _senkronCoordinator.setAutoFallback(_autoFallbackEnabled);
   }
 
   void _setupDeviceConnectionCallback() {
@@ -86,16 +112,12 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
       // PC için sistem bildirimi ve ses ile uyarı
       if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
         SystemSound.play(SystemSoundType.alert);
-        SenkronDialogs.showPCConnectionDialog(
-          context,
-          deviceInfo,
-          _performRealSynchronization,
-        );
+        _showEnhancedConnectionDialog(deviceInfo);
       } else {
         SenkronDialogs.showSuccessDialog(
           context,
           _bagliBulunanCihaz,
-          _startSynchronization,
+          _startEnhancedSynchronization,
         );
       }
 
@@ -103,16 +125,217 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     });
   }
 
-  void _setupSenkronManagerCallbacks() {
-    _senkronManager.onProgressUpdate = (progress) {
-      _progressNotifier.value = progress;
-    };
-    _senkronManager.onOperationUpdate = (operation) {
-      _currentOperationNotifier.value = operation;
-    };
-    _senkronManager.onLogMessage = (message) {
-      _addLog(message);
-    };
+  // YENİ: Gelişmiş bağlantı dialog'u
+  void _showEnhancedConnectionDialog(Map<String, dynamic> deviceInfo) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade50, Colors.white],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Cihaz bağlantı ikonu
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.devices_rounded,
+                    size: 48,
+                    color: Colors.green.shade600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Başlık
+                Text(
+                  '📱 Cihaz Bağlandı!',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Cihaz bilgileri
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoRow('📱 Cihaz', deviceInfo['clientName']),
+                      _buildInfoRow('🌐 IP Adresi', deviceInfo['ip']),
+                      _buildInfoRow(
+                        '📄 Belgeler',
+                        '${deviceInfo['belgeSayisi'] ?? 0} adet',
+                      ),
+                      _buildInfoRow(
+                        '💾 Boyut',
+                        '${(deviceInfo['toplamBoyut'] ?? 0) / 1024} KB',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Sync Manager seçimi
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '⚙️ Sync Manager Seçimi',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<SyncManagerType>(
+                        value: _selectedSyncManager,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                        ),
+                        items:
+                            SyncManagerType.values.map((type) {
+                              return DropdownMenuItem(
+                                value: type,
+                                child: Text(
+                                  '${type.displayName} ${type.isRecommended ? "⭐" : ""}',
+                                ),
+                              );
+                            }).toList(),
+                        onChanged: (SyncManagerType? newType) {
+                          if (newType != null) {
+                            setState(() {
+                              _selectedSyncManager = newType;
+                            });
+                            _senkronCoordinator.setSyncManagerType(newType);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Auto fallback switch
+                      Row(
+                        children: [
+                          Switch(
+                            value: _autoFallbackEnabled,
+                            onChanged: (bool value) {
+                              setState(() {
+                                _autoFallbackEnabled = value;
+                              });
+                              _senkronCoordinator.setAutoFallback(value);
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Auto Fallback (hata durumunda güvenli manager\'a geç)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Butonlar
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('İptal'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _performEnhancedSynchronization();
+                        },
+                        icon: const Icon(Icons.sync_rounded),
+                        label: const Text('Senkronizasyonu Başlat'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
   }
 
   void _showConnectionSnackbar(Map<String, dynamic> deviceInfo) {
@@ -400,7 +623,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         SenkronDialogs.showSuccessDialog(
           context,
           _bagliBulunanCihaz,
-          _startSynchronization,
+          _startEnhancedSynchronization,
         );
 
         final usbCihaz = _senkronServisi.bagliBulunanCihaz;
@@ -453,7 +676,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     });
   }
 
-  void _startSynchronization() {
+  void _startEnhancedSynchronization() {
     if (_bagliBulunanCihaz == null) {
       ScaffoldMessenger.of(
         context,
@@ -480,10 +703,10 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           ),
     );
 
-    _performRealSynchronization();
+    _performEnhancedSynchronization();
   }
 
-  Future<void> _performRealSynchronization() async {
+  Future<void> _performEnhancedSynchronization() async {
     try {
       _progressNotifier.value = 0.0;
       _currentOperationNotifier.value = 'Senkronizasyon başlatılıyor...';
@@ -493,12 +716,23 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         _currentOperationNotifier,
       );
 
-      final results = await _senkronManager.performSynchronization(
+      final results = await _senkronCoordinator.performSynchronization(
         _bagliBulunanCihaz!,
       );
 
       Navigator.pop(context);
-      _showSyncResultsSnackbar(results);
+
+      // Enhanced results'ı eski format'a uyumlu hale getir
+      final stats = results['statistics'] as Map<String, dynamic>? ?? {};
+      final compatibleResults = {
+        'yeni': (stats['downloadedDocuments'] ?? 0) as int,
+        'gonderilen': (stats['uploadedDocuments'] ?? 0) as int,
+        'guncellenen': (stats['updatedDocuments'] ?? 0) as int,
+        'cakisma': (stats['conflictedDocuments'] ?? 0) as int,
+        'hata': (stats['erroredDocuments'] ?? 0) as int,
+      };
+
+      _showSyncResultsSnackbar(compatibleResults);
     } catch (e) {
       Navigator.pop(context);
       _addLog('❌ Senkronizasyon hatası: $e');
@@ -742,7 +976,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
           );
 
           await Future.delayed(const Duration(seconds: 1));
-          _performRealSynchronization();
+          _performEnhancedSynchronization();
         } else {
           throw Exception('Bağlantı yanıtı başarısız');
         }
@@ -1594,7 +1828,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _startSynchronization,
+                onPressed: _startEnhancedSynchronization,
                 icon: const Icon(Icons.sync_rounded),
                 label: const Text('Senkronizasyon Başlat'),
                 style: ElevatedButton.styleFrom(

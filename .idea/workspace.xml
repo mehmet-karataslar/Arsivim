@@ -4,7 +4,14 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="iconlar eklendi" />
+    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="Readme eklendi">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/kategoriler_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/kategoriler_ekrani.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/usb_senkron_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/usb_senkron_ekrani.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/senkron_delta_manager.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/senkron_delta_manager.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/veritabani_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/veritabani_servisi.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/kategori_karti_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/kategori_karti_widget.dart" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -13,7 +20,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="DartProblemsView" group-by-severity="false" show-warnings="false" show-hints="false" />
+  <component name="DartProblemsView" show-warnings="false" show-hints="false" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -94,13 +101,22 @@
       <option name="project" value="LOCAL" />
       <updated>1751542933328</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Readme eklendi">
+      <option name="closed" value="true" />
+      <created>1751543473907</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1751543473907</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="ilk komit yapıldı" />
     <MESSAGE value="sistem genel hatlarıyal toplandı" />
     <MESSAGE value="iconlar eklendi" />
-    <option name="LAST_COMMIT_MESSAGE" value="iconlar eklendi" />
+    <MESSAGE value="Readme eklendi" />
+    <option name="LAST_COMMIT_MESSAGE" value="Readme eklendi" />
   </component>
 </project>
