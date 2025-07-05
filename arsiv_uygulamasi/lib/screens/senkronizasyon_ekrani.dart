@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import '../services/senkronizasyon_yonetici_servisi.dart';
 import '../widgets/senkronizasyon_kartlari.dart';
 import '../widgets/cihaz_baglanti_paneli.dart';
-import '../widgets/senkronizasyon_kontrolleri.dart';
+
 import '../widgets/qr_generator_widget.dart';
 import '../widgets/qr_scanner_widget.dart';
 import '../models/belge_modeli.dart';
@@ -31,6 +32,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   bool _yukleniyor = false;
   List<BelgeModeli> _bekleyenBelgeler = [];
 
+  // Anlık güncelleme için Timer
+  Timer? _refreshTimer;
+
   // Platform kontrolü
   bool get _pcPlatform =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -42,12 +46,14 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     _initAnimations();
     _initServiceCallbacks();
     _verileriYukle();
+    _startRefreshTimer();
   }
 
   @override
   void dispose() {
     _fadeAnimationController.dispose();
     _pulseAnimationController.dispose();
+    _refreshTimer?.cancel();
     _yonetici.dispose();
     super.dispose();
   }
@@ -105,6 +111,21 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     setState(() => _yukleniyor = false);
   }
 
+  /// Anlık güncelleme timer'ını başlat
+  void _startRefreshTimer() {
+    // Mobilde daha az sıklıkla yenile (performans için)
+    final refreshInterval =
+        Platform.isAndroid || Platform.isIOS
+            ? const Duration(seconds: 15)
+            : const Duration(seconds: 10);
+
+    _refreshTimer = Timer.periodic(refreshInterval, (timer) {
+      if (mounted) {
+        _verileriYukle();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -157,8 +178,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                         _pulseAnimation,
                       ),
                       const SizedBox(height: 16),
-                      SenkronizasyonKontrolleri(yonetici: _yonetici),
-                      const SizedBox(height: 16),
+
                       SenkronizasyonKartlari.buildHizliIstatistikler(
                         context,
                         _yonetici,
@@ -182,12 +202,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                       const SizedBox(height: 16),
                       SenkronizasyonKartlari.buildSenkronizasyonGecmisi(
                         context,
+                        _yonetici,
                       ),
                       const SizedBox(height: 16),
-                      SenkronizasyonKartlari.buildGelismisAyarlar(
-                        context,
-                        _gelismisAyarlariAc,
-                      ),
                     ],
                   ),
                 ),
@@ -216,8 +233,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               _pulseAnimation,
             ),
             const SizedBox(height: 16),
-            SenkronizasyonKontrolleri(yonetici: _yonetici),
-            const SizedBox(height: 16),
+
             SenkronizasyonKartlari.buildHizliIstatistikler(
               context,
               _yonetici,
@@ -231,12 +247,12 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               onTamEkranQR: _tamEkranQRGoster,
             ),
             const SizedBox(height: 16),
-            SenkronizasyonKartlari.buildSenkronizasyonGecmisi(context),
-            const SizedBox(height: 16),
-            SenkronizasyonKartlari.buildGelismisAyarlar(
+            SenkronizasyonKartlari.buildSenkronizasyonGecmisi(
               context,
-              _gelismisAyarlariAc,
+              _yonetici,
             ),
+            const SizedBox(height: 16),
+
             const SizedBox(height: 80), // Bottom padding
           ],
         ),
@@ -555,10 +571,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     } else {
       _hataGoster('Önce bir cihaz bağlanmalı');
     }
-  }
-
-  void _gelismisAyarlariAc() {
-    _basariMesaji('Gelişmiş ayarlar açılıyor...');
   }
 
   // Mesaj gösterme fonksiyonları

@@ -155,7 +155,8 @@ class BelgeModeli extends BaseModel {
       YardimciFonksiyonlar.tarihFormatla(olusturmaTarihi);
   String get formatliGuncellemeTarihi =>
       YardimciFonksiyonlar.tarihFormatla(guncellemeTarihi);
-  String get zamanFarki => YardimciFonksiyonlar.zamanFarki(guncellemeTarihi);
+  String get zamanFarki =>
+      YardimciFonksiyonlar.zamanFarkiFormatla(guncellemeTarihi);
 
   /// Model'in geçerli olup olmadığını kontrol et
   @override

@@ -124,11 +124,33 @@ class SenkronizasyonKartlari {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Senkronizasyon İstatistikleri',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            Row(
+              children: [
+                Text(
+                  'Senkronizasyon İstatistikleri',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Anlık',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.green[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             _pcPlatform
@@ -280,6 +302,8 @@ class SenkronizasyonKartlari {
               context,
             ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
         ],
       ),
@@ -323,6 +347,8 @@ class SenkronizasyonKartlari {
                   color: Colors.orange[800],
                 ),
                 textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
               ),
               const SizedBox(height: 4),
               Row(
@@ -347,7 +373,10 @@ class SenkronizasyonKartlari {
     );
   }
 
-  static Widget buildSenkronizasyonGecmisi(BuildContext context) {
+  static Widget buildSenkronizasyonGecmisi(
+    BuildContext context,
+    SenkronizasyonYoneticiServisi yonetici,
+  ) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -366,29 +395,95 @@ class SenkronizasyonKartlari {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    'Anlık',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            _buildGecmisItem(
-              context,
-              'Başarılı senkronizasyon',
-              '2 saat önce',
-              Icons.check_circle,
-              Colors.green,
-            ),
-            _buildGecmisItem(
-              context,
-              'Cihaz bağlantısı',
-              '3 saat önce',
-              Icons.link,
-              Colors.blue,
-            ),
-            _buildGecmisItem(
-              context,
-              '5 dosya senkronize edildi',
-              '1 gün önce',
-              Icons.sync,
-              Colors.orange,
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: yonetici.getSenkronizasyonGecmisi(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return _buildGecmisItem(
+                    context,
+                    'Geçmiş yüklenemedi',
+                    'Veri alınırken hata oluştu',
+                    Icons.error,
+                    Colors.red,
+                  );
+                }
+
+                final gecmis = snapshot.data ?? [];
+
+                if (gecmis.isEmpty) {
+                  return _buildGecmisItem(
+                    context,
+                    'Henüz senkronizasyon yapılmamış',
+                    'İlk senkronizasyon için cihaz bağlayın',
+                    Icons.info,
+                    Colors.blue,
+                  );
+                }
+
+                return Column(
+                  children:
+                      gecmis.take(3).map((item) {
+                        final tip = item['tip'] ?? 'bilinmiyor';
+                        final mesaj = item['mesaj'] ?? 'Bilinmeyen işlem';
+                        final zaman = item['zaman'] ?? 'Bilinmeyen zaman';
+
+                        IconData icon;
+                        Color color;
+
+                        switch (tip) {
+                          case 'basarili':
+                            icon = Icons.check_circle;
+                            color = Colors.green;
+                            break;
+                          case 'baglanti':
+                            icon = Icons.link;
+                            color = Colors.blue;
+                            break;
+                          case 'dosya':
+                            icon = Icons.sync;
+                            color = Colors.orange;
+                            break;
+                          case 'hata':
+                            icon = Icons.error;
+                            color = Colors.red;
+                            break;
+                          default:
+                            icon = Icons.info;
+                            color = Colors.grey;
+                        }
+
+                        return _buildGecmisItem(
+                          context,
+                          mesaj,
+                          zaman,
+                          icon,
+                          color,
+                        );
+                      }).toList(),
+                );
+              },
             ),
           ],
         ),
@@ -424,121 +519,18 @@ class SenkronizasyonKartlari {
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
                 Text(
                   zaman,
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget buildGelismisAyarlar(
-    BuildContext context,
-    VoidCallback gelismisAyarlariAc,
-  ) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.settings, color: Theme.of(context).primaryColor),
-                const SizedBox(width: 8),
-                Text(
-                  'Gelişmiş Ayarlar',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildAyarItem(
-              context,
-              'Otomatik senkronizasyon',
-              'Belge eklendiğinde otomatik senkronize et',
-              true,
-            ),
-            _buildAyarItem(
-              context,
-              'Çakışma çözümü',
-              'Çakışan dosyaları otomatik çöz',
-              false,
-            ),
-            _buildAyarItem(
-              context,
-              'Arka plan senkronizasyonu',
-              'Uygulama kapalıyken senkronize et',
-              true,
-            ),
-            const SizedBox(height: 12),
-            if (_pcPlatform) ...[
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: gelismisAyarlariAc,
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Gelişmiş Ayarlar'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Widget _buildAyarItem(
-    BuildContext context,
-    String baslik,
-    String aciklama,
-    bool value,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  baslik,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  aciklama,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: (newValue) {
-              // Ayar değiştirme logic'i buraya
-            },
           ),
         ],
       ),
@@ -564,13 +556,16 @@ class SenkronizasyonKartlari {
               children: [
                 Icon(Icons.sync_problem, color: Colors.orange[600]),
                 const SizedBox(width: 8),
-                Text(
-                  'Senkronizasyon Bekleyen Belgeler',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    'Bekleyen Belgeler',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,

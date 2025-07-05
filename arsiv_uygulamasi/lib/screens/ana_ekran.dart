@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
+import '../services/auth_servisi.dart';
 import '../models/belge_modeli.dart';
 import '../utils/screen_utils.dart';
 import 'belgeler_ekrani.dart';
 import 'kategoriler_ekrani.dart';
 import 'kisiler_ekrani.dart';
 import 'yeni_belge_ekle_ekrani.dart';
-
 import 'yedekleme_ekrani.dart';
 import 'senkronizasyon_ekrani.dart';
+import 'auth/login_screen.dart';
 
 // Ana dashboard ve navigasyon
 class AnaEkran extends StatefulWidget {
@@ -53,24 +54,32 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   }
 
   Future<void> _verileriYukle() async {
+    if (!mounted) return;
+
     setState(() {
       _yukleniyor = true;
     });
 
     try {
-      final belgeSayisi = await _veriTabani.toplamBelgeSayisi();
-      final dosyaBoyutu = await _veriTabani.toplamDosyaBoyutu();
-      final sonBelgeler = await _veriTabani.belgeleriGetir(limit: 5);
+      // Paralel veri yükleme
+      final futures = await Future.wait([
+        _veriTabani.toplamBelgeSayisi(),
+        _veriTabani.toplamDosyaBoyutu(),
+        _veriTabani.onceakliBelgeleriGetir(limit: 5), // Optimize edilmiş metod
+      ]);
+
+      if (!mounted) return;
 
       setState(() {
-        _toplamBelgeSayisi = belgeSayisi;
-        _toplamDosyaBoyutu = dosyaBoyutu;
-        _sonBelgeler = sonBelgeler;
+        _toplamBelgeSayisi = futures[0] as int;
+        _toplamDosyaBoyutu = futures[1] as int;
+        _sonBelgeler = futures[2] as List<BelgeModeli>;
         _yukleniyor = false;
       });
 
       _animationController.forward();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _yukleniyor = false;
       });
@@ -129,6 +138,49 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
+    );
+  }
+
+  /// Çıkış yap işlemi
+  void _cikisYap() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Çıkış Yap'),
+            content: const Text(
+              'Uygulamadan çıkmak istediğinizden emin misiniz?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+
+                  // Çıkış işlemi
+                  await AuthServisi.instance.logout();
+
+                  if (mounted) {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Çıkış Yap'),
+              ),
+            ],
+          ),
     );
   }
 
@@ -250,6 +302,25 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             ),
             const SizedBox(width: 8),
           ],
+          // Çıkış yap butonu
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 5,
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.logout, color: Colors.redAccent),
+              onPressed: _cikisYap,
+              tooltip: 'Çıkış Yap',
+            ),
+          ),
         ],
       ),
     );

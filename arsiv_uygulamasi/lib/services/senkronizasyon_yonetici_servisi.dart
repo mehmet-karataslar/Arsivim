@@ -11,6 +11,7 @@ import '../models/belge_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../widgets/senkronizasyon_progress_dialog.dart';
+import 'log_servisi.dart';
 
 class SenkronizasyonYoneticiServisi {
   static final SenkronizasyonYoneticiServisi _instance =
@@ -21,6 +22,7 @@ class SenkronizasyonYoneticiServisi {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
   final DosyaServisi _dosyaServisi = DosyaServisi();
+  final LogServisi _logServisi = LogServisi.instance;
 
   // Durumlar
   bool _sunucuCalisiyorMu = false;
@@ -30,6 +32,9 @@ class SenkronizasyonYoneticiServisi {
   int _bekleyenDosyaSayisi = 0;
   int _senkronizeDosyaSayisi = 0;
   List<Map<String, dynamic>> _bagliCihazlar = [];
+
+  /// Mobilde cache boyutunu sınırla
+  int get _maxCacheSize => Platform.isAndroid || Platform.isIOS ? 10 : 50;
 
   // Getters
   bool get sunucuCalisiyorMu => _sunucuCalisiyorMu;
@@ -84,6 +89,9 @@ class SenkronizasyonYoneticiServisi {
           // Yeni cihaz ekle
           _bagliCihazlar.add(formattedDeviceInfo);
           print('➕ Yeni cihaz eklendi: ${formattedDeviceInfo['name']}');
+
+          // Mobilde cache limitini aş
+          _temizleCacheMemory();
         }
 
         // UI'yı güncelle
@@ -91,6 +99,17 @@ class SenkronizasyonYoneticiServisi {
         onDeviceConnected?.call(
           formattedDeviceInfo['name'],
           formattedDeviceInfo,
+        );
+
+        // Senkronizasyon log kaydı
+        _logServisi.syncLog(
+          'Cihaz Bağlandı: ${formattedDeviceInfo['name']}',
+          'success',
+          {
+            'ip': formattedDeviceInfo['ip'],
+            'platform': formattedDeviceInfo['platform'],
+            'device_id': formattedDeviceInfo['device_id'],
+          },
         );
 
         // Başarı mesajı göster
@@ -113,6 +132,19 @@ class SenkronizasyonYoneticiServisi {
 
         // UI'yı güncelle
         onDeviceListChanged?.call();
+
+        // Senkronizasyon log kaydı
+        if (removedDevice.isNotEmpty) {
+          _logServisi.syncLog(
+            'Cihaz Bağlantısı Kesildi: ${removedDevice['device_name']}',
+            'disconnected',
+            {
+              'ip': removedDevice['ip'],
+              'platform': removedDevice['platform'],
+              'device_id': removedDevice['device_id'],
+            },
+          );
+        }
 
         // Bildirim göster
         if (removedDevice.isNotEmpty) {
@@ -155,6 +187,13 @@ class SenkronizasyonYoneticiServisi {
 
       _durum = _sunucuCalisiyorMu ? 'Sunucu Aktif' : 'Sunucu Kapalı';
       onStatusChanged?.call(_durum);
+
+      // Senkronizasyon verilerini yükleme log kaydı
+      _logServisi.syncLog('Senkronizasyon Veriler Yüklendi', 'initialized', {
+        'bekleyen_dosya_sayisi': _bekleyenDosyaSayisi,
+        'senkronize_dosya_sayisi': _senkronizeDosyaSayisi,
+        'sunucu_durumu': _sunucuCalisiyorMu ? 'aktif' : 'kapalı',
+      });
     } catch (e) {
       _durum = 'Hata: $e';
       onError?.call(_durum);
@@ -164,6 +203,13 @@ class SenkronizasyonYoneticiServisi {
   void sunucuToggle() {
     _sunucuCalisiyorMu = !_sunucuCalisiyorMu;
     _durum = _sunucuCalisiyorMu ? 'Sunucu Aktif' : 'Sunucu Kapalı';
+
+    // Sunucu toggle log kaydı
+    _logServisi.syncLog(
+      _sunucuCalisiyorMu ? 'Sunucu Başlatıldı' : 'Sunucu Durduruldu',
+      _sunucuCalisiyorMu ? 'started' : 'stopped',
+    );
+
     onStatusChanged?.call(_durum);
     onSuccess?.call(
       _sunucuCalisiyorMu ? 'Sunucu başlatıldı' : 'Sunucu durduruldu',
@@ -181,6 +227,8 @@ class SenkronizasyonYoneticiServisi {
   }
 
   void hizliSenkronizasyon() {
+    // Hızlı senkronizasyon log kaydı
+    _logServisi.syncLog('Hızlı Senkronizasyon', 'started');
     onSuccess?.call('Hızlı senkronizasyon başlatıldı');
   }
 
@@ -699,6 +747,16 @@ class SenkronizasyonYoneticiServisi {
           }
 
           final sonuc = responseData['sonuc'];
+
+          // Senkronizasyon log kaydı - başarı
+          _logServisi.syncLog('Belgeler Senkronize Edildi', 'success', {
+            'belgeler_eklendi': sonuc['belgeler_eklendi'] ?? 0,
+            'kisiler_eklendi': sonuc['kisiler_eklendi'] ?? 0,
+            'kategoriler_eklendi': sonuc['kategoriler_eklendi'] ?? 0,
+            'hedef_ip': hedefIP,
+            'belge_sayisi': belgeler.length,
+          });
+
           onSuccess?.call(
             'Senkronizasyon tamamlandı!\n'
             '• ${sonuc['belgeler_eklendi']} belge eklendi\n'
@@ -707,10 +765,22 @@ class SenkronizasyonYoneticiServisi {
           );
           return true;
         } else {
+          // Senkronizasyon log kaydı - hata
+          _logServisi.syncLog('Belgeler Senkronize Edilemedi', 'error', {
+            'error': responseData['error'],
+            'hedef_ip': hedefIP,
+            'belge_sayisi': belgeler.length,
+          });
           onError?.call('Senkronizasyon hatası: ${responseData['error']}');
           return false;
         }
       } else {
+        // Senkronizasyon log kaydı - HTTP hatası
+        _logServisi.syncLog('Senkronizasyon Sunucu Hatası', 'error', {
+          'status_code': response.statusCode,
+          'hedef_ip': hedefIP,
+          'belge_sayisi': belgeler.length,
+        });
         onError?.call('Senkronizasyon başarısız: ${response.statusCode}');
         return false;
       }
@@ -1016,6 +1086,98 @@ class SenkronizasyonYoneticiServisi {
       print('❌ Cihaz senkronizasyonu hatası: $e');
       onError?.call('Cihaz senkronizasyonu hatası: $e');
       return false;
+    }
+  }
+
+  /// Senkronizasyon geçmişini al
+  Future<List<Map<String, dynamic>>> getSenkronizasyonGecmisi() async {
+    try {
+      final logServisi = LogServisi.instance;
+      final senkronLoglar = await logServisi.getRecentSyncLogs();
+
+      // Log verilerini UI formatına dönüştür
+      List<Map<String, dynamic>> gecmis = [];
+
+      for (var log in senkronLoglar) {
+        final mesaj = log['mesaj'] ?? '';
+        final zaman = log['zaman'] ?? '';
+
+        String tip = 'bilinmiyor';
+        if (mesaj.contains('başarılı') || mesaj.contains('tamamlandı')) {
+          tip = 'basarili';
+        } else if (mesaj.contains('bağlandı') || mesaj.contains('bağlantı')) {
+          tip = 'baglanti';
+        } else if (mesaj.contains('dosya') || mesaj.contains('belge')) {
+          tip = 'dosya';
+        } else if (mesaj.contains('hata') || mesaj.contains('başarısız')) {
+          tip = 'hata';
+        }
+
+        gecmis.add({
+          'tip': tip,
+          'mesaj': mesaj,
+          'zaman': _formatZaman(zaman),
+          'raw_time': zaman,
+        });
+      }
+
+      // Zamanına göre sırala (en yeni önce)
+      gecmis.sort(
+        (a, b) => DateTime.parse(
+          b['raw_time'],
+        ).compareTo(DateTime.parse(a['raw_time'])),
+      );
+
+      return gecmis;
+    } catch (e) {
+      print('❌ Senkronizasyon geçmişi alınırken hata: $e');
+      return [];
+    }
+  }
+
+  /// Zamanı kullanıcı dostu formata dönüştür
+  String _formatZaman(String isoTime) {
+    try {
+      final dateTime = DateTime.parse(isoTime);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+
+      if (difference.inMinutes < 1) {
+        return 'Az önce';
+      } else if (difference.inMinutes < 60) {
+        return '${difference.inMinutes} dakika önce';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours} saat önce';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays} gün önce';
+      } else {
+        return '${(difference.inDays / 7).floor()} hafta önce';
+      }
+    } catch (e) {
+      return 'Bilinmeyen zaman';
+    }
+  }
+
+  /// Cache memory temizleme (mobilde performance için)
+  void _temizleCacheMemory() {
+    // Bağlı cihazlar listesini sınırla
+    if (_bagliCihazlar.length > _maxCacheSize) {
+      // Eski cihazları kaldır (5 dakikadan eski olanlar)
+      final cutoffTime = DateTime.now().subtract(const Duration(minutes: 5));
+      _bagliCihazlar.removeWhere((cihaz) {
+        final connectedAt = cihaz['connected_at'] as DateTime?;
+        return connectedAt != null && connectedAt.isBefore(cutoffTime);
+      });
+
+      // Hala çok fazlaysa en eskilerini kaldır
+      if (_bagliCihazlar.length > _maxCacheSize) {
+        _bagliCihazlar.sort((a, b) {
+          final aTime = a['connected_at'] as DateTime? ?? DateTime.now();
+          final bTime = b['connected_at'] as DateTime? ?? DateTime.now();
+          return bTime.compareTo(aTime); // Yeni olanları başa al
+        });
+        _bagliCihazlar = _bagliCihazlar.take(_maxCacheSize).toList();
+      }
     }
   }
 

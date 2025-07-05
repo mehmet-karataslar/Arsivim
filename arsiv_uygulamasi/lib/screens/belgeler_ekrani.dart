@@ -26,6 +26,12 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   List<KategoriModeli> _kategoriler = [];
   List<KisiModeli> _kisiler = [];
   bool _yukleniyor = true;
+  bool _dahaFazlaYukleniyor = false;
+  bool _dahaFazlaVarMi = true;
+
+  // Pagination
+  static const int _sayfaBoyutu = 20;
+  int _mevcutSayfa = 0;
 
   // Basit arama durumu
   String _aramaMetni = '';
@@ -41,18 +47,69 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   DateTime? _secilenBitisTarihi;
 
   final TextEditingController _aramaController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _mevcutKategoriId = widget.kategoriId;
+    _scrollController.addListener(_scrollListener);
     _verileriYukle();
   }
 
   @override
   void dispose() {
     _aramaController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _dahaFazlaBelgeYukle();
+    }
+  }
+
+  Future<void> _dahaFazlaBelgeYukle() async {
+    if (_dahaFazlaYukleniyor || !_dahaFazlaVarMi) return;
+
+    setState(() {
+      _dahaFazlaYukleniyor = true;
+    });
+
+    try {
+      _mevcutSayfa++;
+      List<BelgeModeli> yeniBelgeler;
+
+      if (_mevcutKategoriId != null) {
+        yeniBelgeler = await _veriTabani.kategoriyeGoreBelgeleriGetir(
+          _mevcutKategoriId!,
+          limit: _sayfaBoyutu,
+          offset: _mevcutSayfa * _sayfaBoyutu,
+        );
+      } else {
+        yeniBelgeler = await _veriTabani.belgeleriGetir(
+          limit: _sayfaBoyutu,
+          offset: _mevcutSayfa * _sayfaBoyutu,
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _tumBelgeler.addAll(yeniBelgeler);
+          _dahaFazlaVarMi = yeniBelgeler.length == _sayfaBoyutu;
+          _dahaFazlaYukleniyor = false;
+        });
+        _belgeleriFiltrele();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _dahaFazlaYukleniyor = false;
+        });
+      }
+    }
   }
 
   Future<void> _verileriYukle() async {

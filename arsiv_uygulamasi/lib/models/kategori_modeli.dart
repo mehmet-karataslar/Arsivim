@@ -82,7 +82,8 @@ class KategoriModeli extends BaseModel {
   /// Yardımcı getter'lar
   String get formatliOlusturmaTarihi =>
       YardimciFonksiyonlar.tarihFormatla(olusturmaTarihi);
-  String get zamanFarki => YardimciFonksiyonlar.zamanFarki(olusturmaTarihi);
+  String get zamanFarki =>
+      YardimciFonksiyonlar.zamanFarkiFormatla(olusturmaTarihi);
   String get ad => kategoriAdi; // Alias for kategoriAdi
 
   /// Model'in geçerli olup olmadığını kontrol et

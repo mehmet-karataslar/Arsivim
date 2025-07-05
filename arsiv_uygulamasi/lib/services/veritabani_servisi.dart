@@ -43,6 +43,9 @@ class VeriTabaniServisi {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ad TEXT NOT NULL,
         soyad TEXT NOT NULL,
+        kullanici_adi TEXT UNIQUE,
+        sifre TEXT,
+        kullanici_tipi TEXT DEFAULT 'NORMAL',
         olusturma_tarihi TEXT NOT NULL,
         guncelleme_tarihi TEXT NOT NULL,
         aktif INTEGER DEFAULT 1
@@ -157,6 +160,25 @@ class VeriTabaniServisi {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    print('🔄 Database upgrade: $oldVersion -> $newVersion');
+
+    // Kritik migration hatası durumunda veritabanını sıfırla
+    try {
+      await _performMigration(db, oldVersion, newVersion);
+    } catch (e) {
+      print('❌ Migration başarısız: $e');
+      print('🔄 Veritabanı sıfırlanıyor...');
+      await _dropAllTables(db);
+      await _onCreate(db, newVersion);
+      print('✅ Veritabanı yeniden oluşturuldu');
+    }
+  }
+
+  Future<void> _performMigration(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 2) {
       // Kişiler tablosunu ekle
       await db.execute('''
@@ -288,6 +310,48 @@ class VeriTabaniServisi {
         print('❌ V5 migration hatası: $e');
       }
     }
+
+    if (oldVersion < 6) {
+      // V6 Migration - kullanıcı sistemi için kişiler tablosunu güncelle
+      try {
+        print('🔄 V6 Migration başlatılıyor - kullanıcı sistemi ekleniyor...');
+
+        // Önce mevcut kolonları kontrol et
+        final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
+        final existingColumns = columns.map((col) => col['name']).toSet();
+
+        print('Mevcut kolonlar: $existingColumns');
+
+        // Kullanıcı alanlarını ekle (sadece yoksa)
+        if (!existingColumns.contains('kullanici_adi')) {
+          await db.execute(
+            'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
+          );
+          print('✅ kullanici_adi kolonu eklendi');
+        }
+
+        if (!existingColumns.contains('sifre')) {
+          await db.execute('ALTER TABLE kisiler ADD COLUMN sifre TEXT');
+          print('✅ sifre kolonu eklendi');
+        }
+
+        if (!existingColumns.contains('kullanici_tipi')) {
+          await db.execute(
+            'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
+          );
+          print('✅ kullanici_tipi kolonu eklendi');
+        }
+
+        print('✅ Kullanıcı sistemi V6 ile eklendi');
+      } catch (e) {
+        print('❌ V6 migration hatası: $e');
+        // Migration başarısız olursa veritabanını sıfırla
+        print('🔄 Veritabanı sıfırlanıyor...');
+        await _dropAllTables(db);
+        await _onCreate(db, 6);
+        print('✅ Veritabanı yeniden oluşturuldu');
+      }
+    }
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -397,6 +461,36 @@ class VeriTabaniServisi {
     await db.execute('DROP TABLE IF EXISTS kisiler');
   }
 
+  /// Veritabanını manuel olarak sıfırlama (kullanıcı için)
+  Future<void> resetDatabase() async {
+    try {
+      print('🔄 Veritabanı manuel olarak sıfırlanıyor...');
+
+      // Mevcut database bağlantısını kapat
+      if (_database != null) {
+        await _database!.close();
+        _database = null;
+      }
+
+      // Veritabanı dosyasını sil
+      Directory documentsDirectory = await getApplicationDocumentsDirectory();
+      String path = join(documentsDirectory.path, Sabitler.VERITABANI_ADI);
+      File dbFile = File(path);
+
+      if (await dbFile.exists()) {
+        await dbFile.delete();
+        print('✅ Veritabanı dosyası silindi');
+      }
+
+      // Yeni veritabanını oluştur
+      _database = await _initDatabase();
+      print('✅ Veritabanı yeniden oluşturuldu');
+    } catch (e) {
+      print('❌ Veritabanı sıfırlanırken hata: $e');
+      rethrow;
+    }
+  }
+
   // BELGE CRUD İŞLEMLERİ
 
   // Belge ekleme - UNIQUE constraint hatası tamamen önlendi
@@ -419,8 +513,11 @@ class VeriTabaniServisi {
     }
   }
 
-  // Tüm belgeleri getir
-  Future<List<BelgeModeli>> belgeleriGetir({int? limit, int? offset}) async {
+  // Tüm belgeleri getir - PAGINATED
+  Future<List<BelgeModeli>> belgeleriGetir({
+    int? limit = 20,
+    int? offset = 0,
+  }) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
@@ -452,13 +549,19 @@ class VeriTabaniServisi {
   }
 
   // Kategori ID'ye göre belgeleri getir
-  Future<List<BelgeModeli>> kategoriyeGoreBelgeleriGetir(int kategoriId) async {
+  Future<List<BelgeModeli>> kategoriyeGoreBelgeleriGetir(
+    int kategoriId, {
+    int? limit,
+    int? offset,
+  }) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
       where: 'kategori_id = ? AND aktif = ?',
       whereArgs: [kategoriId, 1],
       orderBy: 'guncelleme_tarihi DESC',
+      limit: limit,
+      offset: offset,
     );
 
     return List.generate(maps.length, (i) {
@@ -898,10 +1001,9 @@ class VeriTabaniServisi {
   Future<int> toplamBelgeSayisi() async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM belgeler WHERE aktif = ?',
-      [1],
+      'SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1',
     );
-    return result.first['count'] as int;
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   // Toplam dosya boyutu
@@ -912,6 +1014,22 @@ class VeriTabaniServisi {
       [1],
     );
     return (result.first['total'] as int?) ?? 0;
+  }
+
+  // Öncelikli belgeleri getir (ana ekran için)
+  Future<List<BelgeModeli>> onceakliBelgeleriGetir({int limit = 5}) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'belgeler',
+      where: 'aktif = ?',
+      whereArgs: [1],
+      orderBy: 'son_erisim_tarihi DESC NULLS LAST, guncelleme_tarihi DESC',
+      limit: limit,
+    );
+
+    return List.generate(maps.length, (i) {
+      return BelgeModeli.fromMap(maps[i]);
+    });
   }
 
   // VERİTABANI YÖNETİMİ
