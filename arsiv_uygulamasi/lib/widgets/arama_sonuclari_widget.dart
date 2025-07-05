@@ -344,24 +344,24 @@ class AramaSonuclariWidget extends StatelessWidget {
       builder:
           (BuildContext modalContext) => Container(
             padding: const EdgeInsets.all(20),
-            child: Column(
+              child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
                   'Tarih Filtresi',
-                  style: TextStyle(
+                    style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.grey[800],
+                    ),
                   ),
-                ),
                 const SizedBox(height: 20),
 
                 // Ay seçimi
-                Text(
+                  Text(
                   'Ay:',
-                  style: TextStyle(
+                    style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                     color: Colors.grey[700],
@@ -402,14 +402,14 @@ class AramaSonuclariWidget extends StatelessWidget {
                       style: TextButton.styleFrom(
                         foregroundColor: Colors.red[600],
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
+                  ),
                     ),
                   ),
 
                 const SizedBox(height: 10),
-              ],
+                ],
+              ),
             ),
-          ),
     );
   }
 
@@ -530,12 +530,12 @@ class AramaSonuclariWidget extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.date_range,
-                    size: 16,
-                    color:
+                Icons.date_range,
+                size: 16,
+                color:
                         (secilenAy != null || secilenYil != null)
-                            ? Colors.green[600]
-                            : Colors.grey[600],
+                        ? Colors.green[600]
+                        : Colors.grey[600],
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -666,27 +666,27 @@ class AramaSonuclariWidget extends StatelessWidget {
   Widget _buildHataDurumu() {
     return Center(
       child: SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: [
+        children: [
             Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
             const SizedBox(height: 12),
-            Text(
-              'Arama Hatası',
-              style: TextStyle(
+          Text(
+            'Arama Hatası',
+            style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.red[600],
-              ),
+              fontWeight: FontWeight.bold,
+              color: Colors.red[600],
             ),
+          ),
             const SizedBox(height: 6),
-            Text(
-              hata!,
+          Text(
+            hata!,
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            textAlign: TextAlign.center,
+          ),
+        ],
         ),
       ),
     );
@@ -695,27 +695,27 @@ class AramaSonuclariWidget extends StatelessWidget {
   Widget _buildBosDurum() {
     return Center(
       child: SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
-          children: [
+        children: [
             Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
             const SizedBox(height: 12),
-            Text(
-              'Sonuç Bulunamadı',
-              style: TextStyle(
+          Text(
+            'Sonuç Bulunamadı',
+            style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
-              ),
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
             ),
+          ),
             const SizedBox(height: 6),
-            Text(
-              'Arama kriterlerinize uygun belge bulunamadı.\nFiltreleri değiştirmeyi deneyin.',
+          Text(
+            'Arama kriterlerinize uygun belge bulunamadı.\nFiltreleri değiştirmeyi deneyin.',
               style: TextStyle(color: Colors.grey[500], fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            textAlign: TextAlign.center,
+          ),
+        ],
         ),
       ),
     );

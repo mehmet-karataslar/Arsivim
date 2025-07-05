@@ -123,6 +123,31 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                   ],
                 ),
 
+                // Açıklama kısmı
+                if (widget.belge.aciklama != null &&
+                    widget.belge.aciklama!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.description,
+                        size: 14,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          widget.belge.aciklama!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600], fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
                 // Etiketler alt kısımda
                 if (_getEtiketler().isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -267,6 +292,35 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                       if (_getKisiAdi() != null) _buildKisiChip(),
                     ],
                   ),
+
+                  // Açıklama kısmı
+                  if (widget.belge.aciklama != null &&
+                      widget.belge.aciklama!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.description,
+                          size: 16,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.belge.aciklama!,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[700],
+                              fontSize: 13,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
 
                   // Etiketler alt kısımda
                   if (_getEtiketler().isNotEmpty) ...[

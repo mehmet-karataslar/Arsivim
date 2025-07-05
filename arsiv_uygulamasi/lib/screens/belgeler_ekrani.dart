@@ -61,11 +61,14 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
       _belgeleriFiltrele();
     });
 
-    // Argumentleri al
+    // Constructor parametresini al
+    _mevcutKategoriId = widget.kategoriId;
+
+    // Argumentleri al (eğer route arguments varsa) ve verileri yükle
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      if (args != null) {
+      if (args != null && args['kategori_id'] != null) {
         _mevcutKategoriId = args['kategori_id'];
       }
       _verileriYukle();
@@ -132,6 +135,7 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   }
 
   Future<void> _verileriYukle() async {
+    print('DEBUG: _verileriYukle() çağrıldı, kategori ID: $_mevcutKategoriId');
     setState(() {
       _yukleniyor = true;
     });
@@ -139,11 +143,17 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
     try {
       List<Map<String, dynamic>> detayliBelgeler;
       if (_mevcutKategoriId != null) {
+        print(
+          'DEBUG: Kategori ID: $_mevcutKategoriId ile belgeler getiriliyor',
+        );
         detayliBelgeler = await _veriTabani.kategoriyeGoreBelgeleriDetayliGetir(
           _mevcutKategoriId!,
         );
+        print('DEBUG: Kategoriye ait ${detayliBelgeler.length} belge bulundu');
       } else {
+        print('DEBUG: Tüm belgeler getiriliyor');
         detayliBelgeler = await _veriTabani.belgeleriDetayliGetir();
+        print('DEBUG: Toplam ${detayliBelgeler.length} belge bulundu');
       }
 
       final kategoriler = await _veriTabani.kategorileriGetir();
@@ -221,11 +231,17 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   }
 
   void _belgeleriFiltrele() async {
+    print('DEBUG: _belgeleriFiltrele() çağrıldı');
+    print('DEBUG: Arama metni: "$_aramaMetni"');
+    print('DEBUG: Kategori ID: $_mevcutKategoriId');
+    print('DEBUG: Seçilen ay: $_secilenAy, yıl: $_secilenYil');
+
     // Veritabanı seviyesinde filtreleme yap
     try {
       List<BelgeModeli> filtrelenmsBelgeler;
 
       if (_aramaMetni.isNotEmpty || _secilenAy != null || _secilenYil != null) {
+        print('DEBUG: Gelişmiş arama kullanılıyor');
         // Gelişmiş arama kullan
         filtrelenmsBelgeler = await _veriTabani.belgeAramaDetayli(
           aramaMetni: _aramaMetni.isNotEmpty ? _aramaMetni : null,
@@ -234,18 +250,25 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
           kategoriId: _mevcutKategoriId,
         );
       } else {
+        print('DEBUG: Basit filtreleme kullanılıyor');
         // Filtresiz tüm belgeler
         filtrelenmsBelgeler = List.from(_tumBelgeler);
+        print('DEBUG: Toplam belge sayısı: ${filtrelenmsBelgeler.length}');
 
         // Eğer kategori filtresi varsa uygula
         if (_mevcutKategoriId != null) {
+          print('DEBUG: Kategori filtresi uygulanıyor');
           filtrelenmsBelgeler =
               filtrelenmsBelgeler
                   .where((belge) => belge.kategoriId == _mevcutKategoriId)
                   .toList();
+          print(
+            'DEBUG: Kategori filtresi sonrası: ${filtrelenmsBelgeler.length}',
+          );
         }
       }
 
+      print('DEBUG: Filtreleme sonucu: ${filtrelenmsBelgeler.length} belge');
       setState(() {
         _filtrelenmsBelgeler = filtrelenmsBelgeler;
       });
@@ -258,6 +281,14 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   // Yedek client-side filtreleme
   void _clientSideFiltrele() {
     List<BelgeModeli> filtrelenmsBelgeler = List.from(_tumBelgeler);
+
+    // Önce kategori filtresi uygula
+    if (_mevcutKategoriId != null) {
+      filtrelenmsBelgeler =
+          filtrelenmsBelgeler
+              .where((belge) => belge.kategoriId == _mevcutKategoriId)
+              .toList();
+    }
 
     // Basit arama filtresi - istenen kriterlere göre
     if (_aramaMetni.isNotEmpty) {

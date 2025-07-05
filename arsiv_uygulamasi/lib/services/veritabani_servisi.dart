@@ -604,8 +604,9 @@ class VeriTabaniServisi {
     int? offset,
   }) async {
     final db = await database;
-    final List<Map<String, dynamic>> results = await db.rawQuery(
-      '''
+
+    // SQL sorgusunu dinamik olarak oluştur
+    String sorgu = '''
       SELECT 
         b.*,
         k.kategori_adi,
@@ -618,10 +619,28 @@ class VeriTabaniServisi {
       LEFT JOIN kisiler ki ON b.kisi_id = ki.id
       WHERE b.kategori_id = ? AND b.aktif = 1
       ORDER BY b.guncelleme_tarihi DESC
-      LIMIT ? OFFSET ?
-    ''',
-      [kategoriId, limit, offset],
+    ''';
+
+    List<dynamic> parametreler = [kategoriId];
+
+    if (limit != null) {
+      sorgu += ' LIMIT ?';
+      parametreler.add(limit);
+
+      if (offset != null) {
+        sorgu += ' OFFSET ?';
+        parametreler.add(offset);
+      }
+    }
+
+    print('DEBUG: Kategori sorgusu: $sorgu');
+    print('DEBUG: Parametreler: $parametreler');
+
+    final List<Map<String, dynamic>> results = await db.rawQuery(
+      sorgu,
+      parametreler,
     );
+    print('DEBUG: Kategori sorgusu sonucu: ${results.length} belge');
 
     return results;
   }
