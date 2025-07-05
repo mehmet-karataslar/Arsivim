@@ -4,24 +4,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="Readme eklendi">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/main.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/senkronizasyon_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/senkronizasyon_ekrani.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/http_sunucu_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/http_sunucu_servisi.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/senkronizasyon_yonetici_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/senkronizasyon_yonetici_servisi.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/utils/sabitler.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/utils/sabitler.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/belge_karti_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/belge_karti_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/cihaz_baglanti_paneli.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/cihaz_baglanti_paneli.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/qr_generator_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/qr_generator_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/qr_scanner_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/qr_scanner_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/senkronizasyon_kartlari.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/senkronizasyon_kartlari.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Flutter/GeneratedPluginRegistrant.swift" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/macos/Flutter/GeneratedPluginRegistrant.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.lock" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/pubspec.yaml" afterDir="false" />
-    </list>
+    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="Readme eklendi" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
