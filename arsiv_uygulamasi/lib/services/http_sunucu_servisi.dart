@@ -115,6 +115,32 @@ class HttpSunucuServisi {
             case '/metadata/conflicts':
               responseBody = await _handleMetadataConflicts(request);
               break;
+            case '/sync/negotiate':
+              if (request.method == 'POST') {
+                responseBody = await _handleSyncNegotiate(request);
+              } else {
+                statusCode = 405;
+                responseBody = json.encode({'error': 'Method not allowed'});
+              }
+              break;
+            case '/sync/manifest':
+              if (request.method == 'GET') {
+                responseBody = await _handleSyncManifest(request);
+              } else if (request.method == 'POST') {
+                responseBody = await _handleSyncManifestCreate(request);
+              } else {
+                statusCode = 405;
+                responseBody = json.encode({'error': 'Method not allowed'});
+              }
+              break;
+            case '/sync/bidirectional':
+              if (request.method == 'POST') {
+                responseBody = await _handleBidirectionalSync(request);
+              } else {
+                statusCode = 405;
+                responseBody = json.encode({'error': 'Method not allowed'});
+              }
+              break;
             default:
               if (request.uri.path.startsWith('/download/')) {
                 responseBody = await _handleDownload(request);
@@ -386,62 +412,72 @@ class HttpSunucuServisi {
     }
   }
 
-  // Belge indirme endpoint'i
+  // Belge indirme endpoint'i - Hash ve dosya adı destekli
   Future<String> _handleDownload(HttpRequest request) async {
     try {
-      // URL decode'u güvenli şekilde yap
-      String dosyaAdi;
+      // URL'den hash veya dosya adını al
+      String requestParam;
       try {
-        dosyaAdi = Uri.decodeComponent(request.uri.pathSegments.last);
+        requestParam = Uri.decodeComponent(request.uri.pathSegments.last);
       } catch (e) {
-        // Decode edilemiyorsa raw string kullan
-        dosyaAdi = request.uri.pathSegments.last;
+        requestParam = request.uri.pathSegments.last;
         print('⚠️ URL decode hatası, raw string kullanılıyor: $e');
       }
-      print('📥 Belge indirme isteği: $dosyaAdi');
+      print('📥 Belge indirme isteği: $requestParam');
 
-      // Dosya adı ile belge ara (esnek arama)
-      List<BelgeModeli> belgeler = await _veriTabani.belgeAra(dosyaAdi);
+      BelgeModeli? belge;
 
-      // Eğer bulunamazsa, URL decode edilmiş hali ile de dene
-      if (belgeler.isEmpty) {
-        print('📋 İlk arama sonuçsuz, farklı encode türleri deneniyor...');
+      // Önce hash ile ara
+      belge = await _veriTabani.belgeGetirByHash(requestParam);
 
-        // Farklı encode varyasyonlarını dene
-        final aramaTerimleri = [
-          dosyaAdi,
-          Uri.encodeComponent(dosyaAdi),
-          dosyaAdi.replaceAll('%20', ' '),
-          dosyaAdi.replaceAll('+', ' '),
-        ];
+      if (belge == null) {
+        print('📋 Hash ile bulunamadı, dosya adı ile aranıyor...');
+        // Dosya adı ile ara
+        List<BelgeModeli> belgeler = await _veriTabani.belgeAra(requestParam);
 
-        for (final terim in aramaTerimleri) {
-          belgeler = await _veriTabani.belgeAra(terim);
-          if (belgeler.isNotEmpty) {
-            print('✅ Belge bulundu: $terim');
-            break;
+        if (belgeler.isEmpty) {
+          print('📋 İlk arama sonuçsuz, farklı encode türleri deneniyor...');
+
+          // Farklı encode varyasyonlarını dene
+          final aramaTerimleri = [
+            requestParam,
+            Uri.encodeComponent(requestParam),
+            requestParam.replaceAll('%20', ' '),
+            requestParam.replaceAll('+', ' '),
+          ];
+
+          for (final terim in aramaTerimleri) {
+            belgeler = await _veriTabani.belgeAra(terim);
+            if (belgeler.isNotEmpty) {
+              print('✅ Belge bulundu: $terim');
+              break;
+            }
           }
         }
 
         if (belgeler.isEmpty) {
-          print('❌ Belge hiçbir encode türünde bulunamadı: $dosyaAdi');
+          print('❌ Belge hiçbir türde bulunamadı: $requestParam');
           request.response.statusCode = 404;
           await request.response.close();
           return json.encode({'error': 'Belge bulunamadı'});
         }
+
+        belge = belgeler.first;
       }
 
-      final dosya = File(belgeler.first.dosyaYolu);
+      final dosya = File(belge.dosyaYolu);
       if (!await dosya.exists()) {
+        print('❌ Dosya fiziksel olarak bulunamadı: ${belge.dosyaYolu}');
         request.response.statusCode = 404;
         await request.response.close();
         return json.encode({'error': 'Dosya bulunamadı'});
       }
 
       final dosyaBytes = await dosya.readAsBytes();
-
-      // Türkçe karakterler için güvenli filename oluştur
-      final safeDosyaAdi = dosyaAdi.replaceAll(RegExp(r'[^\w\-_\.]'), '_');
+      final safeDosyaAdi = belge.dosyaAdi.replaceAll(
+        RegExp(r'[^\w\-_\.]'),
+        '_',
+      );
 
       request.response
         ..headers.contentType = ContentType.binary
@@ -453,25 +489,21 @@ class HttpSunucuServisi {
         ..headers.add('Access-Control-Allow-Origin', '*')
         ..headers.add('Access-Control-Expose-Headers', 'Content-Disposition');
 
-      // Dosya verilerini yaz ve response'u kapat
       request.response.add(dosyaBytes);
       await request.response.close();
 
-      print('✅ Belge gönderildi: $dosyaAdi (${dosyaBytes.length} bytes)');
-      print('✅ Binary dosya gönderildi');
-      return 'BINARY_SENT'; // Binary response gönderildi işareti
+      print(
+        '✅ Belge gönderildi: ${belge.dosyaAdi} (${dosyaBytes.length} bytes)',
+      );
+      return 'BINARY_SENT';
     } catch (e) {
       print('❌ Download endpoint hatası: $e');
-
-      // Response kapatmayı dene, eğer zaten kapalıysa ignore et
       try {
         request.response.statusCode = 500;
         await request.response.close();
-        print('⚠️ Error response gönderildi');
       } catch (closeError) {
-        print('⚠️ Response zaten kapatılmış veya kapatma hatası: $closeError');
+        print('⚠️ Response kapatma hatası: $closeError');
       }
-
       return json.encode({'error': 'İndirme hatası: $e'});
     }
   }
@@ -603,7 +635,11 @@ class HttpSunucuServisi {
 
         final contentDisposition = headers['content-disposition'] ?? '';
 
-        if (contentDisposition.contains('name="metadata"')) {
+        // DEBUG: Content-Disposition analizi
+        print('🔍 Content-Disposition: "$contentDisposition"');
+
+        if (contentDisposition.contains('name="metadata"') ||
+            contentDisposition.contains('name="belge_data"')) {
           metadata = utf8.decode(data, allowMalformed: true);
           print(
             '✅ Metadata alındı: ${metadata.substring(0, metadata.length.clamp(0, 100))}...',
@@ -650,12 +686,18 @@ class HttpSunucuServisi {
       try {
         metadataJson = json.decode(metadata) as Map<String, dynamic>;
         print(
-          '📋 Metadata başarıyla parse edildi: ${metadataJson['dosyaAdi']}',
+          '📋 Metadata başarıyla parse edildi: ${metadataJson['dosyaAdi'] ?? 'Belirtilmemiş'}',
         );
+
+        // Kişi bilgilerini güvenli şekilde göster
+        final kisiAd = metadataJson['kisiAd']?.toString() ?? 'Belirtilmemiş';
+        final kisiSoyad = metadataJson['kisiSoyad']?.toString() ?? '';
+        final kisiTam = kisiSoyad.isNotEmpty ? '$kisiAd $kisiSoyad' : kisiAd;
+
+        print('   • Kişi: $kisiTam');
         print(
-          '   • Kişi: ${metadataJson['kisiAd']} ${metadataJson['kisiSoyad']}',
+          '   • Kategori ID: ${metadataJson['kategoriId'] ?? 'Belirtilmemiş'}',
         );
-        print('   • Kategori ID: ${metadataJson['kategoriId']}');
       } catch (e) {
         print('❌ Metadata parse hatası: $e');
         print('   Raw metadata: $metadata');
@@ -689,16 +731,44 @@ class HttpSunucuServisi {
         throw Exception('Dosya yazılamadı: $e');
       }
 
-      // Kişi ID'sini eşleştir (ad-soyad kombinasyonuna göre)
+      // Gelişmiş kişi eşleştirme sistemi
       int? eslestirilenKisiId;
-      if (metadataJson['kisiAd'] != null && metadataJson['kisiSoyad'] != null) {
-        try {
-          // Yerel kişi listesinde ad-soyad kombinasyonunu ara
-          final yerelKisiler = await _veriTabani.kisileriGetir();
-          final eslestirilenKisi = yerelKisiler.firstWhere(
-            (k) =>
-                k.ad == metadataJson['kisiAd'] &&
-                k.soyad == metadataJson['kisiSoyad'],
+      final kisiAdStr = metadataJson['kisiAd']?.toString();
+      final kisiSoyadStr = metadataJson['kisiSoyad']?.toString();
+      final gonderenKisiId = metadataJson['kisiId'];
+      final belgeKimlik = metadataJson['belgeKimlik']?.toString();
+
+      print('🔍 Kişi eşleştirme başlıyor:');
+      print('   • Gönderen Kişi ID: $gonderenKisiId');
+      print('   • Kişi Adı: $kisiAdStr');
+      print('   • Kişi Soyadı: $kisiSoyadStr');
+      print('   • Belge Kimlik: $belgeKimlik');
+
+      // Kişi bilgisi mutlaka olmalı - bu temel kural
+      if (gonderenKisiId == null && (kisiAdStr == null || kisiAdStr.isEmpty)) {
+        print('❌ Belge kişi bilgisi eksik - transfer reddedildi');
+
+        // Dosyayı disk'ten sil
+        final dosya = File(yeniDosyaYolu);
+        if (await dosya.exists()) {
+          await dosya.delete();
+        }
+
+        return json.encode({
+          'status': 'error',
+          'message':
+              'Belge kişi bilgisi eksik. Transfer edilecek her belge mutlaka bir kişiye ait olmalıdır.',
+          'code': 'MISSING_PERSON_INFO',
+        });
+      }
+
+      try {
+        final yerelKisiler = await _veriTabani.kisileriGetir();
+
+        // Önce ID ile eşleştirmeyi dene (en güvenilir)
+        if (gonderenKisiId != null) {
+          final idIleEslestirilenKisi = yerelKisiler.firstWhere(
+            (k) => k.id == gonderenKisiId,
             orElse:
                 () => KisiModeli(
                   ad: '',
@@ -708,68 +778,126 @@ class HttpSunucuServisi {
                 ),
           );
 
-          if (eslestirilenKisi.ad.isNotEmpty) {
-            eslestirilenKisiId = eslestirilenKisi.id;
-            print('👤 Kişi eşleştirildi: ${eslestirilenKisi.tamAd}');
-          } else {
-            // Kişi yoksa yeni kişi ekle
+          if (idIleEslestirilenKisi.ad.isNotEmpty) {
+            eslestirilenKisiId = idIleEslestirilenKisi.id;
+            print('👤 ✅ ID ile eşleştirildi: ${idIleEslestirilenKisi.tamAd}');
+          }
+        }
+
+        // ID ile eşleştirme başarısızsa, ad-soyad ile dene
+        if (eslestirilenKisiId == null &&
+            kisiAdStr != null &&
+            kisiSoyadStr != null &&
+            kisiAdStr.isNotEmpty) {
+          final adSoyadIleEslestirilenKisi = yerelKisiler.firstWhere(
+            (k) =>
+                k.ad.toLowerCase() == kisiAdStr.toLowerCase() &&
+                k.soyad.toLowerCase() == kisiSoyadStr.toLowerCase(),
+            orElse:
+                () => KisiModeli(
+                  ad: '',
+                  soyad: '',
+                  olusturmaTarihi: DateTime.now(),
+                  guncellemeTarihi: DateTime.now(),
+                ),
+          );
+
+          if (adSoyadIleEslestirilenKisi.ad.isNotEmpty) {
+            eslestirilenKisiId = adSoyadIleEslestirilenKisi.id;
+            print(
+              '👤 ✅ Ad-Soyad ile eşleştirildi: ${adSoyadIleEslestirilenKisi.tamAd}',
+            );
+          } else if (kisiAdStr.isNotEmpty) {
+            // Kişi yoksa yeni kişi oluştur
             final yeniKisi = KisiModeli(
-              ad: metadataJson['kisiAd'],
-              soyad: metadataJson['kisiSoyad'],
+              ad: kisiAdStr,
+              soyad: kisiSoyadStr ?? '',
               olusturmaTarihi: DateTime.now(),
               guncellemeTarihi: DateTime.now(),
             );
 
             final kisiId = await _veriTabani.kisiEkle(yeniKisi);
             eslestirilenKisiId = kisiId;
-            print('👤 Yeni kişi eklendi: ${yeniKisi.tamAd}');
-          }
-        } catch (e) {
-          print('⚠️ Kişi eşleştirme hatası: $e');
-          // Varsayılan olarak ilk kişiyi seç
-          final yerelKisiler = await _veriTabani.kisileriGetir();
-          if (yerelKisiler.isNotEmpty) {
-            eslestirilenKisiId = yerelKisiler.first.id;
-            print('⚠️ Varsayılan kişi seçildi: ${yerelKisiler.first.tamAd}');
+            print('👤 ✅ Yeni kişi oluşturuldu: ${yeniKisi.tamAd}');
           }
         }
-      } else if (metadataJson['kisiId'] != null) {
-        // Fallback: eski yöntem (ID ile)
-        try {
-          final yerelKisiler = await _veriTabani.kisileriGetir();
-          final eslestirilenKisi = yerelKisiler.firstWhere(
-            (k) => k.id == metadataJson['kisiId'],
-            orElse:
-                () => KisiModeli(
-                  ad: '',
-                  soyad: '',
-                  olusturmaTarihi: DateTime.now(),
-                  guncellemeTarihi: DateTime.now(),
-                ),
-          );
 
-          if (eslestirilenKisi.ad.isNotEmpty) {
-            eslestirilenKisiId = eslestirilenKisi.id;
-          } else if (yerelKisiler.isNotEmpty) {
-            eslestirilenKisiId = yerelKisiler.first.id;
-            print(
-              '⚠️ ID ile eşleştirilemedi, varsayılan seçildi: ${yerelKisiler.first.tamAd}',
-            );
+        // Hiçbir eşleştirme başarılı değilse hata döndür
+        if (eslestirilenKisiId == null) {
+          print('❌ Kişi eşleştirme başarısız - transfer reddedildi');
+
+          // Dosyayı disk'ten sil
+          final dosya = File(yeniDosyaYolu);
+          if (await dosya.exists()) {
+            await dosya.delete();
           }
-        } catch (e) {
-          print('⚠️ Kişi ID eşleştirme hatası: $e');
+
+          return json.encode({
+            'status': 'error',
+            'message':
+                'Kişi eşleştirme başarısız. Gönderilen kişi bilgileri bulunamadı.',
+            'code': 'PERSON_NOT_FOUND',
+          });
         }
+      } catch (e) {
+        print('❌ Kişi eşleştirme sistemi hatası: $e');
+
+        // Dosyayı disk'ten sil
+        final dosya = File(yeniDosyaYolu);
+        if (await dosya.exists()) {
+          await dosya.delete();
+        }
+
+        return json.encode({
+          'status': 'error',
+          'message': 'Kişi eşleştirme sistemi hatası: $e',
+          'code': 'PERSON_MATCH_ERROR',
+        });
       }
 
-      // Dosya hash'ini hesapla
-      final dosyaHashBytes = sha256.convert(fileBytes);
-      final dosyaHashString = dosyaHashBytes.toString();
-      print('🔐 Dosya hash hesaplandı: ${dosyaHashString.substring(0, 16)}...');
+      // Dosya hash'ini metadata'dan al (tutarlılık için)
+      final metadataHash = metadataJson['dosyaHash']?.toString();
+      String dosyaHashString;
 
-      // Duplicate kontrolü yap
+      if (metadataHash != null && metadataHash.isNotEmpty) {
+        // Metadata'dan gelen hash'i kullan
+        dosyaHashString = metadataHash;
+        print(
+          '🔐 Metadata hash kullanıldı: ${dosyaHashString.substring(0, 16)}...',
+        );
+
+        // Doğrulama için local hash hesapla
+        final localHashBytes = sha256.convert(fileBytes);
+        final localHashString = localHashBytes.toString();
+
+        if (localHashString != metadataHash) {
+          print('⚠️ Hash uyumsuzluğu tespit edildi!');
+          print('   • Metadata Hash: ${metadataHash.substring(0, 16)}...');
+          print('   • Local Hash: ${localHashString.substring(0, 16)}...');
+          print('   • Dosya bütünlüğü kontrol edilmelidir');
+        } else {
+          print('✅ Hash doğrulaması başarılı');
+        }
+      } else {
+        // Metadata'da hash yoksa local hesapla
+        final dosyaHashBytes = sha256.convert(fileBytes);
+        dosyaHashString = dosyaHashBytes.toString();
+        print(
+          '🔐 Local hash hesaplandı: ${dosyaHashString.substring(0, 16)}...',
+        );
+      }
+
+      // Belge kimliği oluştur (Dosya Hash + Kişi ID - TC kimlik mantığı)
+      final calculatedBelgeKimlik = '${dosyaHashString}_${eslestirilenKisiId}';
+      print('🔍 Hesaplanan belge kimliği: $calculatedBelgeKimlik');
+      print('🔍 Gelen belge kimliği: $belgeKimlik');
+
+      // Gelişmiş duplicate kontrolü (hash + kişi bazlı)
       try {
         final mevcutBelgeler = await _veriTabani.belgeleriGetir();
-        final duplicateBelge = mevcutBelgeler.firstWhere(
+
+        // Önce dosya hash ile kontrol et
+        final hashDuplicateBelge = mevcutBelgeler.firstWhere(
           (belge) => belge.dosyaHash == dosyaHashString,
           orElse:
               () => BelgeModeli(
@@ -787,42 +915,180 @@ class HttpSunucuServisi {
               ),
         );
 
-        if (duplicateBelge.dosyaAdi.isNotEmpty) {
-          print('⚠️ Duplicate dosya bulundu: ${duplicateBelge.dosyaAdi}');
+        // Hash duplicate varsa ama kişi farklıysa güncelle
+        if (hashDuplicateBelge.dosyaAdi.isNotEmpty) {
+          if (hashDuplicateBelge.kisiId != eslestirilenKisiId) {
+            print('🔄 Aynı dosya farklı kişiye ait, kişi güncelleniyor...');
+            print('   • Eski kişi ID: ${hashDuplicateBelge.kisiId}');
+            print('   • Yeni kişi ID: $eslestirilenKisiId');
 
-          // Dosyayı disk'ten sil
-          final dosya = File(yeniDosyaYolu);
-          if (await dosya.exists()) {
-            await dosya.delete();
-            print('🗑️ Duplicate dosya diskten silindi');
+            // Kişi ID'sini güncelle
+            final guncelBelge = BelgeModeli(
+              id: hashDuplicateBelge.id,
+              dosyaAdi: hashDuplicateBelge.dosyaAdi,
+              orijinalDosyaAdi: hashDuplicateBelge.orijinalDosyaAdi,
+              dosyaYolu: hashDuplicateBelge.dosyaYolu,
+              dosyaBoyutu: hashDuplicateBelge.dosyaBoyutu,
+              dosyaTipi: hashDuplicateBelge.dosyaTipi,
+              dosyaHash: hashDuplicateBelge.dosyaHash,
+              kategoriId: hashDuplicateBelge.kategoriId,
+              kisiId: eslestirilenKisiId, // Yeni kişi ID'si
+              baslik: hashDuplicateBelge.baslik,
+              aciklama: hashDuplicateBelge.aciklama,
+              etiketler: hashDuplicateBelge.etiketler,
+              olusturmaTarihi: hashDuplicateBelge.olusturmaTarihi,
+              guncellemeTarihi: DateTime.now(), // Güncelleme zamanı
+              aktif: hashDuplicateBelge.aktif,
+            );
+            await _veriTabani.belgeGuncelle(guncelBelge);
+
+            // Dosyayı disk'ten sil (güncelleme yapıldı)
+            final dosya = File(yeniDosyaYolu);
+            if (await dosya.exists()) {
+              await dosya.delete();
+            }
+
+            return json.encode({
+              'status': 'success',
+              'message': 'Belge kişi bilgisi güncellendi',
+              'fileName': fileName,
+              'action': 'updated_person',
+              'oldPersonId': hashDuplicateBelge.kisiId,
+              'newPersonId': eslestirilenKisiId,
+            });
+          } else {
+            print(
+              '⚠️ Aynı kişi için duplicate dosya: ${hashDuplicateBelge.dosyaAdi}',
+            );
+
+            // Metadata farklıysa UPDATE yap
+            final guncellemeTarihiStr =
+                metadataJson['guncellemeTarihi']?.toString();
+            final guncellemeTarihi =
+                guncellemeTarihiStr != null
+                    ? DateTime.tryParse(guncellemeTarihiStr) ?? DateTime.now()
+                    : DateTime.now();
+
+            // Mevcut belgeden daha yeni ise UPDATE yap
+            final mevcutGuncelleme = hashDuplicateBelge.guncellemeTarihi;
+            final yeniGuncelleme = guncellemeTarihi;
+
+            // Metadata değişikliği olup olmadığını kontrol et
+            final metadataChanged =
+                metadataJson['baslik']?.toString() !=
+                    hashDuplicateBelge.baslik ||
+                metadataJson['aciklama']?.toString() !=
+                    hashDuplicateBelge.aciklama ||
+                metadataJson['kategoriId'] != hashDuplicateBelge.kategoriId ||
+                yeniGuncelleme.isAfter(mevcutGuncelleme);
+
+            if (metadataChanged) {
+              print('🔄 Metadata değişikliği tespit edildi - UPDATE yapılıyor');
+              print(
+                '   • Eski güncelleme: ${mevcutGuncelleme.toIso8601String()}',
+              );
+              print(
+                '   • Yeni güncelleme: ${yeniGuncelleme.toIso8601String()}',
+              );
+
+              // Veritabanında UPDATE yap
+              final updatedBelge = BelgeModeli(
+                id: hashDuplicateBelge.id,
+                dosyaAdi: fileName,
+                orijinalDosyaAdi:
+                    metadataJson['dosyaAdi']?.toString() ?? fileName,
+                dosyaYolu: hashDuplicateBelge.dosyaYolu,
+                dosyaBoyutu: fileBytes.length,
+                dosyaTipi: fileName.split('.').last.toLowerCase(),
+                dosyaHash: dosyaHashString,
+                olusturmaTarihi: hashDuplicateBelge.olusturmaTarihi,
+                guncellemeTarihi: yeniGuncelleme,
+                kategoriId:
+                    metadataJson['kategoriId'] ?? hashDuplicateBelge.kategoriId,
+                baslik:
+                    metadataJson['baslik']?.toString() ??
+                    hashDuplicateBelge.baslik,
+                aciklama:
+                    metadataJson['aciklama']?.toString() ??
+                    hashDuplicateBelge.aciklama,
+                kisiId: eslestirilenKisiId,
+                etiketler:
+                    metadataJson['etiketler'] != null
+                        ? List<String>.from(metadataJson['etiketler'])
+                        : hashDuplicateBelge.etiketler,
+                aktif: hashDuplicateBelge.aktif,
+                senkronDurumu: hashDuplicateBelge.senkronDurumu,
+                sonErisimTarihi: hashDuplicateBelge.sonErisimTarihi,
+              );
+
+              await _veriTabani.belgeGuncelle(updatedBelge);
+              print('✅ Belge güncellendi - ID: ${hashDuplicateBelge.id}');
+
+              // Dosyayı disk'ten sil (güncelleme yapıldı)
+              final dosya = File(yeniDosyaYolu);
+              if (await dosya.exists()) {
+                await dosya.delete();
+                print('🗑️ Geçici dosya diskten silindi');
+              }
+
+              return json.encode({
+                'status': 'success',
+                'message': 'Belge başarıyla güncellendi',
+                'fileName': fileName,
+                'size': fileBytes.length,
+                'belgeId': hashDuplicateBelge.id,
+                'action': 'updated',
+              });
+            } else {
+              print('⏸️ Metadata değişikliği yok - atlanıyor');
+
+              // Dosyayı disk'ten sil
+              final dosya = File(yeniDosyaYolu);
+              if (await dosya.exists()) {
+                await dosya.delete();
+                print('🗑️ Duplicate dosya diskten silindi');
+              }
+
+              return json.encode({
+                'status': 'warning',
+                'message': 'Bu dosya zaten mevcut (değişiklik yok)',
+                'fileName': fileName,
+                'existingFile': hashDuplicateBelge.dosyaAdi,
+                'duplicate': true,
+              });
+            }
           }
+        }
 
-          return json.encode({
-            'status': 'warning',
-            'message': 'Bu dosya zaten mevcut',
-            'fileName': fileName,
-            'existingFile': duplicateBelge.dosyaAdi,
-            'duplicate': true,
-          });
+        // Belge kimlik kontrolü (varsa)
+        if (belgeKimlik != null && belgeKimlik.isNotEmpty) {
+          print('🔍 Belge kimlik kontrolü: $belgeKimlik');
+          // İleride belge kimlik tablosu eklenirse burada kontrol edilebilir
         }
       } catch (e) {
         print('⚠️ Duplicate kontrolü hatası: $e');
         // Hata durumunda devam et
       }
 
-      // Veritabanına ekle
+      // Veritabanına ekle - null safety ile
+      final olusturmaTarihiStr = metadataJson['olusturmaTarihi']?.toString();
+      final olusturmaTarihi =
+          olusturmaTarihiStr != null
+              ? DateTime.tryParse(olusturmaTarihiStr) ?? DateTime.now()
+              : DateTime.now();
+
       final yeniBelge = BelgeModeli(
         dosyaAdi: fileName,
-        orijinalDosyaAdi: metadataJson['dosyaAdi'] ?? fileName,
+        orijinalDosyaAdi: metadataJson['dosyaAdi']?.toString() ?? fileName,
         dosyaYolu: yeniDosyaYolu,
         dosyaBoyutu: fileBytes.length,
         dosyaTipi: fileName.split('.').last.toLowerCase(),
         dosyaHash: dosyaHashString,
-        olusturmaTarihi: DateTime.parse(metadataJson['olusturmaTarihi']),
+        olusturmaTarihi: olusturmaTarihi,
         guncellemeTarihi: DateTime.now(),
         kategoriId: metadataJson['kategoriId'] ?? 1,
-        baslik: metadataJson['baslik'],
-        aciklama: metadataJson['aciklama'],
+        baslik: metadataJson['baslik']?.toString(),
+        aciklama: metadataJson['aciklama']?.toString(),
         kisiId: eslestirilenKisiId,
         etiketler:
             metadataJson['etiketler'] != null
@@ -837,9 +1103,13 @@ class HttpSunucuServisi {
       print('📊 Özet:');
       print('   • Dosya adı: $fileName');
       print('   • Boyut: ${fileBytes.length} bytes');
-      print(
-        '   • Kişi: ${metadataJson['kisiAd']} ${metadataJson['kisiSoyad']}',
-      );
+
+      // Kişi bilgilerini güvenli şekilde göster
+      final kisiAd = metadataJson['kisiAd']?.toString() ?? 'Belirtilmemiş';
+      final kisiSoyad = metadataJson['kisiSoyad']?.toString() ?? '';
+      final kisiTam = kisiSoyad.isNotEmpty ? '$kisiAd $kisiSoyad' : kisiAd;
+
+      print('   • Kişi: $kisiTam');
       print('   • Kategori ID: ${metadataJson['kategoriId']}');
 
       return json.encode({
@@ -848,7 +1118,7 @@ class HttpSunucuServisi {
         'fileName': fileName,
         'size': fileBytes.length,
         'belgeId': belgeId,
-        'kisi': '${metadataJson['kisiAd']} ${metadataJson['kisiSoyad']}',
+        'kisi': kisiTam,
       });
     } catch (e, stackTrace) {
       print('❌ Upload endpoint hatası: $e');
@@ -1385,5 +1655,161 @@ class HttpSunucuServisi {
     final bytes = utf8.encode(metadataJson);
     final digest = md5.convert(bytes);
     return digest.toString();
+  }
+
+  // Bidirectional Sync Endpoints
+
+  /// Sync negotiation endpoint - POST /sync/negotiate
+  Future<String> _handleSyncNegotiate(HttpRequest request) async {
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      final data = json.decode(body);
+
+      final remoteManifest = data['manifest'];
+      final strategy = data['strategy'] ?? 'LATEST_WINS';
+      final deviceId = request.headers.value('X-Device-ID') ?? 'unknown';
+
+      print('🤝 Sync negotiation başlatıldı: $deviceId, strategy: $strategy');
+
+      // Simulate negotiation logic
+      // Gerçek implementasyonda BidirectionalSyncProtocol kullanılacak
+
+      return json.encode({
+        'status': 'success',
+        'negotiation_result': {
+          'accepted_strategy': strategy,
+          'sync_direction': 'BIDIRECTIONAL',
+          'estimated_files': 0,
+          'estimated_size': 0,
+        },
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Sync negotiate endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Sync negotiation hatası: $e',
+      });
+    }
+  }
+
+  /// Get sync manifest - GET /sync/manifest
+  Future<String> _handleSyncManifest(HttpRequest request) async {
+    try {
+      final deviceId = request.headers.value('X-Device-ID') ?? 'unknown';
+
+      print('📋 Sync manifest istendi: $deviceId');
+
+      // Simulate manifest creation
+      // Gerçek implementasyonda BidirectionalSyncProtocol.createSyncManifest kullanılacak
+
+      final belgeler = await _veriTabani.belgeleriGetir();
+      final files = <String, Map<String, dynamic>>{};
+      int totalSize = 0;
+
+      for (final belge in belgeler) {
+        files[belge.dosyaHash] = {
+          'fileHash': belge.dosyaHash,
+          'fileName': belge.dosyaAdi,
+          'fileSize': belge.dosyaBoyutu ?? 0,
+          'contentHash': belge.dosyaHash,
+          'metadataHash': _generateMetadataHash(belge),
+          'lastModified': belge.guncellemeTarihi.toIso8601String(),
+          'metadata': {
+            'baslik': belge.baslik,
+            'aciklama': belge.aciklama,
+            'etiketler': belge.etiketler,
+          },
+        };
+        totalSize += belge.dosyaBoyutu ?? 0;
+      }
+
+      return json.encode({
+        'status': 'success',
+        'manifest': {
+          'manifestId': 'manifest_${DateTime.now().millisecondsSinceEpoch}',
+          'deviceId': _cihazId,
+          'deviceName': _cihazAdi,
+          'createdAt': DateTime.now().toIso8601String(),
+          'files': files,
+          'totalSize': totalSize,
+          'fileCount': files.length,
+        },
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Sync manifest endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Sync manifest hatası: $e',
+      });
+    }
+  }
+
+  /// Create sync manifest - POST /sync/manifest
+  Future<String> _handleSyncManifestCreate(HttpRequest request) async {
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      final data = json.decode(body);
+
+      final deviceId = data['deviceId'] ?? 'unknown';
+      final deviceName = data['deviceName'] ?? 'Unknown Device';
+
+      print('📋 Yeni sync manifest oluşturuluyor: $deviceName');
+
+      // Manifest oluşturma simülasyonu
+      // Gerçek implementasyonda BidirectionalSyncProtocol kullanılacak
+
+      return json.encode({
+        'status': 'success',
+        'manifestId': 'manifest_${DateTime.now().millisecondsSinceEpoch}',
+        'message': 'Manifest başarıyla oluşturuldu',
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Sync manifest create endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Sync manifest create hatası: $e',
+      });
+    }
+  }
+
+  /// Bidirectional sync execution - POST /sync/bidirectional
+  Future<String> _handleBidirectionalSync(HttpRequest request) async {
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      final data = json.decode(body);
+
+      final decisions = data['decisions'] ?? {};
+      final parallelExecution = data['parallel_execution'] ?? true;
+      final deviceId = request.headers.value('X-Device-ID') ?? 'unknown';
+
+      print('🔄 Bidirectional sync başlatıldı: $deviceId');
+
+      // Simüle edilmiş bidirectional sync
+      // Gerçek implementasyonda BidirectionalSyncProtocol.executeBidirectionalSync kullanılacak
+
+      return json.encode({
+        'status': 'success',
+        'sync_result': {
+          'session_id': 'session_${DateTime.now().millisecondsSinceEpoch}',
+          'total_files': (decisions as Map).length,
+          'upload_count': 0,
+          'download_count': 0,
+          'success_count': 0,
+          'error_count': 0,
+          'transferred_bytes': 0,
+          'success_rate': 1.0,
+        },
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Bidirectional sync endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Bidirectional sync hatası: $e',
+      });
+    }
   }
 }

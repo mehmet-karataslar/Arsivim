@@ -114,7 +114,7 @@ class DocumentChangeTracker {
     await _createVersionRecord(yeniBelge, cihazId);
   }
 
-  /// Değişiklikleri tespit et
+  /// Değişiklikleri tespit et (Deep Comparison)
   List<Map<String, dynamic>> _detectChanges(
     BelgeModeli eskiBelge,
     BelgeModeli yeniBelge,
@@ -122,56 +122,172 @@ class DocumentChangeTracker {
     final degisiklikler = <Map<String, dynamic>>[];
 
     // Başlık değişikliği
-    if (eskiBelge.baslik != yeniBelge.baslik) {
-      degisiklikler.add({
-        'type': 'TITLE_CHANGE',
-        'field': 'baslik',
-        'old_value': eskiBelge.baslik ?? '',
-        'new_value': yeniBelge.baslik ?? '',
-      });
-    }
+    final titleChange = _detectFieldChange(
+      'baslik',
+      eskiBelge.baslik,
+      yeniBelge.baslik,
+      'TITLE_CHANGE',
+    );
+    if (titleChange != null) degisiklikler.add(titleChange);
 
     // Açıklama değişikliği
-    if (eskiBelge.aciklama != yeniBelge.aciklama) {
-      degisiklikler.add({
-        'type': 'DESCRIPTION_CHANGE',
-        'field': 'aciklama',
-        'old_value': eskiBelge.aciklama ?? '',
-        'new_value': yeniBelge.aciklama ?? '',
-      });
-    }
+    final descriptionChange = _detectFieldChange(
+      'aciklama',
+      eskiBelge.aciklama,
+      yeniBelge.aciklama,
+      'DESCRIPTION_CHANGE',
+    );
+    if (descriptionChange != null) degisiklikler.add(descriptionChange);
 
-    // Etiket değişikliği
-    if (eskiBelge.etiketler != yeniBelge.etiketler) {
-      degisiklikler.add({
-        'type': 'TAGS_CHANGE',
-        'field': 'etiketler',
-        'old_value': eskiBelge.etiketler?.join(',') ?? '',
-        'new_value': yeniBelge.etiketler?.join(',') ?? '',
-      });
-    }
+    // Etiket değişikliği (Deep comparison)
+    final tagsChange = _detectTagsChange(
+      eskiBelge.etiketler,
+      yeniBelge.etiketler,
+    );
+    if (tagsChange != null) degisiklikler.add(tagsChange);
 
     // Kategori değişikliği
-    if (eskiBelge.kategoriId != yeniBelge.kategoriId) {
-      degisiklikler.add({
-        'type': 'CATEGORY_CHANGE',
-        'field': 'kategori_id',
-        'old_value': eskiBelge.kategoriId?.toString() ?? '',
-        'new_value': yeniBelge.kategoriId?.toString() ?? '',
-      });
-    }
+    final categoryChange = _detectFieldChange(
+      'kategori_id',
+      eskiBelge.kategoriId,
+      yeniBelge.kategoriId,
+      'CATEGORY_CHANGE',
+    );
+    if (categoryChange != null) degisiklikler.add(categoryChange);
 
     // Kişi değişikliği
-    if (eskiBelge.kisiId != yeniBelge.kisiId) {
-      degisiklikler.add({
-        'type': 'PERSON_CHANGE',
-        'field': 'kisi_id',
-        'old_value': eskiBelge.kisiId?.toString() ?? '',
-        'new_value': yeniBelge.kisiId?.toString() ?? '',
-      });
-    }
+    final personChange = _detectFieldChange(
+      'kisi_id',
+      eskiBelge.kisiId,
+      yeniBelge.kisiId,
+      'PERSON_CHANGE',
+    );
+    if (personChange != null) degisiklikler.add(personChange);
+
+    // Dosya değişikliği
+    final fileChange = _detectFileChange(eskiBelge, yeniBelge);
+    if (fileChange != null) degisiklikler.add(fileChange);
+
+    // Zaman damgası değişikliği
+    final timestampChange = _detectTimestampChange(eskiBelge, yeniBelge);
+    if (timestampChange != null) degisiklikler.add(timestampChange);
+
+    // Dosya boyutu değişikliği
+    final sizeChange = _detectFieldChange(
+      'dosya_boyutu',
+      eskiBelge.dosyaBoyutu,
+      yeniBelge.dosyaBoyutu,
+      'FILE_SIZE_CHANGE',
+    );
+    if (sizeChange != null) degisiklikler.add(sizeChange);
 
     return degisiklikler;
+  }
+
+  /// Genel field değişikliği tespit et
+  Map<String, dynamic>? _detectFieldChange(
+    String fieldName,
+    dynamic oldValue,
+    dynamic newValue,
+    String changeType,
+  ) {
+    if (oldValue == newValue) return null;
+
+    return {
+      'type': changeType,
+      'field': fieldName,
+      'old_value': oldValue?.toString() ?? '',
+      'new_value': newValue?.toString() ?? '',
+      'change_timestamp': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// Etiket değişikliği tespit et (Deep comparison)
+  Map<String, dynamic>? _detectTagsChange(
+    List<String>? oldTags,
+    List<String>? newTags,
+  ) {
+    final oldTagsSet = Set<String>.from(oldTags ?? []);
+    final newTagsSet = Set<String>.from(newTags ?? []);
+
+    if (oldTagsSet.difference(newTagsSet).isEmpty &&
+        newTagsSet.difference(oldTagsSet).isEmpty) {
+      return null; // Değişiklik yok
+    }
+
+    final addedTags = newTagsSet.difference(oldTagsSet).toList();
+    final removedTags = oldTagsSet.difference(newTagsSet).toList();
+
+    return {
+      'type': 'TAGS_CHANGE',
+      'field': 'etiketler',
+      'old_value': oldTags?.join(',') ?? '',
+      'new_value': newTags?.join(',') ?? '',
+      'added_tags': addedTags,
+      'removed_tags': removedTags,
+      'change_timestamp': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// Dosya değişikliği tespit et
+  Map<String, dynamic>? _detectFileChange(
+    BelgeModeli eskiBelge,
+    BelgeModeli yeniBelge,
+  ) {
+    // Dosya hash'i değişmiş mi?
+    if (eskiBelge.dosyaHash != yeniBelge.dosyaHash) {
+      return {
+        'type': 'FILE_CONTENT_CHANGE',
+        'field': 'dosya_hash',
+        'old_value': eskiBelge.dosyaHash,
+        'new_value': yeniBelge.dosyaHash,
+        'old_file_path': eskiBelge.dosyaYolu,
+        'new_file_path': yeniBelge.dosyaYolu,
+        'change_timestamp': DateTime.now().toIso8601String(),
+      };
+    }
+
+    // Dosya yolu değişmiş mi?
+    if (eskiBelge.dosyaYolu != yeniBelge.dosyaYolu) {
+      return {
+        'type': 'FILE_PATH_CHANGE',
+        'field': 'dosya_yolu',
+        'old_value': eskiBelge.dosyaYolu ?? '',
+        'new_value': yeniBelge.dosyaYolu ?? '',
+        'change_timestamp': DateTime.now().toIso8601String(),
+      };
+    }
+
+    // Dosya adı değişmiş mi?
+    if (eskiBelge.dosyaAdi != yeniBelge.dosyaAdi) {
+      return {
+        'type': 'FILE_NAME_CHANGE',
+        'field': 'dosya_adi',
+        'old_value': eskiBelge.dosyaAdi ?? '',
+        'new_value': yeniBelge.dosyaAdi ?? '',
+        'change_timestamp': DateTime.now().toIso8601String(),
+      };
+    }
+
+    return null;
+  }
+
+  /// Zaman damgası değişikliği tespit et
+  Map<String, dynamic>? _detectTimestampChange(
+    BelgeModeli eskiBelge,
+    BelgeModeli yeniBelge,
+  ) {
+    if (eskiBelge.guncellemeTarihi != yeniBelge.guncellemeTarihi) {
+      return {
+        'type': 'TIMESTAMP_CHANGE',
+        'field': 'guncelleme_tarihi',
+        'old_value': eskiBelge.guncellemeTarihi ?? '',
+        'new_value': yeniBelge.guncellemeTarihi ?? '',
+        'change_timestamp': DateTime.now().toIso8601String(),
+      };
+    }
+
+    return null;
   }
 
   /// Versiyon kaydı oluştur

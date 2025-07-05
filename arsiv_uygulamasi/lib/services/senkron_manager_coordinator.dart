@@ -8,6 +8,8 @@ import 'sync_state_tracker.dart';
 import 'document_change_tracker.dart';
 import 'metadata_sync_manager.dart';
 import 'senkron_delta_manager.dart';
+import 'senkron_error_handler.dart';
+import 'bidirectional_sync_protocol.dart';
 import '../models/senkron_cihazi.dart';
 
 /// Senkronizasyon manager'ları arasında seçim ve koordinasyon
@@ -28,16 +30,28 @@ class SenkronManagerCoordinator {
       MetadataSyncManager.instance,
       SenkronDeltaManager.instance,
     );
+
+    // Error handler'ı initialize et
+    _initializeErrorHandler();
   }
 
   // ============== Sync Manager Türleri ==============
   late final SenkronManagerEnhanced _enhancedManager;
   final SenkronManagerWorking _workingManager = SenkronManagerWorking.instance;
   final SenkronManagerSimple _simpleManager = SenkronManagerSimple.instance;
+  final SenkronErrorHandler _errorHandler = SenkronErrorHandler.instance;
 
   // ============== Varsayılan Ayarlar ==============
   SyncManagerType _currentType = SyncManagerType.working; // Güvenli başlangıç
   bool _autoFallback = true; // Hata durumunda otomatik geri dönüş
+
+  // ============== YENİ: Gelişmiş Senkronizasyon Ayarları ==============
+  SyncStrategy _syncStrategy = SyncStrategy.latestWins;
+  bool _enableSmartSync = true;
+  bool _enableConflictResolution = true;
+  bool _enableVersionControl = true;
+  bool _enableErrorRecovery = true;
+  bool _enableBidirectionalSync = true;
 
   // ============== Progress Tracking ==============
   Function(double progress)? onProgressUpdate;
@@ -60,6 +74,73 @@ class SenkronManagerCoordinator {
   void setAutoFallback(bool enabled) {
     _autoFallback = enabled;
     _logMesaj('🔄 Auto fallback: ${enabled ? "Açık" : "Kapalı"}');
+  }
+
+  /// YENİ: Sync stratejisini ayarla
+  void setSyncStrategy(SyncStrategy strategy) {
+    _syncStrategy = strategy;
+    _logMesaj('🔄 Sync stratejisi: ${strategy.name}');
+  }
+
+  /// YENİ: Akıllı sync'i aç/kapat
+  void setSmartSyncEnabled(bool enabled) {
+    _enableSmartSync = enabled;
+    _logMesaj('🔄 Akıllı sync: ${enabled ? "Açık" : "Kapalı"}');
+  }
+
+  /// YENİ: Çakışma çözümünü aç/kapat
+  void setConflictResolutionEnabled(bool enabled) {
+    _enableConflictResolution = enabled;
+    _logMesaj('🔄 Çakışma çözümü: ${enabled ? "Açık" : "Kapalı"}');
+  }
+
+  /// YENİ: Versiyon kontrolünü aç/kapat
+  void setVersionControlEnabled(bool enabled) {
+    _enableVersionControl = enabled;
+    _logMesaj('🔄 Versiyon kontrolü: ${enabled ? "Açık" : "Kapalı"}');
+  }
+
+  /// YENİ: Hata kurtarmayı aç/kapat
+  void setErrorRecoveryEnabled(bool enabled) {
+    _enableErrorRecovery = enabled;
+    _logMesaj('🔄 Hata kurtarma: ${enabled ? "Açık" : "Kapalı"}');
+  }
+
+  /// YENİ: Bidirectional sync'i aç/kapat
+  void setBidirectionalSyncEnabled(bool enabled) {
+    _enableBidirectionalSync = enabled;
+    _logMesaj('🔄 Bidirectional sync: ${enabled ? "Açık" : "Kapalı"}');
+  }
+
+  /// YENİ: Tüm sync ayarlarını tek seferde yapılandır
+  void configureSyncOptions({
+    SyncStrategy? strategy,
+    bool? smartSync,
+    bool? conflictResolution,
+    bool? versionControl,
+    bool? errorRecovery,
+    bool? bidirectionalSync,
+  }) {
+    if (strategy != null) setSyncStrategy(strategy);
+    if (smartSync != null) setSmartSyncEnabled(smartSync);
+    if (conflictResolution != null)
+      setConflictResolutionEnabled(conflictResolution);
+    if (versionControl != null) setVersionControlEnabled(versionControl);
+    if (errorRecovery != null) setErrorRecoveryEnabled(errorRecovery);
+    if (bidirectionalSync != null)
+      setBidirectionalSyncEnabled(bidirectionalSync);
+  }
+
+  /// YENİ: Mevcut sync ayarlarını al
+  Map<String, dynamic> getSyncConfiguration() {
+    return {
+      'strategy': _syncStrategy.name,
+      'smartSync': _enableSmartSync,
+      'conflictResolution': _enableConflictResolution,
+      'versionControl': _enableVersionControl,
+      'errorRecovery': _enableErrorRecovery,
+      'bidirectionalSync': _enableBidirectionalSync,
+    };
   }
 
   /// Ana senkronizasyon metodu - seçilen manager'a göre işlem yapar
@@ -130,29 +211,103 @@ class SenkronManagerCoordinator {
     String? strategy,
     DateTime? since,
   }) async {
-    switch (managerType) {
-      case SyncManagerType.enhanced:
-        // Enhanced manager - gelişmiş özelliklerle
-        return await _enhancedManager.performFullSync(
-          targetDevice,
-          bidirectional: bidirectional ?? true,
-          conflictStrategy: strategy ?? 'LATEST_WINS',
-          since: since,
-        );
+    final context = {
+      'operation': 'sync',
+      'manager': managerType.name,
+      'target_device': targetDevice.ad,
+      'target_ip': targetDevice.ip,
+      'bidirectional': bidirectional ?? false,
+      'strategy': strategy ?? 'LATEST_WINS',
+    };
 
-      case SyncManagerType.working:
-        // Working manager - basit ve güvenilir
-        final result = await _workingManager.performSynchronization(
-          targetDevice,
-        );
-        return _convertIntResultToMap(result);
+    try {
+      _logMesaj('🔧 ${managerType.displayName} ile sync başlatılıyor...');
 
-      case SyncManagerType.simple:
-        // Simple manager - temel özelliklerle
-        final result = await _simpleManager.performSynchronization(
-          targetDevice,
-        );
-        return _convertIntResultToMap(result);
+      switch (managerType) {
+        case SyncManagerType.enhanced:
+          // Enhanced manager - gelişmiş özelliklerle + FULL DOCUMENT SYNC AKTİF!
+          final result = await _enhancedManager.performFullSync(
+            targetDevice,
+            bidirectional: bidirectional ?? true,
+            conflictStrategy: strategy ?? 'LATEST_WINS',
+            syncMetadata: true,
+            useDeltaSync: false, // ZORLA FULL SYNC!
+            since: since,
+          );
+          _logMesaj('✅ Enhanced manager sync başarılı');
+          return result;
+
+        case SyncManagerType.working:
+          // Working manager - basit ve güvenilir
+          final result = await _workingManager.performSynchronization(
+            targetDevice,
+          );
+          final convertedResult = _convertIntResultToMap(result);
+          _logMesaj('✅ Working manager sync başarılı');
+          return convertedResult;
+
+        case SyncManagerType.simple:
+          // Simple manager - temel özelliklerle
+          final result = await _simpleManager.performSynchronization(
+            targetDevice,
+          );
+          final convertedResult = _convertIntResultToMap(result);
+          _logMesaj('✅ Simple manager sync başarılı');
+          return convertedResult;
+      }
+    } catch (error, stackTrace) {
+      _logMesaj('❌ ${managerType.displayName} sync hatası: $error');
+
+      // Error handler ile hatayı kategorize et
+      final errorInfo = _errorHandler.categorizeError(
+        error,
+        stackTrace: stackTrace,
+        context: context,
+      );
+
+      // Detaylı hata kaydı
+      await _errorHandler.logDetailedError(errorInfo);
+
+      // Recovery stratejisi uygula
+      final recoveryResult = await _errorHandler.recoverFromError(errorInfo);
+      _logMesaj('🔧 Recovery stratejisi: ${recoveryResult['message']}');
+
+      // Retry edilmesi gerekiyor mu kontrol et
+      if (recoveryResult['action'] == 'retry') {
+        final shouldRetry = await _errorHandler.shouldRetry(errorInfo);
+        if (shouldRetry) {
+          _logMesaj('🔄 Yeniden deneniyor...');
+          return await _executeSyncWithManager(
+            managerType,
+            targetDevice,
+            bidirectional: bidirectional,
+            strategy: strategy,
+            since: since,
+          );
+        }
+      }
+
+      // Hata bilgilerini result'a ekle
+      final errorResult = {
+        'success': false,
+        'error': {
+          'id': errorInfo.errorId,
+          'type': errorInfo.type.name,
+          'message': errorInfo.message,
+          'strategy': errorInfo.suggestedStrategy.name,
+          'recovery_action': recoveryResult['action'],
+        },
+        'timestamp': DateTime.now().toIso8601String(),
+        'managerType': managerType.name,
+      };
+
+      // Eğer skip stratejisi ise başarılı olarak döndür
+      if (recoveryResult['action'] == 'skip') {
+        errorResult['success'] = true;
+        errorResult['skipped'] = true;
+      }
+
+      return errorResult;
     }
   }
 
@@ -380,6 +535,34 @@ class SenkronManagerCoordinator {
   void _logMesaj(String mesaj) {
     print('🎛️ SyncCoordinator: $mesaj');
     onLogMessage?.call(mesaj);
+  }
+
+  /// Error handler'ı initialize et
+  Future<void> _initializeErrorHandler() async {
+    try {
+      await _errorHandler.initializeErrorLogging();
+
+      // Error handler callbacks ayarla
+      _errorHandler.onError = (errorInfo) {
+        _logMesaj(
+          '🔴 Hata yakalandı: ${errorInfo.type.name} - ${errorInfo.message}',
+        );
+      };
+
+      _errorHandler.onRetry = (errorInfo) {
+        _logMesaj('🔄 Yeniden deneniyor: ${errorInfo.type.name}');
+      };
+
+      _errorHandler.onRecovery = (errorInfo) {
+        _logMesaj(
+          '🔧 Kurtarma stratejisi uygulandı: ${errorInfo.suggestedStrategy.name}',
+        );
+      };
+
+      _logMesaj('✅ Error handler başarıyla initialize edildi');
+    } catch (e) {
+      _logMesaj('❌ Error handler initialize hatası: $e');
+    }
   }
 }
 

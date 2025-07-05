@@ -30,6 +30,11 @@ class SyncStateTracker {
         hedef_cihaz_id TEXT,
         kaynak_cihaz_id TEXT,
         metadata_hash TEXT,
+        metadata_version INTEGER DEFAULT 1,
+        content_version INTEGER DEFAULT 1,
+        last_metadata_hash TEXT,
+        last_content_hash TEXT,
+        sync_direction TEXT DEFAULT 'BIDIRECTIONAL',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -44,6 +49,16 @@ class SyncStateTracker {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_senkron_state_durum 
       ON senkron_state(sync_durumu)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_senkron_state_metadata_version 
+      ON senkron_state(metadata_version)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_senkron_state_content_version 
+      ON senkron_state(content_version)
     ''');
   }
 
@@ -67,9 +82,32 @@ class SyncStateTracker {
     String? hedefCihazId,
     String? kaynakCihazId, {
     String? metadataHash,
+    int? metadataVersion,
+    int? contentVersion,
+    String? lastMetadataHash,
+    String? lastContentHash,
+    String? syncDirection,
   }) async {
     final db = await _veriTabani.database;
     final now = DateTime.now().toIso8601String();
+
+    // Mevcut versiyon numaralarını al
+    final existingResult = await db.query(
+      'senkron_state',
+      where: 'dosya_hash = ?',
+      whereArgs: [dosyaHash],
+      limit: 1,
+    );
+
+    int currentMetadataVersion = 1;
+    int currentContentVersion = 1;
+
+    if (existingResult.isNotEmpty) {
+      currentMetadataVersion =
+          existingResult.first['metadata_version'] as int? ?? 1;
+      currentContentVersion =
+          existingResult.first['content_version'] as int? ?? 1;
+    }
 
     await db.insert('senkron_state', {
       'dosya_hash': dosyaHash,
@@ -79,6 +117,11 @@ class SyncStateTracker {
       'hedef_cihaz_id': hedefCihazId,
       'kaynak_cihaz_id': kaynakCihazId,
       'metadata_hash': metadataHash ?? '',
+      'metadata_version': metadataVersion ?? (currentMetadataVersion + 1),
+      'content_version': contentVersion ?? (currentContentVersion + 1),
+      'last_metadata_hash': lastMetadataHash ?? metadataHash,
+      'last_content_hash': lastContentHash ?? dosyaHash,
+      'sync_direction': syncDirection ?? 'BIDIRECTIONAL',
       'created_at': now,
       'updated_at': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -116,7 +159,7 @@ class SyncStateTracker {
       {
         'sync_durumu': yeniDurum,
         'metadata_hash': metadataHash,
-        'updated_at': now,
+        'son_sync_zamani': now,
       },
       where: 'dosya_hash = ?',
       whereArgs: [dosyaHash],
@@ -143,27 +186,57 @@ class SyncStateTracker {
     BelgeModeli belge,
     String? hedefCihazId, {
     String? remoteMetadataHash,
+    String? remoteContentHash,
+    int? remoteMetadataVersion,
+    int? remoteContentVersion,
   }) async {
     if (belge.dosyaHash.isEmpty) return false;
 
-    // Daha önce sync edilmiş mi kontrol et
-    final synced = await isSynced(belge.dosyaHash, hedefCihazId);
+    final db = await _veriTabani.database;
 
-    if (!synced) {
+    // Mevcut sync state'i al
+    final result = await db.query(
+      'senkron_state',
+      where: 'dosya_hash = ? AND hedef_cihaz_id = ?',
+      whereArgs: [belge.dosyaHash, hedefCihazId],
+      limit: 1,
+    );
+
+    if (result.isEmpty) {
       return true; // Hiç sync edilmemiş
     }
 
-    // Metadata değişmiş mi kontrol et
-    if (remoteMetadataHash != null) {
-      final db = await _veriTabani.database;
-      final result = await db.query(
-        'senkron_state',
-        where: 'dosya_hash = ? AND metadata_hash = ?',
-        whereArgs: [belge.dosyaHash, remoteMetadataHash],
-      );
+    final syncState = result.first;
+    final localMetadataHash = syncState['metadata_hash'] as String?;
+    final localContentHash = syncState['last_content_hash'] as String?;
+    final localMetadataVersion = syncState['metadata_version'] as int? ?? 1;
+    final localContentVersion = syncState['content_version'] as int? ?? 1;
 
-      // Metadata hash'i farklıysa sync gerekli
-      return result.isEmpty;
+    // Content hash değişmiş mi kontrol et
+    if (remoteContentHash != null && localContentHash != remoteContentHash) {
+      return true;
+    }
+
+    // Metadata hash değişmiş mi kontrol et
+    if (remoteMetadataHash != null && localMetadataHash != remoteMetadataHash) {
+      return true;
+    }
+
+    // Versiyon numaraları karşılaştır
+    if (remoteMetadataVersion != null &&
+        remoteMetadataVersion > localMetadataVersion) {
+      return true;
+    }
+
+    if (remoteContentVersion != null &&
+        remoteContentVersion > localContentVersion) {
+      return true;
+    }
+
+    // Dosya durumu kontrol et
+    final syncDurumu = syncState['sync_durumu'] as String?;
+    if (syncDurumu != 'SYNCED') {
+      return true; // Pending, error veya başka durumda
     }
 
     return false; // Sync gerekli değil

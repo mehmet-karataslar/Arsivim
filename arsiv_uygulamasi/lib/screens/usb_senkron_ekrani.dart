@@ -11,6 +11,9 @@ import '../services/senkron_manager_coordinator.dart';
 import '../models/senkron_cihazi.dart' as models;
 import '../widgets/qr_scanner_widget.dart';
 import '../widgets/senkron_dialogs.dart';
+import '../services/bidirectional_sync_protocol.dart';
+import '../services/senkron_error_handler.dart';
+import '../services/smart_sync_engine.dart';
 
 class UsbSenkronEkrani extends StatefulWidget {
   const UsbSenkronEkrani({Key? key}) : super(key: key);
@@ -47,6 +50,13 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
   final ValueNotifier<String> _currentOperationNotifier = ValueNotifier<String>(
     '',
   );
+
+  // Gelişmiş senkronizasyon ayarları
+  SyncStrategy _selectedSyncStrategy = SyncStrategy.latestWins;
+  bool _enableSmartSync = true;
+  bool _enableConflictResolution = true;
+  bool _enableVersionControl = true;
+  bool _enableErrorRecovery = true;
 
   // Gerçek ayarlar - Gelişmiş Yönetici kullanılacak
   final SyncManagerType _selectedSyncManager = SyncManagerType.enhanced;
@@ -585,6 +595,10 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     try {
       _progressNotifier.value = 0.0;
       _currentOperationNotifier.value = 'Senkronizasyon başlatılıyor...';
+
+      // YENİ: Senkronizasyon ayarlarını uygula
+      await _configureSyncOptions();
+
       SenkronDialogs.showProgressDialog(
         context,
         _progressNotifier,
@@ -607,7 +621,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         'hata': (stats['erroredDocuments'] ?? 0) as int,
       };
 
-      _showSyncResultsSnackbar(compatibleResults);
+      _showEnhancedSyncResults(compatibleResults, stats);
     } catch (e) {
       Navigator.pop(context);
       _addLog('❌ Senkronizasyon hatası: $e');
@@ -620,22 +634,119 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     }
   }
 
-  void _showSyncResultsSnackbar(Map<String, int> results) {
-    final yeni = results['yeni'] ?? 0;
-    final guncellenen = results['guncellenen'] ?? 0;
-    final gonderilen = results['gonderilen'] ?? 0;
+  // YENİ: Senkronizasyon ayarlarını yapılandır
+  Future<void> _configureSyncOptions() async {
+    _addLog('⚙️ Senkronizasyon ayarları yapılandırılıyor...');
+
+    // Coordinator'a ayarları geçir
+    _senkronCoordinator.configureSyncOptions(
+      strategy: _selectedSyncStrategy,
+      smartSync: _enableSmartSync,
+      conflictResolution: _enableConflictResolution,
+      versionControl: _enableVersionControl,
+      errorRecovery: _enableErrorRecovery,
+      bidirectionalSync: true, // Her zaman bidirectional
+    );
+
+    // Sync Strategy'yi logla
+    String strategyText = '';
+    switch (_selectedSyncStrategy) {
+      case SyncStrategy.latestWins:
+        strategyText = 'En son değişiklik kazanır';
+        break;
+      case SyncStrategy.localWins:
+        strategyText = 'Bu cihaz öncelikli';
+        break;
+      case SyncStrategy.remoteWins:
+        strategyText = 'Karşı cihaz öncelikli';
+        break;
+      case SyncStrategy.manual:
+        strategyText = 'Manuel onay';
+        break;
+      case SyncStrategy.merge:
+        strategyText = 'Otomatik birleştirme';
+        break;
+    }
+    _addLog('📋 Strateji: $strategyText');
+
+    // Gelişmiş özellikleri logla
+    List<String> enabledFeatures = [];
+    if (_enableSmartSync) enabledFeatures.add('Akıllı Senkronizasyon');
+    if (_enableConflictResolution) enabledFeatures.add('Çakışma Çözümü');
+    if (_enableVersionControl) enabledFeatures.add('Versiyon Kontrolü');
+    if (_enableErrorRecovery) enabledFeatures.add('Hata Kurtarma');
+
+    if (enabledFeatures.isNotEmpty) {
+      _addLog('🔧 Özellikler: ${enabledFeatures.join(', ')}');
+    }
+
+    // Coordinator'dan ayarları doğrula
+    final appliedConfig = _senkronCoordinator.getSyncConfiguration();
+    _addLog('✅ Ayarlar coordinator\'a uygulandı: ${appliedConfig['strategy']}');
+  }
+
+  // YENİ: Gelişmiş sonuçları göster
+  void _showEnhancedSyncResults(
+    Map<String, int> compatibleResults,
+    Map<String, dynamic> detailedStats,
+  ) {
+    final yeni = compatibleResults['yeni'] ?? 0;
+    final guncellenen = compatibleResults['guncellenen'] ?? 0;
+    final gonderilen = compatibleResults['gonderilen'] ?? 0;
+    final cakisma = compatibleResults['cakisma'] ?? 0;
+    final hata = compatibleResults['hata'] ?? 0;
+
+    // Detaylı istatistikler
+    final totalFiles = detailedStats['totalProcessedFiles'] ?? 0;
+    final skippedFiles = detailedStats['skippedFiles'] ?? 0;
+    final syncDuration = detailedStats['syncDuration'] ?? 0;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'Senkronizasyon tamamlandı!\n'
-          'Belgeler: Yeni $yeni, Güncellenen $guncellenen, '
-          'Gönderilen $gonderilen\n'
-          'Kategoriler ve kişiler de senkronize edildi',
+        content: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Senkronizasyon Tamamlandı!',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Toplam: $totalFiles dosya • Yeni: $yeni • Güncellenen: $guncellenen • Gönderilen: $gonderilen',
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+              if (cakisma > 0 || hata > 0 || skippedFiles > 0)
+                Text(
+                  'Çakışma: $cakisma • Hata: $hata • Atlanan: $skippedFiles',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
+              if (syncDuration > 0)
+                Text(
+                  'Süre: ${(syncDuration / 1000).toStringAsFixed(1)} saniye',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
+            ],
+          ),
         ),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.fixed,
+        backgroundColor: Colors.green.shade600,
+        duration: const Duration(seconds: 8),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        margin: const EdgeInsets.all(20),
+        elevation: 8,
       ),
     );
   }
@@ -1114,6 +1225,8 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
             _buildEnhancedConnectedDeviceCard(),
             const SizedBox(height: 24),
           ],
+          _buildSyncConfigurationCard(),
+          const SizedBox(height: 24),
           _buildEnhancedLogCard(),
         ],
       ),
@@ -1914,5 +2027,302 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     if (_localIP != null && _sunucuCalisiyorMu) {
       SenkronDialogs.showQRCode(context, _localIP!);
     }
+  }
+
+  Widget _buildSyncConfigurationCard() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.orange.shade50, Colors.orange.shade100],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.orange.shade400, Colors.orange.shade600],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.tune_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Gelişmiş Senkronizasyon Ayarları',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            _buildSyncStrategySelector(),
+            const SizedBox(height: 16),
+
+            _buildAdvancedOptions(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSyncStrategySelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Çakışma Çözüm Stratejisi:',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              _buildStrategyOption(
+                SyncStrategy.latestWins,
+                'En Son Değişiklik Kazanır',
+                'Hangi cihazda son değişiklik yapıldıysa o kullanılır',
+                Icons.access_time_rounded,
+              ),
+              _buildStrategyOption(
+                SyncStrategy.localWins,
+                'Bu Cihaz Öncelikli',
+                'Bu cihazdaki değişiklikler her zaman öncelikli',
+                Icons.smartphone_rounded,
+              ),
+              _buildStrategyOption(
+                SyncStrategy.remoteWins,
+                'Karşı Cihaz Öncelikli',
+                'Karşı cihazdaki değişiklikler her zaman öncelikli',
+                Icons.computer_rounded,
+              ),
+              _buildStrategyOption(
+                SyncStrategy.manual,
+                'Manuel Onay',
+                'Her çakışma için size sorulur',
+                Icons.person_rounded,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStrategyOption(
+    SyncStrategy strategy,
+    String title,
+    String description,
+    IconData icon,
+  ) {
+    final isSelected = _selectedSyncStrategy == strategy;
+    return Container(
+      decoration: BoxDecoration(
+        color: isSelected ? Colors.orange.withOpacity(0.1) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: RadioListTile<SyncStrategy>(
+        value: strategy,
+        groupValue: _selectedSyncStrategy,
+        onChanged: (value) {
+          setState(() {
+            _selectedSyncStrategy = value!;
+          });
+        },
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color:
+                    isSelected
+                        ? Colors.orange.withOpacity(0.2)
+                        : Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                icon,
+                size: 16,
+                color:
+                    isSelected ? Colors.orange.shade600 : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          isSelected ? Colors.orange.shade700 : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color:
+                          isSelected
+                              ? Colors.orange.shade600
+                              : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        activeColor: Colors.orange.shade600,
+        dense: true,
+      ),
+    );
+  }
+
+  Widget _buildAdvancedOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Gelişmiş Özellikler:',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              _buildAdvancedOption(
+                'Akıllı Senkronizasyon',
+                'Sadece değişen dosyaları senkronize eder',
+                Icons.psychology_rounded,
+                _enableSmartSync,
+                (value) => setState(() => _enableSmartSync = value),
+              ),
+              _buildAdvancedOption(
+                'Çakışma Çözümü',
+                'Dosya çakışmalarını otomatik çözer',
+                Icons.auto_fix_high_rounded,
+                _enableConflictResolution,
+                (value) => setState(() => _enableConflictResolution = value),
+              ),
+              _buildAdvancedOption(
+                'Versiyon Kontrolü',
+                'Dosya versiyonlarını takip eder',
+                Icons.history_rounded,
+                _enableVersionControl,
+                (value) => setState(() => _enableVersionControl = value),
+              ),
+              _buildAdvancedOption(
+                'Hata Kurtarma',
+                'Başarısız transferleri otomatik tekrar dener',
+                Icons.refresh_rounded,
+                _enableErrorRecovery,
+                (value) => setState(() => _enableErrorRecovery = value),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdvancedOption(
+    String title,
+    String description,
+    IconData icon,
+    bool value,
+    Function(bool) onChanged,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: value ? Colors.orange.withOpacity(0.05) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SwitchListTile(
+        value: value,
+        onChanged: onChanged,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color:
+                    value
+                        ? Colors.orange.withOpacity(0.2)
+                        : Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                icon,
+                size: 16,
+                color: value ? Colors.orange.shade600 : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: value ? Colors.orange.shade700 : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color:
+                          value ? Colors.orange.shade600 : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        activeColor: Colors.orange.shade600,
+        dense: true,
+      ),
+    );
   }
 }
