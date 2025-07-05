@@ -39,13 +39,13 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   int? _mevcutKategoriId; // Kategoriye göre filtreleme için
   KategoriModeli? _mevcutKategori; // Kategori bilgisi için
 
+  // Tarih filtresi
+  int? _secilenAy;
+  int? _secilenYil;
+
   // Sonuç widget durumu
   AramaSiralamaTuru _siralamaTuru = AramaSiralamaTuru.tarihYeni;
   AramaGorunumTuru _gorunumTuru = AramaGorunumTuru.liste;
-
-  // Tarih filtresi
-  DateTime? _secilenBaslangicTarihi;
-  DateTime? _secilenBitisTarihi;
 
   final TextEditingController _aramaController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -183,27 +183,33 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   // Verileri yenileme metodu
   Future<void> _verileriYenile() async {
     try {
+      // Önce cache'i temizle ve gerçek verilerle yenile
+      _mevcutSayfa = 0;
+      _dahaFazlaVarMi = true;
+
       await _verileriYukle();
 
       // Başarı mesajı göster
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              Text('${_filtrelenmsBelgeler.length} belge yenilendi!'),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text('${_filtrelenmsBelgeler.length} belge yenilendi!'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 2),
           ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+        );
+      }
     } catch (e) {
       _hataGoster('Yenileme sırasında hata oluştu: $e');
     }
@@ -214,7 +220,43 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
     await _verileriYenile();
   }
 
-  void _belgeleriFiltrele() {
+  void _belgeleriFiltrele() async {
+    // Veritabanı seviyesinde filtreleme yap
+    try {
+      List<BelgeModeli> filtrelenmsBelgeler;
+
+      if (_aramaMetni.isNotEmpty || _secilenAy != null || _secilenYil != null) {
+        // Gelişmiş arama kullan
+        filtrelenmsBelgeler = await _veriTabani.belgeAramaDetayli(
+          aramaMetni: _aramaMetni.isNotEmpty ? _aramaMetni : null,
+          ay: _secilenAy,
+          yil: _secilenYil,
+          kategoriId: _mevcutKategoriId,
+        );
+      } else {
+        // Filtresiz tüm belgeler
+        filtrelenmsBelgeler = List.from(_tumBelgeler);
+
+        // Eğer kategori filtresi varsa uygula
+        if (_mevcutKategoriId != null) {
+          filtrelenmsBelgeler =
+              filtrelenmsBelgeler
+                  .where((belge) => belge.kategoriId == _mevcutKategoriId)
+                  .toList();
+        }
+      }
+
+      setState(() {
+        _filtrelenmsBelgeler = filtrelenmsBelgeler;
+      });
+    } catch (e) {
+      // Hata durumunda client-side filtreleme kullan
+      _clientSideFiltrele();
+    }
+  }
+
+  // Yedek client-side filtreleme
+  void _clientSideFiltrele() {
     List<BelgeModeli> filtrelenmsBelgeler = List.from(_tumBelgeler);
 
     // Basit arama filtresi - istenen kriterlere göre
@@ -283,29 +325,21 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
     }
 
     // Tarih filtresi uygula
-    if (_secilenBaslangicTarihi != null || _secilenBitisTarihi != null) {
+    if (_secilenAy != null || _secilenYil != null) {
       filtrelenmsBelgeler =
           filtrelenmsBelgeler.where((belge) {
             final belgeTarihi = belge.olusturmaTarihi;
 
-            // Başlangıç tarihi kontrolü
-            if (_secilenBaslangicTarihi != null) {
-              if (belgeTarihi.isBefore(_secilenBaslangicTarihi!)) {
+            // Ay kontrolü
+            if (_secilenAy != null) {
+              if (belgeTarihi.month != _secilenAy) {
                 return false;
               }
             }
 
-            // Bitiş tarihi kontrolü
-            if (_secilenBitisTarihi != null) {
-              final bitisTarihi = DateTime(
-                _secilenBitisTarihi!.year,
-                _secilenBitisTarihi!.month,
-                _secilenBitisTarihi!.day,
-                23,
-                59,
-                59,
-              ); // Gün sonuna kadar
-              if (belgeTarihi.isAfter(bitisTarihi)) {
+            // Yıl kontrolü
+            if (_secilenYil != null) {
+              if (belgeTarihi.year != _secilenYil) {
                 return false;
               }
             }
@@ -386,18 +420,18 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
                   siralamaTuru: _siralamaTuru,
                   gorunumTuru: _gorunumTuru,
                   yukleniyor: _yukleniyor,
-                  secilenBaslangicTarihi: _secilenBaslangicTarihi,
-                  secilenBitisTarihi: _secilenBitisTarihi,
+                  secilenAy: _secilenAy,
+                  secilenYil: _secilenYil,
                   onSiralamaSecildi: (siralama) {
                     setState(() => _siralamaTuru = siralama);
                   },
                   onGorunumSecildi: (gorunum) {
                     setState(() => _gorunumTuru = gorunum);
                   },
-                  onTarihSecimi: (baslangic, bitis) {
+                  onAyYilSecimi: (ay, yil) {
                     setState(() {
-                      _secilenBaslangicTarihi = baslangic;
-                      _secilenBitisTarihi = bitis;
+                      _secilenAy = ay;
+                      _secilenYil = yil;
                     });
                     _belgeleriFiltrele();
                   },

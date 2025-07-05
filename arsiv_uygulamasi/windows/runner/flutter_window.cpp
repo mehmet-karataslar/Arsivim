@@ -25,7 +25,7 @@ bool FlutterWindow::OnCreate() {
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
     return false;
   }
-  RegisterGeneratedPlugins(flutter_controller_->engine());
+  RegisterPlugins(flutter_controller_->engine());
   
   // Register scanner method channel
   RegisterScannerMethodChannel();

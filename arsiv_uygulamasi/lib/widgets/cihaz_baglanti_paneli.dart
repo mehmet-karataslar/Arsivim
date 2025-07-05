@@ -93,6 +93,23 @@ class CihazBaglantiPaneli extends StatelessWidget {
             ],
           ),
         ),
+        // Tüm bağlantıları kes butonu
+        if (yonetici.bagliCihazlar.isNotEmpty) ...[
+          ElevatedButton.icon(
+            onPressed: () => _tumBaglantilarinKes(context),
+            icon: const Icon(Icons.link_off_rounded, size: 16),
+            label: const Text('Tümünü Kes'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
@@ -354,66 +371,107 @@ class CihazBaglantiPaneli extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _getDeviceColor(deviceType).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              _getDeviceIcon(deviceType),
-              color: _getDeviceColor(deviceType),
-              size: 24,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _getDeviceColor(deviceType).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _getDeviceIcon(deviceType),
+                  color: _getDeviceColor(deviceType),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      deviceName,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Bağlantı: $lastSeen',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isOnline ? Colors.green : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isOnline ? Icons.circle : Icons.circle_outlined,
+                      color: isOnline ? Colors.white : Colors.grey[600],
+                      size: 8,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isOnline ? 'Çevrimiçi' : 'Çevrimdışı',
+                      style: TextStyle(
+                        color: isOnline ? Colors.white : Colors.grey[600],
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  deviceName,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+          const SizedBox(height: 12),
+          // Bağlantı kesme butonları
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _senkronizasyonBaslat(context, device),
+                  icon: const Icon(Icons.sync_rounded, size: 16),
+                  label: const Text('Senkronize Et'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Bağlantı: $lastSeen',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isOnline ? Colors.green : Colors.grey[300],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isOnline ? Icons.circle : Icons.circle_outlined,
-                  color: isOnline ? Colors.white : Colors.grey[600],
-                  size: 8,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  isOnline ? 'Çevrimiçi' : 'Çevrimdışı',
-                  style: TextStyle(
-                    color: isOnline ? Colors.white : Colors.grey[600],
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _baglantiKes(context, device),
+                  icon: const Icon(Icons.link_off_rounded, size: 16),
+                  label: const Text('Bağlantı Kes'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -515,5 +573,153 @@ class CihazBaglantiPaneli extends StatelessWidget {
             ),
           ),
     );
+  }
+
+  /// Cihaz ile senkronizasyon başlat
+  void _senkronizasyonBaslat(
+    BuildContext context,
+    Map<String, dynamic> device,
+  ) async {
+    final deviceName = device['name'] ?? 'Bilinmeyen Cihaz';
+
+    // Onay dialog göster
+    final onay = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Senkronizasyon Onayı'),
+            content: Text('$deviceName ile senkronizasyon başlatılsın mı?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Başlat'),
+              ),
+            ],
+          ),
+    );
+
+    if (onay == true) {
+      // Senkronizasyon başlat
+      final basarili = await yonetici.cihazlaSenkronizasyonBaslat(device);
+
+      if (basarili) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ $deviceName ile senkronizasyon başlatıldı'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ $deviceName ile senkronizasyon başarısız'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Cihaz bağlantısını kes
+  void _baglantiKes(BuildContext context, Map<String, dynamic> device) async {
+    final deviceName = device['name'] ?? 'Bilinmeyen Cihaz';
+    final deviceId = device['device_id'] ?? '';
+
+    // Onay dialog göster
+    final onay = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Bağlantı Kesme Onayı'),
+            content: Text('$deviceName cihazının bağlantısı kesilsin mi?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Bağlantıyı Kes'),
+              ),
+            ],
+          ),
+    );
+
+    if (onay == true) {
+      // Bağlantı kes
+      final basarili = await yonetici.cihazBaglantiKes(deviceId);
+
+      if (basarili) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🔌 $deviceName bağlantısı kesildi'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ $deviceName bağlantısı kesilemedi'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Tüm bağlantıları kes
+  void _tumBaglantilarinKes(BuildContext context) async {
+    // Onay dialog göster
+    final onay = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Tüm Bağlantıları Kesme Onayı'),
+            content: Text('Tüm bağlantıları kesilsin mi?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Tümünü Kes'),
+              ),
+            ],
+          ),
+    );
+
+    if (onay == true) {
+      // Tüm bağlantıları kes
+      final basarili = await yonetici.tumBaglantilarinKes();
+
+      if (basarili) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🔌 Tüm bağlantılar kesildi'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Tüm bağlantılar kesilemedi'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

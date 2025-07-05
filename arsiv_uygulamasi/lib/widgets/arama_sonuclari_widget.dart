@@ -29,9 +29,9 @@ class AramaSonuclariWidget extends StatelessWidget {
   final String? hata;
 
   // Tarih filtresi için
-  final DateTime? secilenBaslangicTarihi;
-  final DateTime? secilenBitisTarihi;
-  final Function(DateTime?, DateTime?)? onTarihSecimi;
+  final int? secilenAy;
+  final int? secilenYil;
+  final Function(int?, int?)? onAyYilSecimi;
 
   const AramaSonuclariWidget({
     Key? key,
@@ -47,9 +47,9 @@ class AramaSonuclariWidget extends StatelessWidget {
     this.onBelgelerGuncellendi,
     this.yukleniyor = false,
     this.hata,
-    this.secilenBaslangicTarihi,
-    this.secilenBitisTarihi,
-    this.onTarihSecimi,
+    this.secilenAy,
+    this.secilenYil,
+    this.onAyYilSecimi,
   }) : super(key: key);
 
   @override
@@ -127,7 +127,7 @@ class AramaSonuclariWidget extends StatelessWidget {
               const SizedBox(width: 12),
 
               // Tarih filtresi butonu
-              if (onTarihSecimi != null) ...[
+              if (onAyYilSecimi != null) ...[
                 _buildTarihFiltresiButonu(),
                 const SizedBox(width: 12),
               ],
@@ -268,172 +268,6 @@ class AramaSonuclariWidget extends StatelessWidget {
     );
   }
 
-  void _tarihSecimModalGoster(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder:
-          (context) => Container(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Tarih Filtresi',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Başlangıç tarihi seçimi
-                _buildTarihSecimButonu(
-                  context,
-                  'Başlangıç Tarihi',
-                  secilenBaslangicTarihi,
-                  Icons.event_available,
-                  (tarih) {
-                    if (onTarihSecimi != null) {
-                      onTarihSecimi!(tarih, secilenBitisTarihi);
-                    }
-                    Navigator.of(context).pop();
-                  },
-                ),
-
-                const SizedBox(height: 12),
-
-                // Bitiş tarihi seçimi
-                _buildTarihSecimButonu(
-                  context,
-                  'Bitiş Tarihi',
-                  secilenBitisTarihi,
-                  Icons.event_busy,
-                  (tarih) {
-                    if (onTarihSecimi != null) {
-                      onTarihSecimi!(secilenBaslangicTarihi, tarih);
-                    }
-                    Navigator.of(context).pop();
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                // Filtreyi temizle butonu
-                if (secilenBaslangicTarihi != null ||
-                    secilenBitisTarihi != null)
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        if (onTarihSecimi != null) {
-                          onTarihSecimi!(null, null);
-                        }
-                        Navigator.of(context).pop();
-                      },
-                      icon: const Icon(Icons.clear),
-                      label: const Text('Tarih Filtresini Temizle'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    ),
-                  ),
-
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-    );
-  }
-
-  Widget _buildTarihSecimButonu(
-    BuildContext context,
-    String baslik,
-    DateTime? secilenTarih,
-    IconData icon,
-    Function(DateTime?) onTarihSecildi,
-  ) {
-    return InkWell(
-      onTap: () async {
-        final tarih = await showDatePicker(
-          context: context,
-          initialDate: secilenTarih ?? DateTime.now(),
-          firstDate: DateTime(2020),
-          lastDate: DateTime.now().add(const Duration(days: 365)),
-          locale: const Locale('tr', 'TR'),
-        );
-        onTarihSecildi(tarih);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: secilenTarih != null ? Colors.green[50] : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color:
-                secilenTarih != null ? Colors.green[200]! : Colors.grey[200]!,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color:
-                    secilenTarih != null ? Colors.green[100] : Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                size: 20,
-                color:
-                    secilenTarih != null ? Colors.green[600] : Colors.grey[600],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    baslik,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color:
-                          secilenTarih != null
-                              ? Colors.green[800]
-                              : Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    secilenTarih != null
-                        ? '${secilenTarih!.day}/${secilenTarih!.month}/${secilenTarih!.year}'
-                        : 'Tarih seçin',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color:
-                          secilenTarih != null
-                              ? Colors.green[600]
-                              : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (secilenTarih != null)
-              Icon(Icons.check_circle, color: Colors.green[600], size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildMobilSiralamaSecenegi(
     BuildContext context,
     AramaSiralamaTuru tur,
@@ -504,35 +338,250 @@ class AramaSonuclariWidget extends StatelessWidget {
     );
   }
 
+  void _ayYilSecimModalGoster(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder:
+          (BuildContext modalContext) => Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tarih Filtresi',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Ay seçimi
+                Text(
+                  'Ay:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildAyDropdown(modalContext),
+
+                const SizedBox(height: 20),
+
+                // Yıl seçimi
+                Text(
+                  'Yıl:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildYilDropdown(modalContext),
+
+                const SizedBox(height: 20),
+
+                // Filtreyi temizle butonu
+                if (secilenAy != null || secilenYil != null)
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        if (onAyYilSecimi != null) {
+                          onAyYilSecimi!(null, null);
+                        }
+                        Navigator.of(modalContext).pop();
+                      },
+                      icon: const Icon(Icons.clear, size: 18),
+                      label: const Text('Filtreyi Temizle'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red[600],
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildAyDropdown(BuildContext context) {
+    const aylar = [
+      'Ocak',
+      'Şubat',
+      'Mart',
+      'Nisan',
+      'Mayıs',
+      'Haziran',
+      'Temmuz',
+      'Ağustos',
+      'Eylül',
+      'Ekim',
+      'Kasım',
+      'Aralık',
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int?>(
+          value: secilenAy,
+          hint: const Text('Ay seçin'),
+          isExpanded: true,
+          onChanged: (ay) {
+            if (onAyYilSecimi != null) {
+              onAyYilSecimi!(ay, secilenYil);
+            }
+            Navigator.of(context).pop();
+          },
+          items: [
+            const DropdownMenuItem<int?>(value: null, child: Text('Tüm aylar')),
+            ...aylar.asMap().entries.map((entry) {
+              final index = entry.key + 1;
+              final ayAdi = entry.value;
+              return DropdownMenuItem<int?>(value: index, child: Text(ayAdi));
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildYilDropdown(BuildContext context) {
+    final TextEditingController yilController = TextEditingController();
+    if (secilenYil != null) {
+      yilController.text = secilenYil.toString();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: TextField(
+        controller: yilController,
+        keyboardType: TextInputType.number,
+        maxLength: 4,
+        decoration: const InputDecoration(
+          hintText: 'Yıl girin',
+          border: InputBorder.none,
+          counterText: '',
+        ),
+        onChanged: (value) {
+          if (value.isEmpty) {
+            if (onAyYilSecimi != null) {
+              onAyYilSecimi!(secilenAy, null);
+            }
+          } else {
+            final yil = int.tryParse(value);
+            if (yil != null && yil >= 2020 && yil <= DateTime.now().year + 5) {
+              if (onAyYilSecimi != null) {
+                onAyYilSecimi!(secilenAy, yil);
+              }
+            }
+          }
+        },
+        onSubmitted: (value) {
+          Navigator.of(context).pop();
+        },
+      ),
+    );
+  }
+
   Widget _buildTarihFiltresiButonu() {
     return Builder(
       builder:
           (context) => InkWell(
-            onTap: () => _tarihSecimModalGoster(context),
+            onTap: () => _ayYilSecimModalGoster(context),
             borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
                 borderRadius: BorderRadius.circular(8),
                 color:
-                    (secilenBaslangicTarihi != null ||
-                            secilenBitisTarihi != null)
+                    (secilenAy != null || secilenYil != null)
                         ? Colors.green[50]
                         : Colors.white,
+                border: Border.all(
+                  color:
+                      (secilenAy != null || secilenYil != null)
+                          ? Colors.green[200]!
+                          : Colors.grey[300]!,
+                ),
               ),
-              child: Icon(
-                Icons.date_range,
-                size: 16,
-                color:
-                    (secilenBaslangicTarihi != null ||
-                            secilenBitisTarihi != null)
-                        ? Colors.green[600]
-                        : Colors.grey[600],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.date_range,
+                    size: 16,
+                    color:
+                        (secilenAy != null || secilenYil != null)
+                            ? Colors.green[600]
+                            : Colors.grey[600],
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _getTarihMetni(),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color:
+                          (secilenAy != null || secilenYil != null)
+                              ? Colors.green[600]
+                              : Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
     );
+  }
+
+  String _getTarihMetni() {
+    if (secilenAy != null && secilenYil != null) {
+      return '${_getAyAdi(secilenAy!)} $secilenYil';
+    } else if (secilenAy != null) {
+      return _getAyAdi(secilenAy!);
+    } else if (secilenYil != null) {
+      return '$secilenYil';
+    }
+    return 'Tarih';
+  }
+
+  String _getAyAdi(int ay) {
+    const aylar = [
+      'Ocak',
+      'Şubat',
+      'Mart',
+      'Nisan',
+      'Mayıs',
+      'Haziran',
+      'Temmuz',
+      'Ağustos',
+      'Eylül',
+      'Ekim',
+      'Kasım',
+      'Aralık',
+    ];
+    return aylar[ay - 1];
   }
 
   Widget _buildGorunumSecici() {

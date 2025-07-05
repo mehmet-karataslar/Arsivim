@@ -16,6 +16,78 @@
 #pragma comment(lib, "wiaguid.lib")
 #pragma comment(lib, "shlwapi.lib")
 
+// WIA sabitlerini tanımla
+#ifndef WIA_DEVICE_TYPE_SCANNER
+#define WIA_DEVICE_TYPE_SCANNER 1
+#endif
+
+// Callback class for scan progress
+class ScanCallback : public IWiaDataCallback {
+private:
+    LONG refCount;
+    std::string outputPath;
+    
+public:
+    ScanCallback(const std::string& path) : refCount(1), outputPath(path) {}
+    
+    // IUnknown methods
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
+        if (riid == IID_IUnknown || riid == IID_IWiaDataCallback) {
+            *ppvObject = this;
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+    
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return InterlockedIncrement(&refCount);
+    }
+    
+    ULONG STDMETHODCALLTYPE Release() override {
+        LONG result = InterlockedDecrement(&refCount);
+        if (result == 0) {
+            delete this;
+        }
+        return result;
+    }
+    
+    // IWiaDataCallback method
+    HRESULT STDMETHODCALLTYPE BandedDataCallback(
+        LONG lMessage,
+        LONG lStatus,
+        LONG lPercentComplete,
+        LONG lOffset,
+        LONG lLength,
+        LONG lReserved,
+        LONG lResLength,
+        BYTE* pbBuffer) override {
+        
+        switch (lMessage) {
+            case IT_MSG_DATA:
+                // Save data to file
+                if (pbBuffer && lLength > 0) {
+                    std::ofstream file(outputPath, std::ios::binary | std::ios::app);
+                    if (file.is_open()) {
+                        file.write(reinterpret_cast<char*>(pbBuffer), lLength);
+                        file.close();
+                    }
+                }
+                break;
+                
+            case IT_MSG_STATUS:
+                // Update progress (can be used for UI updates)
+                break;
+                
+            case IT_MSG_TERMINATION:
+                // Scan completed
+                break;
+        }
+        
+        return S_OK;
+    }
+};
+
 class WindowsScannerPlugin {
 private:
     IWiaDevMgr* deviceManager;
@@ -126,7 +198,9 @@ public:
         
         // Create device
         IWiaItem* rootItem = nullptr;
-        HRESULT hr = deviceManager->CreateDevice(deviceId.c_str(), &rootItem);
+        BSTR deviceIdBstr = SysAllocString(deviceId.c_str());
+        HRESULT hr = deviceManager->CreateDevice(deviceIdBstr, &rootItem);
+        SysFreeString(deviceIdBstr);
         
         if (!SUCCEEDED(hr) || !rootItem) {
             return "";
@@ -271,73 +345,6 @@ private:
     }
 };
 
-// Callback class for scan progress
-class ScanCallback : public IWiaDataCallback {
-private:
-    LONG refCount;
-    std::string outputPath;
-    
-public:
-    ScanCallback(const std::string& path) : refCount(1), outputPath(path) {}
-    
-    // IUnknown methods
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
-        if (riid == IID_IUnknown || riid == IID_IWiaDataCallback) {
-            *ppvObject = this;
-            AddRef();
-            return S_OK;
-        }
-        return E_NOINTERFACE;
-    }
-    
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        return InterlockedIncrement(&refCount);
-    }
-    
-    ULONG STDMETHODCALLTYPE Release() override {
-        LONG result = InterlockedDecrement(&refCount);
-        if (result == 0) {
-            delete this;
-        }
-        return result;
-    }
-    
-    // IWiaDataCallback method
-    HRESULT STDMETHODCALLTYPE BandedDataCallback(
-        LONG lMessage,
-        LONG lStatus,
-        LONG lPercentComplete,
-        LONG lOffset,
-        LONG lLength,
-        LONG lReserved,
-        LONG lResLength,
-        BYTE* pbBuffer) override {
-        
-        switch (lMessage) {
-            case IT_MSG_DATA:
-                // Save data to file
-                if (pbBuffer && lLength > 0) {
-                    std::ofstream file(outputPath, std::ios::binary | std::ios::app);
-                    if (file.is_open()) {
-                        file.write(reinterpret_cast<char*>(pbBuffer), lLength);
-                        file.close();
-                    }
-                }
-                break;
-                
-            case IT_MSG_STATUS:
-                // Update progress (can be used for UI updates)
-                break;
-                
-            case IT_MSG_TERMINATION:
-                // Scan completed
-                break;
-        }
-        
-        return S_OK;
-    }
-};
-
 // Global plugin instance
 static std::unique_ptr<WindowsScannerPlugin> g_scannerPlugin;
 
@@ -366,7 +373,7 @@ extern "C" {
         
         if (result.length() < bufferSize) {
             strcpy_s(buffer, bufferSize, result.c_str());
-            return result.length();
+            return static_cast<int>(result.length());
         }
         
         return 0;
@@ -381,7 +388,7 @@ extern "C" {
         
         if (result.length() < bufferSize) {
             strcpy_s(resultBuffer, bufferSize, result.c_str());
-            return result.length();
+            return static_cast<int>(result.length());
         }
         
         return 0;

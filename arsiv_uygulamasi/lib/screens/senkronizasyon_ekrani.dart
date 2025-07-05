@@ -299,6 +299,54 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        // Otomatik bağlantı kesme ayarı
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.settings_power_rounded,
+                color: Theme.of(context).primaryColor,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Otomatik Bağlantı Kesme',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Senkronizasyon bitince bağlantı otomatik kesilsin',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _yonetici.otomatikBaglantiKes,
+                onChanged: (value) {
+                  setState(() {
+                    _yonetici.otomatikBaglantiKes = value;
+                  });
+                },
+                activeColor: Theme.of(context).primaryColor,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

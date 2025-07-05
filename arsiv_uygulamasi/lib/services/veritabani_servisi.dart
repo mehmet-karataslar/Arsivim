@@ -711,12 +711,92 @@ class VeriTabaniServisi {
     });
   }
 
+  // Tarihe göre belge arama
+  Future<List<BelgeModeli>> belgeAramaDetayli({
+    String? aramaMetni,
+    int? ay,
+    int? yil,
+    int? kategoriId,
+    int? kisiId,
+  }) async {
+    final db = await database;
+
+    // Dinamik WHERE koşulları
+    List<String> kosullar = ['b.aktif = 1'];
+    List<dynamic> parametreler = [];
+
+    // Metin araması
+    if (aramaMetni != null && aramaMetni.isNotEmpty) {
+      kosullar.add('''(
+        b.dosya_adi LIKE ? OR 
+        b.orijinal_dosya_adi LIKE ? OR 
+        b.baslik LIKE ? OR 
+        b.aciklama LIKE ? OR 
+        b.etiketler LIKE ? OR
+        k.kategori_adi LIKE ? OR
+        (ki.ad || ' ' || ki.soyad) LIKE ?
+      )''');
+      parametreler.addAll([
+        '%$aramaMetni%', // dosya_adi
+        '%$aramaMetni%', // orijinal_dosya_adi
+        '%$aramaMetni%', // baslik
+        '%$aramaMetni%', // aciklama
+        '%$aramaMetni%', // etiketler
+        '%$aramaMetni%', // kategori_adi
+        '%$aramaMetni%', // kişi adı soyadı
+      ]);
+    }
+
+    // Ay filtresi
+    if (ay != null) {
+      kosullar.add("strftime('%m', b.olusturma_tarihi) = ?");
+      parametreler.add(ay.toString().padLeft(2, '0'));
+    }
+
+    // Yıl filtresi
+    if (yil != null) {
+      kosullar.add("strftime('%Y', b.olusturma_tarihi) = ?");
+      parametreler.add(yil.toString());
+    }
+
+    // Kategori filtresi
+    if (kategoriId != null) {
+      kosullar.add('b.kategori_id = ?');
+      parametreler.add(kategoriId);
+    }
+
+    // Kişi filtresi
+    if (kisiId != null) {
+      kosullar.add('b.kisi_id = ?');
+      parametreler.add(kisiId);
+    }
+
+    final sorgu = '''
+      SELECT DISTINCT b.* FROM belgeler b
+      LEFT JOIN kategoriler k ON b.kategori_id = k.id
+      LEFT JOIN kisiler ki ON b.kisi_id = ki.id
+      WHERE ${kosullar.join(' AND ')}
+      ORDER BY b.guncelleme_tarihi DESC
+    ''';
+
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      sorgu,
+      parametreler,
+    );
+
+    return List.generate(maps.length, (i) {
+      return BelgeModeli.fromMap(maps[i]);
+    });
+  }
+
   // KİŞİ CRUD İŞLEMLERİ
 
   // Kişi ekleme
   Future<int> kisiEkle(KisiModeli kisi) async {
     final db = await database;
-    return await db.insert('kisiler', kisi.toMap());
+    final map = kisi.toMap();
+    map.remove('id'); // ID'yi kaldır, otomatik olarak atanacak
+    return await db.insert('kisiler', map);
   }
 
   // Kişi ID'si ile ekleme (senkronizasyon için)
@@ -724,21 +804,6 @@ class VeriTabaniServisi {
     final db = await database;
     final map = kisi.toMap();
     return await db.insert('kisiler', map);
-  }
-
-  // Ad ve soyadla kişi bul
-  Future<KisiModeli?> kisiBulAdSoyad(String ad, String soyad) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'kisiler',
-      where: 'ad = ? AND soyad = ? AND aktif = ?',
-      whereArgs: [ad, soyad, 1],
-    );
-
-    if (maps.isNotEmpty) {
-      return KisiModeli.fromMap(maps.first);
-    }
-    return null;
   }
 
   // Tüm kişileri getir
@@ -771,6 +836,21 @@ class VeriTabaniServisi {
     return null;
   }
 
+  // Ad ve soyada göre kişi bul
+  Future<KisiModeli?> kisiBulAdSoyad(String ad, String soyad) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'kisiler',
+      where: 'ad = ? AND soyad = ? AND aktif = ?',
+      whereArgs: [ad, soyad, 1],
+    );
+
+    if (maps.isNotEmpty) {
+      return KisiModeli.fromMap(maps.first);
+    }
+    return null;
+  }
+
   // Kişi güncelleme
   Future<int> kisiGuncelle(KisiModeli kisi) async {
     final db = await database;
@@ -793,8 +873,33 @@ class VeriTabaniServisi {
     );
   }
 
-  // Kişiye göre belgeler
-  Future<List<BelgeModeli>> kisiyeGoreBelgeler(int kisiId) async {
+  // Kişi arama
+  Future<List<KisiModeli>> kisiAra(String sorgu) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'kisiler',
+      where: '(ad LIKE ? OR soyad LIKE ?) AND aktif = ?',
+      whereArgs: ['%$sorgu%', '%$sorgu%', 1],
+      orderBy: 'ad ASC, soyad ASC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return KisiModeli.fromMap(maps[i]);
+    });
+  }
+
+  // Kişi sayısını getir
+  Future<int> kisiSayisi() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM kisiler WHERE aktif = ?',
+      [1],
+    );
+    return result.first['count'] as int;
+  }
+
+  // Kişinin belgelerini getir
+  Future<List<BelgeModeli>> kisiBelyeleriniGetir(int kisiId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
@@ -1242,7 +1347,7 @@ class VeriTabaniServisi {
   }
 
   // Kişinin belgelerini getir
-  Future<List<BelgeModeli>> kisiBelyeleriniGetir(int kisiId) async {
+  Future<List<BelgeModeli>> kisiBelGeleriniGetir(int kisiId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',

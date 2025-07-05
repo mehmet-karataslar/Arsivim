@@ -1157,13 +1157,32 @@ class HttpSunucuServisi {
       final kisilerData = data['kisiler'] as List<dynamic>;
       int basariliSayisi = 0;
       int hataliSayisi = 0;
+      int mevcutSayisi = 0;
 
       for (final kisiData in kisilerData) {
         try {
           final kisi = KisiModeli.fromMap(kisiData);
-          await _veriTabani.kisiEkle(kisi);
-          basariliSayisi++;
-          print('✅ Kişi kaydedildi: ${kisi.ad} ${kisi.soyad}');
+
+          // Kişi zaten var mı kontrol et (ad-soyad kombinasyonu)
+          final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
+            kisi.ad,
+            kisi.soyad,
+          );
+
+          if (mevcutKisi == null) {
+            // Kişi ID'sini korumak için özel ekleme
+            await _veriTabani.kisiEkleIdIle(kisi);
+            basariliSayisi++;
+            print('✅ Kişi kaydedildi: ${kisi.ad} ${kisi.soyad}');
+          } else {
+            // Kişi mevcut, güncelle
+            final guncelKisi = kisi.copyWith(
+              id: mevcutKisi.id, // Mevcut kişinin ID'sini koru
+            );
+            await _veriTabani.kisiGuncelle(guncelKisi);
+            mevcutSayisi++;
+            print('🔄 Kişi güncellendi: ${kisi.ad} ${kisi.soyad}');
+          }
         } catch (e) {
           print('❌ Kişi kaydetme hatası: $e');
           hataliSayisi++;
@@ -1174,6 +1193,7 @@ class HttpSunucuServisi {
         'success': true,
         'message': 'Kişi senkronizasyonu tamamlandı',
         'basarili': basariliSayisi,
+        'guncellenen': mevcutSayisi,
         'hatali': hataliSayisi,
         'toplam': kisilerData.length,
         'timestamp': DateTime.now().toIso8601String(),

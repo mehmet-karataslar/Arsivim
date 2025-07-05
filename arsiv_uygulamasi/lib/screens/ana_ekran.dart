@@ -9,6 +9,9 @@ import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../utils/screen_utils.dart';
+import '../utils/sabitler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import 'belgeler_ekrani.dart';
 import 'kategoriler_ekrani.dart';
 import 'kisiler_ekrani.dart';
@@ -81,27 +84,9 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     });
 
     try {
-      // Önce cache'ten kontrol et
-      final cachedIstatistikler =
-          await _cacheServisi.cachedIstatistikleriGetir();
-      final cachedBelgeler = await _cacheServisi.cachedBelgeleriGetir();
+      // Cache'i bypassla ve her zaman gerçek verileri al
+      _debugPrint('Gerçek veriler veritabanından yükleniyor...');
 
-      if (cachedIstatistikler != null && cachedBelgeler != null) {
-        // Cache'ten verileri yükle
-        if (!mounted) return;
-        setState(() {
-          _toplamBelgeSayisi = cachedIstatistikler['belge_sayisi'] ?? 0;
-          _toplamDosyaBoyutu = cachedIstatistikler['dosya_boyutu'] ?? 0;
-          _sonBelgeler = cachedBelgeler;
-          _detayliSonBelgeler = []; // Cache'te detaylı veri yok, boş bırak
-          _yukleniyor = false;
-        });
-        _animationController.forward();
-        _debugPrint('Veriler cache ten yuklendi');
-        return;
-      }
-
-      // Cache yoksa veritabanından yükle - yeni detaylı metodları kullan
       final futures = await Future.wait([
         _veriTabani.belgeIstatistikleriGetir(),
         _veriTabani.onceakliBelgeleriDetayliGetir(limit: 5),
@@ -124,12 +109,9 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         _yukleniyor = false;
       });
 
-      // Verileri cache'le
-      await _cacheServisi.istatistikleriCacheEt({
-        'belge_sayisi': _toplamBelgeSayisi,
-        'dosya_boyutu': _toplamDosyaBoyutu,
-      });
-      await _cacheServisi.belgeleriCacheEt(_sonBelgeler);
+      _debugPrint(
+        'Gerçek veriler yüklendi: $_toplamBelgeSayisi belge, ${(_toplamDosyaBoyutu / (1024 * 1024)).toStringAsFixed(2)} MB',
+      );
 
       _animationController.forward();
     } catch (e) {
@@ -138,6 +120,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         _yukleniyor = false;
       });
       _hataGoster('Veriler yüklenirken hata oluştu: $e');
+      _debugPrint('Veri yükleme hatası: $e');
     }
   }
 
@@ -153,27 +136,30 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
       // Animasyonu sıfırla
       _animationController.reset();
 
+      // Gerçek verilerle yenile
       await _verileriYukle();
 
       // Başarı mesajı göster
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              const Text('Veriler yenilendi!'),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text('Veriler yenilendi! $_toplamBelgeSayisi belge bulundu.'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 2),
           ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+        );
+      }
     } catch (e) {
       _hataGoster('Yenileme sırasında hata oluştu: $e');
     }
@@ -197,6 +183,159 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Future<void> _veriTabaniKonumunuGoster() async {
+    try {
+      final bilgiler = await _veritabaniBilgileriAl();
+      final platformAciklama = await _platformYolAciklamasiAl();
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.storage_rounded, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  const Text('Veritabanı Konumu'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Card(
+                      color: Colors.orange.withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '📁 Dosya Bilgileri',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange[700],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildBilgiSatiri(
+                              'Dosya Adı',
+                              bilgiler['dosya_adi'],
+                            ),
+                            _buildBilgiSatiri(
+                              'Boyut',
+                              '${bilgiler['boyut_mb']} MB',
+                            ),
+                            _buildBilgiSatiri(
+                              'Versiyon',
+                              bilgiler['versiyon'].toString(),
+                            ),
+                            _buildBilgiSatiri(
+                              'Durum',
+                              bilgiler['var_mi'] ? 'Mevcut' : 'Bulunamadı',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      color: Colors.blue.withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '📍 Konum Bilgileri',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue[700],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                              bilgiler['tam_yol'],
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      color: Colors.green.withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '💡 Platform Açıklaması',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green[700],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              platformAciklama,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Kapat'),
+                ),
+              ],
+            ),
+      );
+    } catch (e) {
+      _hataGoster('Veritabanı konumu alınamadı: $e');
+    }
+  }
+
+  Widget _buildBilgiSatiri(String baslik, String deger) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$baslik:',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[600],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(deger, style: TextStyle(color: Colors.grey[800])),
+          ),
+        ],
       ),
     );
   }
@@ -570,9 +709,73 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 [Colors.green, Colors.lightGreen],
               ),
             ),
+            const SizedBox(width: 16),
+            Expanded(child: _buildVeriTabaniKonumKarti()),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildVeriTabaniKonumKarti() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.orange.withOpacity(0.1),
+            Colors.deepOrange.withOpacity(0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.withOpacity(0.2)),
+      ),
+      child: InkWell(
+        onTap: _veriTabaniKonumunuGoster,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.folder_open_rounded,
+                  size: 24,
+                  color: Colors.orange[700],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Veritabanı',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Konum Göster',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Dokun ve gör',
+                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -652,7 +855,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
           ],
         ),
         const SizedBox(height: 16),
-        if (_sonBelgeler.isEmpty)
+        if (_sonBelgeler.isEmpty && !_yukleniyor)
           Container(
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
@@ -683,6 +886,24 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
                     textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (_yukleniyor)
+          Container(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(
+                    color: Theme.of(context).primaryColor,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Son belgeler yükleniyor...',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                 ],
               ),
@@ -1040,6 +1261,71 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     // Eğer başarılı bir şekilde belge eklendiyse verileri yenile
     if (sonuc == true) {
       _verileriYukle();
+    }
+  }
+
+  /// Veritabanı bilgilerini al
+  Future<Map<String, dynamic>> _veritabaniBilgileriAl() async {
+    Directory documentsDirectory = await getApplicationDocumentsDirectory();
+    final dbPath = path.join(documentsDirectory.path, Sabitler.VERITABANI_ADI);
+
+    final varMi = await File(dbPath).exists();
+    final boyut = varMi ? await File(dbPath).length() : 0;
+
+    return {
+      'tam_yol': dbPath,
+      'klasor': documentsDirectory.path,
+      'dosya_adi': Sabitler.VERITABANI_ADI,
+      'var_mi': varMi,
+      'boyut_byte': boyut,
+      'boyut_mb': (boyut / 1024 / 1024).toStringAsFixed(2),
+      'versiyon': Sabitler.VERITABANI_VERSIYONU,
+    };
+  }
+
+  /// Platform yol açıklaması al
+  Future<String> _platformYolAciklamasiAl() async {
+    Directory documentsDirectory = await getApplicationDocumentsDirectory();
+    final klasor = documentsDirectory.path;
+
+    if (Platform.isAndroid) {
+      return '''
+🤖 ANDROID:
+- Konum: $klasor
+- Uygulama verisi: /data/data/com.example.arsiv_uygulamasi/files/Documents/
+- Sadece uygulama erişebilir (private storage)
+- Uygulama silinirse veritabanı da silinir
+''';
+    } else if (Platform.isWindows) {
+      return '''
+🖥️ WINDOWS:
+- Konum: $klasor
+- Genellikle: C:\\Users\\[Username]\\Documents\\
+- Windows Explorer'dan erişilebilir
+- Uygulama silinse bile veritabanı kalır
+''';
+    } else if (Platform.isLinux) {
+      return '''
+🐧 LINUX:
+- Konum: $klasor
+- Genellikle: /home/[username]/Documents/
+- Dosya yöneticisinden erişilebilir
+- Uygulama silinse bile veritabanı kalır
+''';
+    } else if (Platform.isMacOS) {
+      return '''
+🍎 MACOS:
+- Konum: $klasor
+- Genellikle: /Users/[username]/Documents/
+- Finder'dan erişilebilir
+- Uygulama silinse bile veritabanı kalır
+''';
+    } else {
+      return '''
+📱 PLATFORM BİLİNMİYOR:
+- Konum: $klasor
+- Platform-specific açıklama mevcut değil
+''';
     }
   }
 }

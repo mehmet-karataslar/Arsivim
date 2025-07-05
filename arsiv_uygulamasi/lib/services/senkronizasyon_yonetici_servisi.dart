@@ -27,6 +27,7 @@ class SenkronizasyonYoneticiServisi {
   // Durumlar
   bool _sunucuCalisiyorMu = false;
   bool _senkronizasyonAktif = false;
+  bool _otomatikBaglantiKes = true; // Otomatik bağlantı kesme özelliği
   String _durum = 'Hazır';
   String _sonSenkronizasyon = 'Henüz yapılmadı';
   int _bekleyenDosyaSayisi = 0;
@@ -39,12 +40,16 @@ class SenkronizasyonYoneticiServisi {
   // Getters
   bool get sunucuCalisiyorMu => _sunucuCalisiyorMu;
   bool get senkronizasyonAktif => _senkronizasyonAktif;
+  bool get otomatikBaglantiKes => _otomatikBaglantiKes;
   String get durum => _durum;
   String get sonSenkronizasyon => _sonSenkronizasyon;
   int get bekleyenDosyaSayisi => _bekleyenDosyaSayisi;
   int get senkronizeDosyaSayisi => _senkronizeDosyaSayisi;
   List<Map<String, dynamic>> get bagliCihazlar =>
       List.unmodifiable(_bagliCihazlar);
+
+  // Setters
+  set otomatikBaglantiKes(bool value) => _otomatikBaglantiKes = value;
 
   // Event callbacks
   Function(String)? onStatusChanged;
@@ -505,24 +510,13 @@ class SenkronizasyonYoneticiServisi {
               .toList();
 
       final kisiler = await _veriTabani.kisileriGetir();
-      final bekleyenKisiler =
-          kisiler
-              .where(
-                (kisi) => kisi.olusturmaTarihi.isAfter(
-                  DateTime.now().subtract(const Duration(days: 1)),
-                ),
-              )
-              .toList();
+      // TÜM KİŞİLERİ BEKLEYENCİ OLARAK GÖNDER - Transfer sorunu çözümü
+      final bekleyenKisiler = kisiler; // Tüm kişiler senkronize edilsin
 
       final kategoriler = await _veriTabani.kategorileriGetir();
+      // TÜM KATEGORİLERİ BEKLEYENCİ OLARAK GÖNDER - Transfer sorunu çözümü
       final bekleyenKategoriler =
-          kategoriler
-              .where(
-                (kategori) => kategori.olusturmaTarihi.isAfter(
-                  DateTime.now().subtract(const Duration(days: 1)),
-                ),
-              )
-              .toList();
+          kategoriler; // Tüm kategoriler senkronize edilsin
 
       return {
         'bekleyen_belgeler': bekleyenBelgeler,
@@ -1062,6 +1056,15 @@ class SenkronizasyonYoneticiServisi {
         print(
           '✅ Senkronizasyon tamamlandı - belgeler, kişiler ve kategoriler dahil',
         );
+
+        // Otomatik bağlantı kesme özelliği
+        if (_otomatikBaglantiKes) {
+          await Future.delayed(
+            const Duration(seconds: 2),
+          ); // Kullanıcı mesajını görsün
+          await _otomatikBaglantiKes_Func(hedefIP);
+        }
+
         return true;
       } else {
         onError?.call('Senkronizasyon başarısız');
@@ -1070,6 +1073,102 @@ class SenkronizasyonYoneticiServisi {
     } catch (e) {
       print('❌ Kapsamlı senkronizasyon hatası: $e');
       onError?.call('Senkronizasyon hatası: $e');
+      return false;
+    }
+  }
+
+  /// Otomatik bağlantı kesme işlemi
+  Future<void> _otomatikBaglantiKes_Func(String hedefIP) async {
+    try {
+      print('🔌 Otomatik bağlantı kesme başlatılıyor...');
+
+      // Bağlı cihazlardan IP'si eşleşen cihazı bul
+      final cihaz = _bagliCihazlar.firstWhere(
+        (device) => device['ip'] == hedefIP,
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (cihaz.isNotEmpty) {
+        await cihazBaglantiKes(cihaz['device_id']);
+        onSuccess?.call('✅ Bağlantı otomatik olarak kesildi');
+      }
+    } catch (e) {
+      print('❌ Otomatik bağlantı kesme hatası: $e');
+    }
+  }
+
+  /// Manuel bağlantı kesme
+  Future<bool> cihazBaglantiKes(String deviceId) async {
+    try {
+      print('🔌 Cihaz bağlantısı kesiliyor: $deviceId');
+
+      // Cihazı bağlı cihazlar listesinden çıkar
+      final removedDevice = _bagliCihazlar.firstWhere(
+        (device) => device['device_id'] == deviceId,
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (removedDevice.isEmpty) {
+        onError?.call('Cihaz bulunamadı');
+        return false;
+      }
+
+      // Listeden kaldır
+      _bagliCihazlar.removeWhere((device) => device['device_id'] == deviceId);
+
+      // UI'yı güncelle
+      onDeviceListChanged?.call();
+
+      // Log kaydı
+      _logServisi.syncLog(
+        'Manuel Bağlantı Kesildi: ${removedDevice['name']}',
+        'disconnected',
+        {
+          'ip': removedDevice['ip'],
+          'platform': removedDevice['platform'],
+          'device_id': removedDevice['device_id'],
+          'disconnect_type': 'manual',
+        },
+      );
+
+      onSuccess?.call('👋 ${removedDevice['name']} bağlantısı kesildi');
+      return true;
+    } catch (e) {
+      print('❌ Cihaz bağlantısı kesme hatası: $e');
+      onError?.call('Bağlantı kesme hatası: $e');
+      return false;
+    }
+  }
+
+  /// Tüm bağlantıları kes
+  Future<bool> tumBaglantilarinKes() async {
+    try {
+      print('🔌 Tüm bağlantılar kesiliyor...');
+
+      final bagliBaglantiSayisi = _bagliCihazlar.length;
+
+      if (bagliBaglantiSayisi == 0) {
+        onSuccess?.call('Bağlı cihaz yok');
+        return true;
+      }
+
+      // Tüm cihazları kaldır
+      _bagliCihazlar.clear();
+
+      // UI'yı güncelle
+      onDeviceListChanged?.call();
+
+      // Log kaydı
+      _logServisi.syncLog('Tüm Bağlantılar Kesildi', 'disconnected', {
+        'disconnected_count': bagliBaglantiSayisi,
+        'disconnect_type': 'manual_all',
+      });
+
+      onSuccess?.call('🔌 $bagliBaglantiSayisi cihazın bağlantısı kesildi');
+      return true;
+    } catch (e) {
+      print('❌ Tüm bağlantıları kesme hatası: $e');
+      onError?.call('Bağlantı kesme hatası: $e');
       return false;
     }
   }
