@@ -51,12 +51,7 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     '',
   );
 
-  // Gelişmiş senkronizasyon ayarları
-  SyncStrategy _selectedSyncStrategy = SyncStrategy.latestWins;
-  bool _enableSmartSync = true;
-  bool _enableConflictResolution = true;
-  bool _enableVersionControl = true;
-  bool _enableErrorRecovery = true;
+  // Sync ayarları Enhanced Manager tarafından otomatik yönetilir
 
   // Gerçek ayarlar - Gelişmiş Yönetici kullanılacak
   final SyncManagerType _selectedSyncManager = SyncManagerType.enhanced;
@@ -100,24 +95,49 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
       print('🎉 USB SENKRON CALLBACK ÇALIŞTI!');
       _addLog('🎉 YENİ CİHAZ BAĞLANDI!');
       _addLog('📱 Cihaz: ${deviceInfo['clientName']}');
-      _addLog('🌐 IP: ${deviceInfo['ip']}');
+      _addLog('🌐 Client IP: ${deviceInfo['ip']}');
       _addLog(
         '⏰ Bağlantı Zamanı: ${DateTime.now().toString().substring(11, 19)}',
       );
+
+      // 🔧 BİDİRECTİONAL SYNC İÇİN DÜZELTİLDİ:
+      // Android bağlandığında PC'nin IP'sini kullanmamız gerekiyor
+      // çünkü Enhanced Manager upload/download için device.ip kullanıyor
+
+      // PC'nin IP'sini al (local network IP)
+      String targetIP = _localIP ?? 'localhost';
+
+      // Eğer Android'den bağlanıyorsa, target PC'dir (local IP)
+      // Eğer PC'den bağlanıyorsa, target Android'dir (client IP)
+      if (Platform.isAndroid || Platform.isIOS) {
+        // Android/iOS'ta çalışıyorsa, target PC'dir
+        targetIP = _localIP ?? 'localhost';
+        _addLog('📱 Android → PC sync için PC IP kullanılıyor: $targetIP');
+      } else {
+        // PC'de çalışıyorsa, target Android'dir
+        targetIP = deviceInfo['ip'] ?? 'unknown';
+        _addLog('💻 PC → Android sync için Android IP kullanılıyor: $targetIP');
+      }
 
       setState(() {
         _bagliBulunanCihaz = models.SenkronCihazi(
           id: deviceInfo['clientId'],
           ad: deviceInfo['clientName'],
-          ip: deviceInfo['ip'],
+          ip: targetIP, // ✅ DÜZELTİLDİ: Bidirectional sync için doğru IP
           mac: 'unknown',
-          platform: 'Mobil',
+          platform: deviceInfo['platform'] ?? 'Mobil',
           sonGorulen: DateTime.now(),
           aktif: true,
           belgeSayisi: deviceInfo['belgeSayisi'] ?? 0,
           toplamBoyut: deviceInfo['toplamBoyut'] ?? 0,
         );
       });
+
+      _addLog('🔧 Target Device oluşturuldu:');
+      _addLog('   • ID: ${deviceInfo['clientId']}');
+      _addLog('   • Ad: ${deviceInfo['clientName']}');
+      _addLog('   • Target IP: $targetIP');
+      _addLog('   • Platform: ${deviceInfo['platform'] ?? 'Mobil'}');
 
       // PC için sistem bildirimi ve ses ile uyarı
       if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -596,8 +616,8 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
       _progressNotifier.value = 0.0;
       _currentOperationNotifier.value = 'Senkronizasyon başlatılıyor...';
 
-      // YENİ: Senkronizasyon ayarlarını uygula
-      await _configureSyncOptions();
+      // Senkronizasyon ayarları Enhanced Manager için varsayılan
+      _addLog('⚙️ Senkronizasyon ayarları varsayılan olarak yapılandırıldı');
 
       SenkronDialogs.showProgressDialog(
         context,
@@ -632,57 +652,6 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
         ),
       );
     }
-  }
-
-  // YENİ: Senkronizasyon ayarlarını yapılandır
-  Future<void> _configureSyncOptions() async {
-    _addLog('⚙️ Senkronizasyon ayarları yapılandırılıyor...');
-
-    // Coordinator'a ayarları geçir
-    _senkronCoordinator.configureSyncOptions(
-      strategy: _selectedSyncStrategy,
-      smartSync: _enableSmartSync,
-      conflictResolution: _enableConflictResolution,
-      versionControl: _enableVersionControl,
-      errorRecovery: _enableErrorRecovery,
-      bidirectionalSync: true, // Her zaman bidirectional
-    );
-
-    // Sync Strategy'yi logla
-    String strategyText = '';
-    switch (_selectedSyncStrategy) {
-      case SyncStrategy.latestWins:
-        strategyText = 'En son değişiklik kazanır';
-        break;
-      case SyncStrategy.localWins:
-        strategyText = 'Bu cihaz öncelikli';
-        break;
-      case SyncStrategy.remoteWins:
-        strategyText = 'Karşı cihaz öncelikli';
-        break;
-      case SyncStrategy.manual:
-        strategyText = 'Manuel onay';
-        break;
-      case SyncStrategy.merge:
-        strategyText = 'Otomatik birleştirme';
-        break;
-    }
-    _addLog('📋 Strateji: $strategyText');
-
-    // Gelişmiş özellikleri logla
-    List<String> enabledFeatures = [];
-    if (_enableSmartSync) enabledFeatures.add('Akıllı Senkronizasyon');
-    if (_enableConflictResolution) enabledFeatures.add('Çakışma Çözümü');
-    if (_enableVersionControl) enabledFeatures.add('Versiyon Kontrolü');
-    if (_enableErrorRecovery) enabledFeatures.add('Hata Kurtarma');
-
-    if (enabledFeatures.isNotEmpty) {
-      _addLog('🔧 Özellikler: ${enabledFeatures.join(', ')}');
-    }
-
-    // Coordinator'dan ayarları doğrula
-    final appliedConfig = _senkronCoordinator.getSyncConfiguration();
-    _addLog('✅ Ayarlar coordinator\'a uygulandı: ${appliedConfig['strategy']}');
   }
 
   // YENİ: Gelişmiş sonuçları göster
@@ -2079,124 +2048,22 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
             ),
             const SizedBox(height: 20),
 
-            _buildSyncStrategySelector(),
-            const SizedBox(height: 16),
-
-            _buildAdvancedOptions(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSyncStrategySelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Çakışma Çözüm Stratejisi:',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-          ),
-          child: Column(
-            children: [
-              _buildStrategyOption(
-                SyncStrategy.latestWins,
-                'En Son Değişiklik Kazanır',
-                'Hangi cihazda son değişiklik yapıldıysa o kullanılır',
-                Icons.access_time_rounded,
-              ),
-              _buildStrategyOption(
-                SyncStrategy.localWins,
-                'Bu Cihaz Öncelikli',
-                'Bu cihazdaki değişiklikler her zaman öncelikli',
-                Icons.smartphone_rounded,
-              ),
-              _buildStrategyOption(
-                SyncStrategy.remoteWins,
-                'Karşı Cihaz Öncelikli',
-                'Karşı cihazdaki değişiklikler her zaman öncelikli',
-                Icons.computer_rounded,
-              ),
-              _buildStrategyOption(
-                SyncStrategy.manual,
-                'Manuel Onay',
-                'Her çakışma için size sorulur',
-                Icons.person_rounded,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStrategyOption(
-    SyncStrategy strategy,
-    String title,
-    String description,
-    IconData icon,
-  ) {
-    final isSelected = _selectedSyncStrategy == strategy;
-    return Container(
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.orange.withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: RadioListTile<SyncStrategy>(
-        value: strategy,
-        groupValue: _selectedSyncStrategy,
-        onChanged: (value) {
-          setState(() {
-            _selectedSyncStrategy = value!;
-          });
-        },
-        title: Row(
-          children: [
+            // Sync ayarları Enhanced Manager tarafından otomatik yönetilir
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color:
-                    isSelected
-                        ? Colors.orange.withOpacity(0.2)
-                        : Colors.grey.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
               ),
-              child: Icon(
-                icon,
-                size: 16,
-                color:
-                    isSelected ? Colors.orange.shade600 : Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: const Row(
                 children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color:
-                          isSelected ? Colors.orange.shade700 : Colors.black87,
-                    ),
-                  ),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color:
-                          isSelected
-                              ? Colors.orange.shade600
-                              : Colors.grey.shade600,
+                  Icon(Icons.settings_rounded, color: Colors.blue),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Senkronizasyon ayarları Enhanced Manager tarafından otomatik olarak optimize edilir.',
+                      style: TextStyle(fontSize: 14, color: Colors.blue),
                     ),
                   ),
                 ],
@@ -2204,125 +2071,11 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
             ),
           ],
         ),
-        activeColor: Colors.orange.shade600,
-        dense: true,
       ),
     );
   }
 
-  Widget _buildAdvancedOptions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Gelişmiş Özellikler:',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-          ),
-          child: Column(
-            children: [
-              _buildAdvancedOption(
-                'Akıllı Senkronizasyon',
-                'Sadece değişen dosyaları senkronize eder',
-                Icons.psychology_rounded,
-                _enableSmartSync,
-                (value) => setState(() => _enableSmartSync = value),
-              ),
-              _buildAdvancedOption(
-                'Çakışma Çözümü',
-                'Dosya çakışmalarını otomatik çözer',
-                Icons.auto_fix_high_rounded,
-                _enableConflictResolution,
-                (value) => setState(() => _enableConflictResolution = value),
-              ),
-              _buildAdvancedOption(
-                'Versiyon Kontrolü',
-                'Dosya versiyonlarını takip eder',
-                Icons.history_rounded,
-                _enableVersionControl,
-                (value) => setState(() => _enableVersionControl = value),
-              ),
-              _buildAdvancedOption(
-                'Hata Kurtarma',
-                'Başarısız transferleri otomatik tekrar dener',
-                Icons.refresh_rounded,
-                _enableErrorRecovery,
-                (value) => setState(() => _enableErrorRecovery = value),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  // Sync Strategy Selector kaldırıldı - Enhanced Manager otomatik yönetir
 
-  Widget _buildAdvancedOption(
-    String title,
-    String description,
-    IconData icon,
-    bool value,
-    Function(bool) onChanged,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: value ? Colors.orange.withOpacity(0.05) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: SwitchListTile(
-        value: value,
-        onChanged: onChanged,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color:
-                    value
-                        ? Colors.orange.withOpacity(0.2)
-                        : Colors.grey.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                icon,
-                size: 16,
-                color: value ? Colors.orange.shade600 : Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: value ? Colors.orange.shade700 : Colors.black87,
-                    ),
-                  ),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color:
-                          value ? Colors.orange.shade600 : Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        activeColor: Colors.orange.shade600,
-        dense: true,
-      ),
-    );
-  }
+  // Sync configuration UI kaldırıldı - Enhanced Manager otomatik yönetir
 }

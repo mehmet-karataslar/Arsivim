@@ -381,10 +381,24 @@ class VeriTabaniServisi {
 
   // BELGE CRUD İŞLEMLERİ
 
-  // Belge ekleme
+  // Belge ekleme - UNIQUE constraint hatası tamamen önlendi
   Future<int> belgeEkle(BelgeModeli belge) async {
     final db = await database;
-    return await db.insert('belgeler', belge.toMap());
+
+    // Basit ama etkili çözüm: Direkt REPLACE INTO kullan
+    try {
+      print('📝 Belge ekleme/güncelleme: ${belge.dosyaAdi}');
+      print('   • Hash: ${belge.dosyaHash.substring(0, 16)}...');
+
+      return await db.insert(
+        'belgeler',
+        belge.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('❌ Belge ekleme hatası: $e');
+      rethrow;
+    }
   }
 
   // Tüm belgeleri getir

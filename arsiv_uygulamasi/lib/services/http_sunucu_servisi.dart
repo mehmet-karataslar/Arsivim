@@ -314,6 +314,8 @@ class HttpSunucuServisi {
 
       final clientId = data['clientId'] as String?;
       final clientName = data['clientName'] as String?;
+      final clientIP =
+          request.connectionInfo?.remoteAddress?.address ?? 'bilinmiyor';
 
       if (clientId == null || clientName == null) {
         return json.encode({'error': 'clientId ve clientName gerekli'});
@@ -322,16 +324,58 @@ class HttpSunucuServisi {
       // Basit token oluştur
       final token = 'token_${DateTime.now().millisecondsSinceEpoch}';
 
+      // Server'ın kendi IP'sini al (local network IP)
+      String? serverIP;
+      try {
+        // Local network interface'ini bul
+        final interfaces = await NetworkInterface.list();
+        for (final interface in interfaces) {
+          if (interface.name.toLowerCase().contains('wi-fi') ||
+              interface.name.toLowerCase().contains('wlan') ||
+              interface.name.toLowerCase().contains('ethernet')) {
+            for (final addr in interface.addresses) {
+              if (addr.type == InternetAddressType.IPv4 &&
+                  !addr.isLoopback &&
+                  addr.address.startsWith('192.168.')) {
+                serverIP = addr.address;
+                break;
+              }
+            }
+            if (serverIP != null) break;
+          }
+        }
+        // Fallback: any valid local IP
+        if (serverIP == null) {
+          for (final interface in interfaces) {
+            for (final addr in interface.addresses) {
+              if (addr.type == InternetAddressType.IPv4 &&
+                  !addr.isLoopback &&
+                  (addr.address.startsWith('192.168.') ||
+                      addr.address.startsWith('10.') ||
+                      addr.address.startsWith('172.'))) {
+                serverIP = addr.address;
+                break;
+              }
+            }
+            if (serverIP != null) break;
+          }
+        }
+      } catch (e) {
+        print('⚠️ Server IP alınamadı: $e');
+        serverIP = 'localhost';
+      }
+
       // Bağlantı başarılı bildirimi
       print('🎉 BAĞLANTI BAŞARILI! Mobil cihaz bağlandı');
       print('📱 Bağlanan cihaz: $clientName ($clientId)');
-      print('📱 IP: ${request.connectionInfo?.remoteAddress?.address}');
+      print('📱 Client IP: $clientIP');
+      print('💻 Server IP: $serverIP');
 
       // UI'ya bildirim gönder - HEMEN
       final deviceInfo = {
         'clientId': clientId,
         'clientName': clientName,
-        'ip': request.connectionInfo?.remoteAddress?.address ?? 'bilinmiyor',
+        'ip': clientIP,
         'timestamp': DateTime.now().toIso8601String(),
         'platform': data['platform'] ?? 'Mobil',
         'belgeSayisi': data['belgeSayisi'] ?? 0,
@@ -351,11 +395,21 @@ class HttpSunucuServisi {
         'token': token,
         'serverId': _cihazId,
         'serverName': _cihazAdi,
+        'serverIP': serverIP, // ✅ EKLENEN: Server IP bilgisi
+        'serverPort': SUNUCU_PORTU, // ✅ EKLENEN: Server port bilgisi
         'message': 'Bağlantı kuruldu',
         'serverInfo': {
           'platform': _platform,
           'belgeSayisi': await _veriTabani.toplamBelgeSayisi(),
           'toplamBoyut': await _veriTabani.toplamDosyaBoyutu(),
+          'ip': serverIP, // ✅ EKLENEN: Duplicate ama uyumluluk için
+        },
+        // ✅ EKLENEN: Bidirectional sync için endpoint bilgileri
+        'endpoints': {
+          'upload': 'http://$serverIP:$SUNUCU_PORTU/upload',
+          'download': 'http://$serverIP:$SUNUCU_PORTU/download',
+          'documents': 'http://$serverIP:$SUNUCU_PORTU/documents',
+          'connect': 'http://$serverIP:$SUNUCU_PORTU/connect',
         },
       });
     } catch (e) {
