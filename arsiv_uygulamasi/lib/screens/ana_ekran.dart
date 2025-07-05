@@ -6,6 +6,8 @@ import '../services/dosya_servisi.dart';
 import '../services/auth_servisi.dart';
 import '../services/cache_servisi.dart';
 import '../models/belge_modeli.dart';
+import '../models/kategori_modeli.dart';
+import '../models/kisi_modeli.dart';
 import '../utils/screen_utils.dart';
 import 'belgeler_ekrani.dart';
 import 'kategoriler_ekrani.dart';
@@ -14,6 +16,7 @@ import 'yeni_belge_ekle_ekrani.dart';
 import 'yedekleme_ekrani.dart';
 import 'senkronizasyon_ekrani.dart';
 import 'auth/login_screen.dart';
+import '../widgets/belge_karti_widget.dart';
 
 // Ana dashboard ve navigasyon
 class AnaEkran extends StatefulWidget {
@@ -32,7 +35,20 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   int _toplamBelgeSayisi = 0;
   int _toplamDosyaBoyutu = 0;
   List<BelgeModeli> _sonBelgeler = [];
+  List<Map<String, dynamic>> _detayliSonBelgeler = [];
   bool _yukleniyor = true;
+
+  List<BelgeModeli> _tumBelgeler = [];
+  List<BelgeModeli> _filtrelenmsBelgeler = [];
+  List<Map<String, dynamic>> _detayliBelgeler = [];
+  List<KategoriModeli> _kategoriler = [];
+  List<KisiModeli> _kisiler = [];
+  String _aramaMetni = '';
+  bool _dahaFazlaVarMi = true;
+
+  int _mevcutSayfa = 0;
+  final int _sayfaBoyutu = 20;
+  bool _dahaFazlaYukleniyor = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -76,6 +92,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
           _toplamBelgeSayisi = cachedIstatistikler['belge_sayisi'] ?? 0;
           _toplamDosyaBoyutu = cachedIstatistikler['dosya_boyutu'] ?? 0;
           _sonBelgeler = cachedBelgeler;
+          _detayliSonBelgeler = []; // Cache'te detaylı veri yok, boş bırak
           _yukleniyor = false;
         });
         _animationController.forward();
@@ -83,19 +100,26 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         return;
       }
 
-      // Cache yoksa veritabanından yükle
+      // Cache yoksa veritabanından yükle - yeni detaylı metodları kullan
       final futures = await Future.wait([
-        _veriTabani.toplamBelgeSayisi(),
-        _veriTabani.toplamDosyaBoyutu(),
-        _veriTabani.onceakliBelgeleriGetir(limit: 5),
+        _veriTabani.belgeIstatistikleriGetir(),
+        _veriTabani.onceakliBelgeleriDetayliGetir(limit: 5),
       ]);
 
       if (!mounted) return;
 
+      final istatistikler = futures[0] as Map<String, dynamic>;
+      final detayliBelgeler = futures[1] as List<Map<String, dynamic>>;
+
+      // Detaylı belgelerden normal belge modellerini oluştur
+      final sonBelgeler =
+          detayliBelgeler.map((data) => BelgeModeli.fromMap(data)).toList();
+
       setState(() {
-        _toplamBelgeSayisi = futures[0] as int;
-        _toplamDosyaBoyutu = futures[1] as int;
-        _sonBelgeler = futures[2] as List<BelgeModeli>;
+        _toplamBelgeSayisi = istatistikler['toplam_belge_sayisi'] ?? 0;
+        _toplamDosyaBoyutu = istatistikler['toplam_dosya_boyutu'] ?? 0;
+        _sonBelgeler = sonBelgeler;
+        _detayliSonBelgeler = detayliBelgeler;
         _yukleniyor = false;
       });
 
@@ -642,66 +666,27 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _sonBelgeler.length,
             itemBuilder: (context, index) {
-              return _buildModernBelgeKarti(_sonBelgeler[index]);
+              final belge = _sonBelgeler[index];
+
+              // Detaylı veri varsa onu kullan
+              Map<String, dynamic>? extraData;
+              if (index < _detayliSonBelgeler.length) {
+                extraData = _detayliSonBelgeler[index];
+              }
+
+              return OptimizedBelgeKartiWidget(
+                belge: belge,
+                extraData: extraData,
+                compactMode: true,
+                onTap: () {
+                  setState(() {
+                    _secilenTab = 1; // Belgeler sekmesine git
+                  });
+                },
+              );
             },
           ),
       ],
-    );
-  }
-
-  Widget _buildModernBelgeKarti(BelgeModeli belge) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            belge.dosyaTipiSimgesi,
-            style: const TextStyle(fontSize: 20),
-          ),
-        ),
-        title: Text(
-          belge.baslik ?? belge.orijinalDosyaAdi,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          '${belge.dosyaTipi.toUpperCase()} • ${belge.formatliDosyaBoyutu}',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-        ),
-        trailing: Icon(
-          Icons.arrow_forward_ios_rounded,
-          size: 16,
-          color: Colors.grey[400],
-        ),
-        onTap: () {
-          setState(() {
-            _secilenTab = 1; // Belgeler sekmesine git
-          });
-        },
-      ),
     );
   }
 

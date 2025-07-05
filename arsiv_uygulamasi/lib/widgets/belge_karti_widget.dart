@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/belge_modeli.dart';
 import '../utils/screen_utils.dart';
 import '../services/belge_islemleri_servisi.dart';
+import '../utils/yardimci_fonksiyonlar.dart';
 
 class OptimizedBelgeKartiWidget extends StatefulWidget {
   final BelgeModeli belge;
@@ -12,6 +13,7 @@ class OptimizedBelgeKartiWidget extends StatefulWidget {
   final VoidCallback? onDuzenle;
   final VoidCallback? onSil;
   final bool compactMode;
+  final Map<String, dynamic>? extraData; // Kategori, kişi bilgileri için
 
   const OptimizedBelgeKartiWidget({
     Key? key,
@@ -23,6 +25,7 @@ class OptimizedBelgeKartiWidget extends StatefulWidget {
     this.onDuzenle,
     this.onSil,
     this.compactMode = false,
+    this.extraData,
   }) : super(key: key);
 
   @override
@@ -64,12 +67,16 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
             contentPadding: const EdgeInsets.all(12),
             leading: _buildLeading(),
             title: _buildTitle(),
-            subtitle: _buildSubtitle(),
+            subtitle: _buildCompactSubtitle(),
             onTap:
                 widget.onTap ??
                 () => _belgeIslemleri.belgeAc(widget.belge, context),
             onLongPress: widget.onLongPress,
           ),
+
+          // Kategori, kişi ve etiket bilgileri
+          if (_hasExtraInfo()) _buildExtraInfoSection(),
+
           // Aksiyon butonları
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -143,60 +150,71 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
                 children: [
-                  // Dosya ikonu
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        widget.belge.dosyaTipiSimgesi,
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-
-                  // Belge bilgileri
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Başlık
-                        Text(
-                          widget.belge.baslik ?? widget.belge.orijinalDosyaAdi,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                  Row(
+                    children: [
+                      // Dosya ikonu
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: _getKategoriRengi().withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Text(
+                            widget.belge.dosyaTipiSimgesi,
+                            style: const TextStyle(fontSize: 24),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
+                      ),
+                      const SizedBox(width: 16),
 
-                        // Dosya tipi ve boyut
-                        Text(
-                          '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.grey[600]),
-                        ),
-                        const SizedBox(height: 4),
+                      // Belge bilgileri
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Başlık
+                            Text(
+                              widget.belge.baslik ??
+                                  widget.belge.orijinalDosyaAdi,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
 
-                        // Zaman bilgisi
-                        Text(
-                          widget.belge.zamanFarki,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.grey[500]),
+                            // Dosya tipi ve boyut
+                            Text(
+                              '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: Colors.grey[600]),
+                            ),
+                            const SizedBox(height: 4),
+
+                            // Zaman bilgisi
+                            Text(
+                              widget.belge.zamanFarki,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: Colors.grey[500]),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+
+                  // Kategori, kişi ve etiket bilgileri
+                  if (_hasExtraInfo()) ...[
+                    const SizedBox(height: 12),
+                    _buildExtraInfoSection(),
+                  ],
                 ],
               ),
             ),
@@ -263,7 +281,7 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
     return Container(
       padding: EdgeInsets.all(widget.compactMode ? 8 : 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).primaryColor.withOpacity(0.1),
+        color: _getKategoriRengi().withOpacity(0.1),
         borderRadius: BorderRadius.circular(widget.compactMode ? 6 : 10),
       ),
       child: Text(
@@ -285,12 +303,115 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
     );
   }
 
-  Widget _buildSubtitle() {
-    return Text(
-      '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: Colors.grey[600],
-        fontSize: widget.compactMode ? 12 : 14,
+  Widget _buildCompactSubtitle() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.grey[600],
+            fontSize: widget.compactMode ? 12 : 14,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          widget.belge.zamanFarki,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.grey[500],
+            fontSize: widget.compactMode ? 11 : 13,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExtraInfoSection() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Kategori bilgisi
+          if (_getKategoriAdi() != null) ...[
+            Row(
+              children: [
+                Icon(Icons.category, size: 16, color: _getKategoriRengi()),
+                const SizedBox(width: 4),
+                Text(
+                  _getKategoriAdi()!,
+                  style: TextStyle(
+                    fontSize: widget.compactMode ? 11 : 12,
+                    fontWeight: FontWeight.w500,
+                    color: _getKategoriRengi(),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
+
+          // Kişi bilgisi
+          if (_getKisiAdi() != null) ...[
+            Row(
+              children: [
+                Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  _getKisiAdi()!,
+                  style: TextStyle(
+                    fontSize: widget.compactMode ? 11 : 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
+
+          // Etiketler
+          if (_getEtiketler().isNotEmpty) ...[
+            Row(
+              children: [
+                Icon(Icons.label, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 2,
+                    children:
+                        _getEtiketler().map((etiket) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.blue[200]!),
+                            ),
+                            child: Text(
+                              etiket,
+                              style: TextStyle(
+                                fontSize: widget.compactMode ? 10 : 11,
+                                color: Colors.blue[700],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -363,6 +484,45 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
         ),
       ),
     );
+  }
+
+  // Yardımcı metodlar
+  bool _hasExtraInfo() {
+    return _getKategoriAdi() != null ||
+        _getKisiAdi() != null ||
+        _getEtiketler().isNotEmpty;
+  }
+
+  String? _getKategoriAdi() {
+    return widget.extraData?['kategori_adi'];
+  }
+
+  String? _getKisiAdi() {
+    final ad = widget.extraData?['kisi_ad'];
+    final soyad = widget.extraData?['kisi_soyad'];
+    if (ad != null && soyad != null) {
+      return '$ad $soyad';
+    }
+    return null;
+  }
+
+  List<String> _getEtiketler() {
+    if (widget.belge.etiketler != null && widget.belge.etiketler!.isNotEmpty) {
+      return widget.belge.etiketler!;
+    }
+    return [];
+  }
+
+  Color _getKategoriRengi() {
+    final renkKodu = widget.extraData?['renk_kodu'];
+    if (renkKodu != null) {
+      try {
+        return Color(int.parse(renkKodu.replaceFirst('#', '0xFF')));
+      } catch (e) {
+        return Theme.of(context).primaryColor;
+      }
+    }
+    return Theme.of(context).primaryColor;
   }
 
   void _belgeDuzenle(BuildContext context) {

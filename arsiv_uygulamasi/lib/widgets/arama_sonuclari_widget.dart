@@ -16,6 +16,7 @@ enum AramaGorunumTuru { liste, kompakt }
 
 class AramaSonuclariWidget extends StatelessWidget {
   final List<BelgeModeli> belgeler;
+  final List<Map<String, dynamic>>? detayliBelgeler; // Detaylı veri için
   final List<KategoriModeli> kategoriler;
   final List<KisiModeli> kisiler;
   final AramaSiralamaTuru siralamaTuru;
@@ -35,6 +36,7 @@ class AramaSonuclariWidget extends StatelessWidget {
   const AramaSonuclariWidget({
     Key? key,
     required this.belgeler,
+    this.detayliBelgeler,
     required this.kategoriler,
     required this.kisiler,
     required this.siralamaTuru,
@@ -682,11 +684,18 @@ class AramaSonuclariWidget extends StatelessWidget {
       itemBuilder: (context, index) {
         final belge = belgeler[index];
 
+        // Detaylı veri varsa onu kullan
+        Map<String, dynamic>? extraData;
+        if (detayliBelgeler != null && index < detayliBelgeler!.length) {
+          extraData = detayliBelgeler![index];
+        }
+
         // Hem mobil hem PC için detaylı kart kullan
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: OptimizedBelgeKartiWidget(
             belge: belge,
+            extraData: extraData, // Kategori, kişi ve diğer detay bilgileri
             onTap: () => _belgeDetayGoster(context, belge),
             onLongPress: () => _belgeDetayGoster(context, belge),
             onAc: () => _belgeAc(context, belge),

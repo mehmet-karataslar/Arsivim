@@ -4,7 +4,14 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="Readme eklendi" />
+    <list default="true" id="c6750622-ccd4-4189-b7d2-5de5cde3a805" name="Changes" comment="Readme eklendi">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/ana_ekran.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/belgeler_ekrani.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/screens/belgeler_ekrani.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/veritabani_servisi.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/services/veritabani_servisi.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/arama_sonuclari_widget.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/belge_karti_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/arsiv_uygulamasi/lib/widgets/belge_karti_widget.dart" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -47,7 +54,6 @@
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
-    "dart.analysis.tool.window.visible": "false",
     "git-widget-placeholder": "master",
     "io.flutter.reload.alreadyRun": "true",
     "kotlin-language-version-configured": "true",

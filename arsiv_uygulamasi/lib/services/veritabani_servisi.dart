@@ -533,6 +533,34 @@ class VeriTabaniServisi {
     });
   }
 
+  // Belgeleri kategori ve kişi bilgileri ile birlikte getir - JOIN kullanımı
+  Future<List<Map<String, dynamic>>> belgeleriDetayliGetir({
+    int? limit = 20,
+    int? offset = 0,
+  }) async {
+    final db = await database;
+    final List<Map<String, dynamic>> results = await db.rawQuery(
+      '''
+      SELECT 
+        b.*,
+        k.kategori_adi,
+        k.renk_kodu,
+        k.simge_kodu,
+        ki.ad as kisi_ad,
+        ki.soyad as kisi_soyad
+      FROM belgeler b
+      LEFT JOIN kategoriler k ON b.kategori_id = k.id
+      LEFT JOIN kisiler ki ON b.kisi_id = ki.id
+      WHERE b.aktif = 1
+      ORDER BY b.guncelleme_tarihi DESC
+      LIMIT ? OFFSET ?
+    ''',
+      [limit, offset],
+    );
+
+    return results;
+  }
+
   // ID'ye göre belge getir
   Future<BelgeModeli?> belgeGetir(int id) async {
     final db = await database;
@@ -567,6 +595,35 @@ class VeriTabaniServisi {
     return List.generate(maps.length, (i) {
       return BelgeModeli.fromMap(maps[i]);
     });
+  }
+
+  // Belgeleri kategori ve kişi bilgileri ile birlikte getir - JOIN kullanımı
+  Future<List<Map<String, dynamic>>> kategoriyeGoreBelgeleriDetayliGetir(
+    int kategoriId, {
+    int? limit,
+    int? offset,
+  }) async {
+    final db = await database;
+    final List<Map<String, dynamic>> results = await db.rawQuery(
+      '''
+      SELECT 
+        b.*,
+        k.kategori_adi,
+        k.renk_kodu,
+        k.simge_kodu,
+        ki.ad as kisi_ad,
+        ki.soyad as kisi_soyad
+      FROM belgeler b
+      LEFT JOIN kategoriler k ON b.kategori_id = k.id
+      LEFT JOIN kisiler ki ON b.kisi_id = ki.id
+      WHERE b.kategori_id = ? AND b.aktif = 1
+      ORDER BY b.guncelleme_tarihi DESC
+      LIMIT ? OFFSET ?
+    ''',
+      [kategoriId, limit, offset],
+    );
+
+    return results;
   }
 
   // Hash'e göre belge getir
@@ -1030,6 +1087,78 @@ class VeriTabaniServisi {
     return List.generate(maps.length, (i) {
       return BelgeModeli.fromMap(maps[i]);
     });
+  }
+
+  // Öncelikli belgeleri detaylı getir (ana sayfa için)
+  Future<List<Map<String, dynamic>>> onceakliBelgeleriDetayliGetir({
+    int limit = 5,
+  }) async {
+    final db = await database;
+    final List<Map<String, dynamic>> results = await db.rawQuery(
+      '''
+      SELECT 
+        b.*,
+        k.kategori_adi,
+        k.renk_kodu,
+        k.simge_kodu,
+        ki.ad as kisi_ad,
+        ki.soyad as kisi_soyad
+      FROM belgeler b
+      LEFT JOIN kategoriler k ON b.kategori_id = k.id
+      LEFT JOIN kisiler ki ON b.kisi_id = ki.id
+      WHERE b.aktif = 1
+      ORDER BY b.guncelleme_tarihi DESC
+      LIMIT ?
+    ''',
+      [limit],
+    );
+
+    return results;
+  }
+
+  // Belge istatistiklerini getir
+  Future<Map<String, dynamic>> belgeIstatistikleriGetir() async {
+    final db = await database;
+
+    // Toplam belge sayısı
+    final belgeResult = await db.rawQuery(
+      'SELECT COUNT(*) as sayi FROM belgeler WHERE aktif = 1',
+    );
+    final belgeSayisi = Sqflite.firstIntValue(belgeResult) ?? 0;
+
+    // Toplam dosya boyutu
+    final boyutResult = await db.rawQuery(
+      'SELECT SUM(dosya_boyutu) as toplam FROM belgeler WHERE aktif = 1',
+    );
+    final toplamBoyut = Sqflite.firstIntValue(boyutResult) ?? 0;
+
+    // Son 30 günde eklenen belge sayısı
+    final tarih30GunOnce = DateTime.now().subtract(const Duration(days: 30));
+    final yeniResult = await db.rawQuery(
+      'SELECT COUNT(*) as sayi FROM belgeler WHERE aktif = 1 AND olusturma_tarihi > ?',
+      [tarih30GunOnce.toIso8601String()],
+    );
+    final yeniBelgeSayisi = Sqflite.firstIntValue(yeniResult) ?? 0;
+
+    // Kategorilere göre dağılım
+    final kategoriResult = await db.rawQuery('''
+      SELECT 
+        k.kategori_adi,
+        COUNT(b.id) as belge_sayisi
+      FROM kategoriler k
+      LEFT JOIN belgeler b ON k.id = b.kategori_id AND b.aktif = 1
+      WHERE k.aktif = 1
+      GROUP BY k.id, k.kategori_adi
+      ORDER BY belge_sayisi DESC
+      LIMIT 5
+    ''');
+
+    return {
+      'toplam_belge_sayisi': belgeSayisi,
+      'toplam_dosya_boyutu': toplamBoyut,
+      'yeni_belge_sayisi': yeniBelgeSayisi,
+      'kategori_dagilimi': kategoriResult,
+    };
   }
 
   // VERİTABANI YÖNETİMİ

@@ -23,6 +23,7 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
 
   List<BelgeModeli> _tumBelgeler = [];
   List<BelgeModeli> _filtrelenmsBelgeler = [];
+  List<Map<String, dynamic>> _detayliBelgeler = []; // Detaylı belge verisi için
   List<KategoriModeli> _kategoriler = [];
   List<KisiModeli> _kisiler = [];
   bool _yukleniyor = true;
@@ -52,9 +53,23 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   @override
   void initState() {
     super.initState();
-    _mevcutKategoriId = widget.kategoriId;
     _scrollController.addListener(_scrollListener);
-    _verileriYukle();
+    _aramaController.addListener(() {
+      setState(() {
+        _aramaMetni = _aramaController.text;
+      });
+      _belgeleriFiltrele();
+    });
+
+    // Argumentleri al
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null) {
+        _mevcutKategoriId = args['kategori_id'];
+      }
+      _verileriYukle();
+    });
   }
 
   @override
@@ -80,16 +95,16 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
 
     try {
       _mevcutSayfa++;
-      List<BelgeModeli> yeniBelgeler;
+      List<Map<String, dynamic>> yeniBelgeler;
 
       if (_mevcutKategoriId != null) {
-        yeniBelgeler = await _veriTabani.kategoriyeGoreBelgeleriGetir(
+        yeniBelgeler = await _veriTabani.kategoriyeGoreBelgeleriDetayliGetir(
           _mevcutKategoriId!,
           limit: _sayfaBoyutu,
           offset: _mevcutSayfa * _sayfaBoyutu,
         );
       } else {
-        yeniBelgeler = await _veriTabani.belgeleriGetir(
+        yeniBelgeler = await _veriTabani.belgeleriDetayliGetir(
           limit: _sayfaBoyutu,
           offset: _mevcutSayfa * _sayfaBoyutu,
         );
@@ -97,7 +112,11 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
 
       if (mounted) {
         setState(() {
-          _tumBelgeler.addAll(yeniBelgeler);
+          _detayliBelgeler.addAll(yeniBelgeler);
+          // Eski belge listesini de güncelle
+          _tumBelgeler.addAll(
+            yeniBelgeler.map((data) => BelgeModeli.fromMap(data)).toList(),
+          );
           _dahaFazlaVarMi = yeniBelgeler.length == _sayfaBoyutu;
           _dahaFazlaYukleniyor = false;
         });
@@ -118,14 +137,15 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
     });
 
     try {
-      List<BelgeModeli> belgeler;
+      List<Map<String, dynamic>> detayliBelgeler;
       if (_mevcutKategoriId != null) {
-        belgeler = await _veriTabani.kategoriyeGoreBelgeleriGetir(
+        detayliBelgeler = await _veriTabani.kategoriyeGoreBelgeleriDetayliGetir(
           _mevcutKategoriId!,
         );
       } else {
-        belgeler = await _veriTabani.belgeleriGetir();
+        detayliBelgeler = await _veriTabani.belgeleriDetayliGetir();
       }
+
       final kategoriler = await _veriTabani.kategorileriGetir();
       final kisiler = await _veriTabani.kisileriGetir();
 
@@ -142,7 +162,9 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
       }
 
       setState(() {
-        _tumBelgeler = belgeler;
+        _detayliBelgeler = detayliBelgeler;
+        _tumBelgeler =
+            detayliBelgeler.map((data) => BelgeModeli.fromMap(data)).toList();
         _kategoriler = kategoriler;
         _kisiler = kisiler;
         _mevcutKategori = mevcutKategori;
@@ -358,6 +380,7 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
               Expanded(
                 child: AramaSonuclariWidget(
                   belgeler: _filtrelenmsBelgeler,
+                  detayliBelgeler: _detayliBelgeler,
                   kategoriler: _kategoriler,
                   kisiler: _kisiler,
                   siralamaTuru: _siralamaTuru,
