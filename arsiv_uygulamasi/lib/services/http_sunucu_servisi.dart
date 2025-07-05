@@ -101,6 +101,20 @@ class HttpSunucuServisi {
             case '/sync/deltas':
               responseBody = await _handleSyncDeltas();
               break;
+            case '/metadata/sync':
+              if (request.method == 'POST') {
+                responseBody = await _handleMetadataSync(request);
+              } else {
+                statusCode = 405;
+                responseBody = json.encode({'error': 'Method not allowed'});
+              }
+              break;
+            case '/metadata/changes':
+              responseBody = await _handleMetadataChanges(request);
+              break;
+            case '/metadata/conflicts':
+              responseBody = await _handleMetadataConflicts(request);
+              break;
             default:
               if (request.uri.path.startsWith('/download/')) {
                 responseBody = await _handleDownload(request);
@@ -337,12 +351,23 @@ class HttpSunucuServisi {
                   'id': belge.id,
                   'dosyaAdi': belge.dosyaAdi,
                   'dosyaBoyutu': belge.dosyaBoyutu,
+                  'dosyaTipi': belge.dosyaTipi,
+                  'dosyaHash': belge.dosyaHash,
                   'olusturmaTarihi': belge.olusturmaTarihi.toIso8601String(),
                   'kategoriId': belge.kategoriId,
                   'baslik': belge.baslik,
                   'aciklama': belge.aciklama,
                   'kisiId': belge.kisiId,
                   'etiketler': belge.etiketler,
+                  // Ek backward compatibility için
+                  'fileName': belge.dosyaAdi,
+                  'fileType': belge.dosyaTipi,
+                  'hash': belge.dosyaHash,
+                  'categoryId': belge.kategoriId,
+                  'personId': belge.kisiId,
+                  'title': belge.baslik,
+                  'description': belge.aciklama,
+                  'tags': belge.etiketler,
                 },
               )
               .toList();
@@ -469,6 +494,14 @@ class HttpSunucuServisi {
                   'olusturmaTarihi': kategori.olusturmaTarihi.toIso8601String(),
                   'aktif': kategori.aktif,
                   'belgeSayisi': kategori.belgeSayisi,
+                  // Backward compatibility için İngilizce field'ları da ekle
+                  'name': kategori.kategoriAdi,
+                  'color': kategori.renkKodu,
+                  'icon': kategori.simgeKodu,
+                  'description': kategori.aciklama,
+                  'createdAt': kategori.olusturmaTarihi.toIso8601String(),
+                  'active': kategori.aktif,
+                  'documentCount': kategori.belgeSayisi,
                 },
               )
               .toList();
@@ -504,6 +537,13 @@ class HttpSunucuServisi {
                   'olusturmaTarihi': kisi.olusturmaTarihi.toIso8601String(),
                   'guncellemeTarihi': kisi.guncellemeTarihi.toIso8601String(),
                   'aktif': kisi.aktif,
+                  // Backward compatibility için İngilizce field'ları da ekle
+                  'firstName': kisi.ad,
+                  'lastName': kisi.soyad,
+                  'fullName': kisi.tamAd,
+                  'createdAt': kisi.olusturmaTarihi.toIso8601String(),
+                  'updatedAt': kisi.guncellemeTarihi.toIso8601String(),
+                  'active': kisi.aktif,
                 },
               )
               .toList();
@@ -1147,5 +1187,203 @@ class HttpSunucuServisi {
         'message': e.toString(),
       });
     }
+  }
+
+  // New metadata synchronization endpoints
+
+  /// Metadata senkronizasyon endpoint'i - POST /metadata/sync
+  Future<String> _handleMetadataSync(HttpRequest request) async {
+    try {
+      final body = await utf8.decoder.bind(request).join();
+      final data = json.decode(body);
+      final changes = List<Map<String, dynamic>>.from(data['changes'] ?? []);
+      final deviceId = request.headers.value('X-Device-ID') ?? 'unknown';
+
+      print(
+        '📥 Metadata sync: ${changes.length} değişiklik alındı ($deviceId)',
+      );
+
+      final processedIds = <int>[];
+
+      for (final change in changes) {
+        try {
+          final belgeId = change['belge_id'] as int?;
+          if (belgeId == null) continue;
+
+          final belge = await _veriTabani.belgeGetir(belgeId);
+          if (belge == null) continue;
+
+          // Metadata değişikliklerini uygula
+          final updatedBelge = _applyMetadataChanges(belge, change);
+          await _veriTabani.belgeGuncelle(updatedBelge);
+
+          processedIds.add(change['id'] as int);
+          print('✅ Metadata güncellendi: ${belge.dosyaAdi}');
+        } catch (e) {
+          print('❌ Metadata güncelleme hatası: $e');
+        }
+      }
+
+      return json.encode({
+        'status': 'success',
+        'processed_count': processedIds.length,
+        'processed_ids': processedIds,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Metadata sync endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Metadata sync hatası: $e',
+      });
+    }
+  }
+
+  /// Metadata değişikliklerini getir - GET /metadata/changes
+  Future<String> _handleMetadataChanges(HttpRequest request) async {
+    try {
+      final queryParams = request.uri.queryParameters;
+      final sinceParam = queryParams['since'];
+      final deviceId = queryParams['device_id'] ?? 'unknown';
+
+      DateTime since = DateTime.now().subtract(Duration(days: 1));
+      if (sinceParam != null && sinceParam.isNotEmpty) {
+        try {
+          since = DateTime.parse(sinceParam);
+        } catch (e) {
+          print('⚠️ Geçersiz since parametresi: $sinceParam');
+        }
+      }
+
+      print('📤 Metadata değişiklikleri istendi: $deviceId, since: $since');
+
+      // Son değişiklikleri al
+      final belgeler = await _veriTabani.belgeleriGetir();
+      final changes = <Map<String, dynamic>>[];
+
+      for (final belge in belgeler) {
+        if (belge.guncellemeTarihi.isAfter(since)) {
+          changes.add({
+            'belge_id': belge.id,
+            'dosya_hash': belge.dosyaHash,
+            'metadata_hash': _generateMetadataHash(belge),
+            'baslik': belge.baslik,
+            'aciklama': belge.aciklama,
+            'etiketler': belge.etiketler?.join(','),
+            'kategori_id': belge.kategoriId,
+            'kisi_id': belge.kisiId,
+            'guncelleme_tarihi': belge.guncellemeTarihi.toIso8601String(),
+            'change_type': 'UPDATE',
+          });
+        }
+      }
+
+      print('📊 ${changes.length} metadata değişikliği gönderiliyor');
+
+      return json.encode({
+        'status': 'success',
+        'changes': changes,
+        'count': changes.length,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Metadata changes endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Metadata changes hatası: $e',
+        'changes': [],
+      });
+    }
+  }
+
+  /// Metadata çakışmalarını getir - GET /metadata/conflicts
+  Future<String> _handleMetadataConflicts(HttpRequest request) async {
+    try {
+      final db = await _veriTabani.database;
+
+      // Bekleyen çakışmaları al
+      final conflicts = await db.rawQuery('''
+        SELECT 
+          mc.*,
+          b.dosya_adi,
+          b.baslik
+        FROM metadata_conflicts mc
+        LEFT JOIN belgeler b ON mc.belge_id = b.id
+        WHERE mc.status = 'PENDING'
+        ORDER BY mc.conflict_time DESC
+        LIMIT 50
+      ''');
+
+      print('📋 ${conflicts.length} metadata çakışması gönderiliyor');
+
+      return json.encode({
+        'status': 'success',
+        'conflicts': conflicts,
+        'count': conflicts.length,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Metadata conflicts endpoint hatası: $e');
+      return json.encode({
+        'status': 'error',
+        'message': 'Metadata conflicts hatası: $e',
+        'conflicts': [],
+      });
+    }
+  }
+
+  /// Metadata değişikliklerini belgeye uygula
+  BelgeModeli _applyMetadataChanges(
+    BelgeModeli belge,
+    Map<String, dynamic> change,
+  ) {
+    return BelgeModeli(
+      id: belge.id,
+      dosyaAdi: belge.dosyaAdi,
+      orijinalDosyaAdi: belge.orijinalDosyaAdi,
+      dosyaYolu: belge.dosyaYolu,
+      dosyaBoyutu: belge.dosyaBoyutu,
+      dosyaTipi: belge.dosyaTipi,
+      dosyaHash: belge.dosyaHash,
+      baslik: change['yeni_deger'] ?? belge.baslik,
+      aciklama: change['aciklama'] ?? belge.aciklama,
+      etiketler:
+          _parseEtiketler(change['etiketler']?.toString()) ?? belge.etiketler,
+      kategoriId: change['kategori_id'] as int? ?? belge.kategoriId,
+      kisiId: change['kisi_id'] as int? ?? belge.kisiId,
+      olusturmaTarihi: belge.olusturmaTarihi,
+      guncellemeTarihi: DateTime.now(),
+      sonErisimTarihi: belge.sonErisimTarihi,
+      aktif: belge.aktif,
+      senkronDurumu: belge.senkronDurumu,
+    );
+  }
+
+  /// Etiketleri parse et
+  List<String>? _parseEtiketler(String? etiketlerString) {
+    if (etiketlerString == null || etiketlerString.isEmpty) return null;
+    return etiketlerString
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  /// Metadata hash oluştur
+  String _generateMetadataHash(BelgeModeli belge) {
+    final metadataMap = {
+      'baslik': belge.baslik ?? '',
+      'aciklama': belge.aciklama ?? '',
+      'etiketler': belge.etiketler?.join(',') ?? '',
+      'kategori_id': belge.kategoriId ?? 0,
+      'kisi_id': belge.kisiId ?? 0,
+      'dosya_adi': belge.dosyaAdi,
+      'dosya_tipi': belge.dosyaTipi,
+    };
+
+    final metadataJson = json.encode(metadataMap);
+    final bytes = utf8.encode(metadataJson);
+    final digest = md5.convert(bytes);
+    return digest.toString();
   }
 }

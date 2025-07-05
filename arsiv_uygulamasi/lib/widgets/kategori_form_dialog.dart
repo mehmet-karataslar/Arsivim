@@ -302,7 +302,6 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
     final kategori = KategoriModeli(
       id: widget.kategori?.id,
       kategoriAdi: kategoriAdi,
-      ustKategoriId: null,
       renkKodu: _secilenRenk,
       simgeKodu: _secilenSimge,
       aciklama:

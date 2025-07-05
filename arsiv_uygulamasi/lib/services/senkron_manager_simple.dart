@@ -243,16 +243,26 @@ class SenkronManagerSimple {
     final localCategories = await veriTabani.kategorileriGetir();
 
     for (final remoteCategory in remoteCategories) {
-      final categoryName = remoteCategory['name'] ?? remoteCategory['ad'];
+      // Türkçe field isimleri ile uyumlu hale getir
+      final categoryName =
+          remoteCategory['kategoriAdi'] ??
+          remoteCategory['ad'] ??
+          remoteCategory['name'];
       if (categoryName == null) continue;
 
-      final exists = localCategories.any((cat) => cat.ad == categoryName);
+      final exists = localCategories.any(
+        (cat) => cat.kategoriAdi == categoryName,
+      );
 
       if (!exists) {
         final newCategory = KategoriModeli(
           kategoriAdi: categoryName,
-          renkKodu: remoteCategory['color'] ?? '#2196F3',
-          simgeKodu: remoteCategory['icon'] ?? 'folder',
+          renkKodu:
+              remoteCategory['renkKodu'] ??
+              remoteCategory['color'] ??
+              '#2196F3',
+          simgeKodu:
+              remoteCategory['simgeKodu'] ?? remoteCategory['icon'] ?? 'folder',
           olusturmaTarihi: DateTime.now(),
         );
 
@@ -268,8 +278,9 @@ class SenkronManagerSimple {
     final localPeople = await veriTabani.kisileriGetir();
 
     for (final remotePerson in remotePeople) {
-      final firstName = remotePerson['firstName'] ?? remotePerson['ad'];
-      final lastName = remotePerson['lastName'] ?? remotePerson['soyad'];
+      // Türkçe field isimleri ile uyumlu hale getir
+      final firstName = remotePerson['ad'] ?? remotePerson['firstName'];
+      final lastName = remotePerson['soyad'] ?? remotePerson['lastName'];
 
       if (firstName == null || lastName == null) continue;
 
@@ -296,7 +307,8 @@ class SenkronManagerSimple {
     SenkronCihazi cihaz,
     Map<String, dynamic> docData,
   ) async {
-    final fileName = docData['fileName'] ?? docData['dosyaAdi'];
+    // Türkçe field isimleri ile uyumlu hale getir
+    final fileName = docData['dosyaAdi'] ?? docData['fileName'];
     if (fileName == null) return;
 
     // Dosyayı indir
@@ -326,13 +338,13 @@ class SenkronManagerSimple {
       orijinalDosyaAdi: fileName,
       dosyaYolu: filePath,
       dosyaBoyutu: response.bodyBytes.length,
-      dosyaTipi: docData['fileType'] ?? 'unknown',
+      dosyaTipi: docData['dosyaTipi'] ?? docData['fileType'] ?? 'unknown',
       dosyaHash: fileHash,
       olusturmaTarihi: DateTime.now(),
       guncellemeTarihi: DateTime.now(),
-      kategoriId: docData['categoryId'] ?? 1,
-      baslik: docData['title'],
-      aciklama: docData['description'],
+      kategoriId: docData['kategoriId'] ?? docData['categoryId'] ?? 1,
+      baslik: docData['baslik'] ?? docData['title'],
+      aciklama: docData['aciklama'] ?? docData['description'],
     );
 
     await veriTabani.belgeEkle(belge);

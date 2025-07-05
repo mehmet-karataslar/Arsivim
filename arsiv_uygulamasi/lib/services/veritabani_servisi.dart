@@ -58,8 +58,7 @@ class VeriTabaniServisi {
         simge_kodu TEXT DEFAULT 'folder',
         aciklama TEXT,
         olusturma_tarihi TEXT NOT NULL,
-        aktif INTEGER DEFAULT 1,
-        FOREIGN KEY (ust_kategori_id) REFERENCES kategoriler(id)
+        aktif INTEGER DEFAULT 1
       )
     ''');
 
@@ -83,6 +82,9 @@ class VeriTabaniServisi {
         son_erisim_tarihi TEXT,
         aktif INTEGER DEFAULT 1,
         senkron_durumu INTEGER DEFAULT 0,
+        versiyon_numarasi INTEGER DEFAULT 1,
+        metadata_hash TEXT,
+        son_metadata_guncelleme TEXT,
         FOREIGN KEY (kategori_id) REFERENCES kategoriler(id),
         FOREIGN KEY (kisi_id) REFERENCES kisiler(id)
       )
@@ -100,6 +102,49 @@ class VeriTabaniServisi {
         durum TEXT DEFAULT 'BEKLEMEDE',
         hata_mesaji TEXT,
         FOREIGN KEY (belge_id) REFERENCES belgeler(id)
+      )
+    ''');
+
+    // Senkronizasyon durumu tablosu (raporda belirtilen)
+    await db.execute('''
+      CREATE TABLE senkron_state (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dosya_hash TEXT NOT NULL UNIQUE,
+        son_sync_zamani TEXT NOT NULL,
+        sync_durumu TEXT NOT NULL DEFAULT 'PENDING',
+        cihaz_id TEXT,
+        metadata_hash TEXT,
+        olusturma_tarihi TEXT NOT NULL
+      )
+    ''');
+
+    // Belge versiyonları tablosu (raporda belirtilen)
+    await db.execute('''
+      CREATE TABLE belge_versiyonlari (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        belge_id INTEGER NOT NULL,
+        versiyon_numarasi INTEGER NOT NULL,
+        dosya_hash TEXT NOT NULL,
+        metadata_hash TEXT,
+        degisiklik_aciklamasi TEXT,
+        olusturan_cihaz TEXT,
+        olusturma_tarihi TEXT NOT NULL,
+        FOREIGN KEY (belge_id) REFERENCES belgeler(id)
+      )
+    ''');
+
+    // Metadata değişiklikleri tablosu (raporda belirtilen)
+    await db.execute('''
+      CREATE TABLE metadata_degisiklikleri (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        degisiklik_tipi TEXT NOT NULL,
+        eski_deger TEXT,
+        yeni_deger TEXT,
+        degisiklik_zamani TEXT NOT NULL,
+        cihaz_id TEXT,
+        sync_edildi INTEGER DEFAULT 0
       )
     ''');
 
@@ -127,9 +172,108 @@ class VeriTabaniServisi {
       // Belgeler tablosuna kisi_id sütunu ekle
       await db.execute('ALTER TABLE belgeler ADD COLUMN kisi_id INTEGER');
     }
+
+    if (oldVersion < 3) {
+      // metadata_degisiklikleri tablosunda sync_durumu kolonu sync_edildi olarak değiştir
+      try {
+        // Önce kolonu kontrol et
+        final columns = await db.rawQuery(
+          "PRAGMA table_info(metadata_degisiklikleri)",
+        );
+        final hasOldColumn = columns.any((col) => col['name'] == 'sync_durumu');
+
+        if (hasOldColumn) {
+          // Eski tabloyu yedekle
+          await db.execute('''
+            CREATE TABLE metadata_degisiklikleri_backup AS 
+            SELECT * FROM metadata_degisiklikleri
+          ''');
+
+          // Eski tabloyu sil
+          await db.execute('DROP TABLE metadata_degisiklikleri');
+
+          // Yeni tabloyu oluştur
+          await db.execute('''
+            CREATE TABLE metadata_degisiklikleri (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              entity_type TEXT NOT NULL,
+              entity_id INTEGER NOT NULL,
+              degisiklik_tipi TEXT NOT NULL,
+              eski_deger TEXT,
+              yeni_deger TEXT,
+              degisiklik_zamani TEXT NOT NULL,
+              cihaz_id TEXT,
+              sync_edildi INTEGER DEFAULT 0
+            )
+          ''');
+
+          // Verileri geri aktar (sync_durumu -> sync_edildi conversion)
+          await db.execute('''
+            INSERT INTO metadata_degisiklikleri 
+            (id, entity_type, entity_id, degisiklik_tipi, eski_deger, yeni_deger, degisiklik_zamani, cihaz_id, sync_edildi)
+            SELECT 
+              id, entity_type, entity_id, degisiklik_tipi, eski_deger, yeni_deger, degisiklik_zamani, cihaz_id,
+              CASE WHEN sync_durumu = 'SYNCED' THEN 1 ELSE 0 END
+            FROM metadata_degisiklikleri_backup
+          ''');
+
+          // Backup tabloyu sil
+          await db.execute('DROP TABLE metadata_degisiklikleri_backup');
+
+          print(
+            '✅ metadata_degisiklikleri tablosu güncellendi (sync_durumu -> sync_edildi)',
+          );
+        }
+      } catch (e) {
+        print('⚠️ metadata_degisiklikleri migration hatası: $e');
+      }
+    }
+
+    if (oldVersion < 4) {
+      // Aggressive migration - metadata_degisiklikleri tablosunu tamamen yeniden oluştur
+      try {
+        print(
+          '🔄 V4 Migration başlatılıyor - metadata_degisiklikleri yeniden oluşturuluyor...',
+        );
+
+        // Eski tabloyu tamamen sil
+        await db.execute('DROP TABLE IF EXISTS metadata_degisiklikleri');
+
+        // Yeni tabloyu doğru schema ile oluştur
+        await db.execute('''
+          CREATE TABLE metadata_degisiklikleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER NOT NULL,
+            degisiklik_tipi TEXT NOT NULL,
+            eski_deger TEXT,
+            yeni_deger TEXT,
+            degisiklik_zamani TEXT NOT NULL,
+            cihaz_id TEXT,
+            sync_edildi INTEGER DEFAULT 0
+          )
+        ''');
+
+        // Indexleri de yeniden oluştur
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_metadata_entity ON metadata_degisiklikleri(entity_type, entity_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_metadata_zaman ON metadata_degisiklikleri(degisiklik_zamani)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
+        );
+
+        print('✅ metadata_degisiklikleri tablosu V4 ile yeniden oluşturuldu');
+      } catch (e) {
+        print('❌ V4 migration hatası: $e');
+      }
+    }
   }
 
   Future<void> _createIndexes(Database db) async {
+    // Belgeler tablosu indeksleri
     await db.execute('CREATE INDEX idx_belgeler_hash ON belgeler(dosya_hash)');
     await db.execute(
       'CREATE INDEX idx_belgeler_kategori ON belgeler(kategori_id)',
@@ -142,10 +286,51 @@ class VeriTabaniServisi {
       'CREATE INDEX idx_senkron_durum ON belgeler(senkron_durumu)',
     );
     await db.execute(
+      'CREATE INDEX idx_belgeler_metadata_hash ON belgeler(metadata_hash)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_belgeler_versiyon ON belgeler(versiyon_numarasi)',
+    );
+
+    // Senkron logları indeksleri
+    await db.execute(
       'CREATE INDEX idx_senkron_tarih ON senkron_logları(islem_tarihi)',
     );
     await db.execute(
       'CREATE INDEX idx_senkron_durum_log ON senkron_logları(durum)',
+    );
+
+    // Senkron state indeksleri
+    await db.execute(
+      'CREATE INDEX idx_sync_state_hash ON senkron_state(dosya_hash)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_sync_state_durum ON senkron_state(sync_durumu)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_sync_state_zaman ON senkron_state(son_sync_zamani)',
+    );
+
+    // Belge versiyonları indeksleri
+    await db.execute(
+      'CREATE INDEX idx_versiyon_belge ON belge_versiyonlari(belge_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_versiyon_hash ON belge_versiyonlari(dosya_hash)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_versiyon_tarih ON belge_versiyonlari(olusturma_tarihi)',
+    );
+
+    // Metadata değişiklikleri indeksleri
+    await db.execute(
+      'CREATE INDEX idx_metadata_entity ON metadata_degisiklikleri(entity_type, entity_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_metadata_zaman ON metadata_degisiklikleri(degisiklik_zamani)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
     );
   }
 
@@ -185,10 +370,13 @@ class VeriTabaniServisi {
   }
 
   Future<void> _dropAllTables(Database db) async {
+    await db.execute('DROP TABLE IF EXISTS metadata_degisiklikleri');
+    await db.execute('DROP TABLE IF EXISTS belge_versiyonlari');
+    await db.execute('DROP TABLE IF EXISTS senkron_state');
+    await db.execute('DROP TABLE IF EXISTS senkron_logları');
     await db.execute('DROP TABLE IF EXISTS belgeler');
     await db.execute('DROP TABLE IF EXISTS kategoriler');
     await db.execute('DROP TABLE IF EXISTS kisiler');
-    await db.execute('DROP TABLE IF EXISTS senkron_logları');
   }
 
   // BELGE CRUD İŞLEMLERİ
@@ -740,5 +928,235 @@ class VeriTabaniServisi {
     return List.generate(maps.length, (i) {
       return BelgeModeli.fromMap(maps[i]);
     });
+  }
+
+  Future<int> belgeVersiyonKaydet(
+    int belgeId,
+    int versiyonNumarasi,
+    String dosyaHash,
+    String? metadataHash,
+    String? degisiklikAciklamasi,
+    String? olusturanCihaz,
+  ) async {
+    final db = await database;
+    return await db.insert('belge_versiyonlari', {
+      'belge_id': belgeId,
+      'versiyon_numarasi': versiyonNumarasi,
+      'dosya_hash': dosyaHash,
+      'metadata_hash': metadataHash,
+      'degisiklik_aciklamasi': degisiklikAciklamasi,
+      'olusturan_cihaz': olusturanCihaz,
+      'olusturma_tarihi': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // Son değişiklikleri getir (raporda belirtilen)
+  Future<List<Map<String, dynamic>>> sonDegisiklikleriGetir(
+    DateTime since,
+  ) async {
+    final db = await database;
+    return await db.query(
+      'belgeler',
+      where: 'guncelleme_tarihi > ? AND aktif = ?',
+      whereArgs: [since.toIso8601String(), 1],
+      orderBy: 'guncelleme_tarihi DESC',
+    );
+  }
+
+  // Metadata güncelleme (raporda belirtilen)
+  Future<int> metadataGuncelle(
+    int belgeId,
+    String? baslik,
+    String? aciklama,
+    String? etiketler,
+    String? metadataHash,
+  ) async {
+    final db = await database;
+    final guncellemeTarihi = DateTime.now().toIso8601String();
+
+    return await db.update(
+      'belgeler',
+      {
+        if (baslik != null) 'baslik': baslik,
+        if (aciklama != null) 'aciklama': aciklama,
+        if (etiketler != null) 'etiketler': etiketler,
+        if (metadataHash != null) 'metadata_hash': metadataHash,
+        'son_metadata_guncelleme': guncellemeTarihi,
+        'guncelleme_tarihi': guncellemeTarihi,
+      },
+      where: 'id = ?',
+      whereArgs: [belgeId],
+    );
+  }
+
+  // ============== SYNC STATE TRACKING ==============
+
+  // Sync state kaydet/güncelle
+  Future<void> syncStateGuncelle(
+    String dosyaHash,
+    String syncDurumu,
+    String? cihazId,
+    String? metadataHash,
+  ) async {
+    final db = await database;
+    final tarih = DateTime.now().toIso8601String();
+
+    await db.execute(
+      '''
+      INSERT OR REPLACE INTO senkron_state 
+      (dosya_hash, son_sync_zamani, sync_durumu, cihaz_id, metadata_hash, olusturma_tarihi)
+      VALUES (?, ?, ?, ?, ?, ?)
+    ''',
+      [dosyaHash, tarih, syncDurumu, cihazId, metadataHash, tarih],
+    );
+  }
+
+  // Sync state getir
+  Future<Map<String, dynamic>?> syncStateGetir(String dosyaHash) async {
+    final db = await database;
+    final maps = await db.query(
+      'senkron_state',
+      where: 'dosya_hash = ?',
+      whereArgs: [dosyaHash],
+    );
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  // Sync edilmemiş dosyaları getir
+  Future<List<String>> syncEdilmemisHashleriGetir() async {
+    final db = await database;
+    final maps = await db.query(
+      'senkron_state',
+      columns: ['dosya_hash'],
+      where: 'sync_durumu != ?',
+      whereArgs: ['SYNCED'],
+    );
+    return maps.map((m) => m['dosya_hash'] as String).toList();
+  }
+
+  // Tüm sync state'leri getir
+  Future<List<Map<String, dynamic>>> tumSyncStateleriniGetir() async {
+    final db = await database;
+    return await db.query('senkron_state', orderBy: 'son_sync_zamani DESC');
+  }
+
+  // Sync state temizle
+  Future<void> syncStateTemizle(String? dosyaHash) async {
+    final db = await database;
+    if (dosyaHash != null) {
+      await db.delete(
+        'senkron_state',
+        where: 'dosya_hash = ?',
+        whereArgs: [dosyaHash],
+      );
+    } else {
+      await db.delete('senkron_state');
+    }
+  }
+
+  // ============== METADATA CHANGE TRACKING ==============
+
+  // Metadata değişikliği kaydet
+  Future<int> metadataDegisikligiKaydet(
+    String entityType,
+    int entityId,
+    String degisiklikTipi,
+    String? eskiDeger,
+    String? yeniDeger,
+    String? cihazId,
+  ) async {
+    final db = await database;
+    return await db.insert('metadata_degisiklikleri', {
+      'entity_type': entityType,
+      'entity_id': entityId,
+      'degisiklik_tipi': degisiklikTipi,
+      'eski_deger': eskiDeger,
+      'yeni_deger': yeniDeger,
+      'degisiklik_zamani': DateTime.now().toIso8601String(),
+      'cihaz_id': cihazId,
+      'sync_edildi': 0,
+    });
+  }
+
+  // Sync edilmemiş metadata değişikliklerini getir
+  Future<List<Map<String, dynamic>>>
+  syncEdilmemisMetadataDegisiklikleriniGetir() async {
+    final db = await database;
+    return await db.query(
+      'metadata_degisiklikleri',
+      where: 'sync_edildi = ?',
+      whereArgs: [0],
+      orderBy: 'degisiklik_zamani ASC',
+    );
+  }
+
+  // Metadata değişikliğini sync edildi olarak işaretle
+  Future<void> metadataDegisikligiSyncEdiOlarakIsaretle(int id) async {
+    final db = await database;
+    await db.update(
+      'metadata_degisiklikleri',
+      {'sync_edildi': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Son zamandan beri metadata değişikliklerini getir
+  Future<List<Map<String, dynamic>>>
+  sonZamandanBeriMetadataDegisiklikleriniGetir(DateTime since) async {
+    final db = await database;
+    return await db.query(
+      'metadata_degisiklikleri',
+      where: 'degisiklik_zamani > ?',
+      whereArgs: [since.toIso8601String()],
+      orderBy: 'degisiklik_zamani DESC',
+    );
+  }
+
+  // ============== BELGE VERSİYON METODLARI ==============
+
+  // Belgenin tüm versiyonlarını getir
+  Future<List<Map<String, dynamic>>> belgeVersiyonlariniGetir(
+    int belgeId,
+  ) async {
+    final db = await database;
+    return await db.query(
+      'belge_versiyonlari',
+      where: 'belge_id = ?',
+      whereArgs: [belgeId],
+      orderBy: 'versiyon_numarasi DESC',
+    );
+  }
+
+  // Belgenin son versiyon numarasını getir
+  Future<int> belgeninSonVersiyonNumarasiniGetir(int belgeId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      '''
+      SELECT MAX(versiyon_numarasi) as max_versiyon 
+      FROM belge_versiyonlari 
+      WHERE belge_id = ?
+    ''',
+      [belgeId],
+    );
+
+    return (result.first['max_versiyon'] as int?) ?? 0;
+  }
+
+  // Belgenin versiyon numarasını güncelle
+  Future<void> belgeVersiyonNumarasiniGuncelle(
+    int belgeId,
+    int yeniVersiyon,
+  ) async {
+    final db = await database;
+    await db.update(
+      'belgeler',
+      {
+        'versiyon_numarasi': yeniVersiyon,
+        'guncelleme_tarihi': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [belgeId],
+    );
   }
 }

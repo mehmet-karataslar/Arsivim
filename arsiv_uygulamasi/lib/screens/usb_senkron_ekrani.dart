@@ -48,9 +48,9 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     '',
   );
 
-  // YENİ: Sync Manager seçimi için
-  SyncManagerType _selectedSyncManager = SyncManagerType.enhanced;
-  bool _autoFallbackEnabled = true;
+  // Gerçek ayarlar - Gelişmiş Yönetici kullanılacak
+  final SyncManagerType _selectedSyncManager = SyncManagerType.enhanced;
+  final bool _autoFallbackEnabled = true;
 
   @override
   void initState() {
@@ -125,195 +125,70 @@ class _UsbSenkronEkraniState extends State<UsbSenkronEkrani>
     });
   }
 
-  // YENİ: Gelişmiş bağlantı dialog'u
+  // Basit bağlantı dialog'u - sadece gelişmiş yönetici ile senkronizasyon
   void _showEnhancedConnectionDialog(Map<String, dynamic> deviceInfo) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return Dialog(
+        return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade50, Colors.white],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Cihaz bağlantı ikonu
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.devices_rounded,
-                    size: 48,
-                    color: Colors.green.shade600,
-                  ),
+          title: Row(
+            children: [
+              Icon(Icons.devices_rounded, color: Colors.green.shade600),
+              const SizedBox(width: 8),
+              const Text('Cihaz Bağlandı!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${deviceInfo['clientName']} cihazı bağlandı.'),
+              const SizedBox(height: 8),
+              Text('IP: ${deviceInfo['ip']}'),
+              const SizedBox(height: 8),
+              Text('Belgeler: ${deviceInfo['belgeSayisi'] ?? 0} adet'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 16),
-
-                // Başlık
-                Text(
-                  '📱 Cihaz Bağlandı!',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Cihaz bilgileri
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildInfoRow('📱 Cihaz', deviceInfo['clientName']),
-                      _buildInfoRow('🌐 IP Adresi', deviceInfo['ip']),
-                      _buildInfoRow(
-                        '📄 Belgeler',
-                        '${deviceInfo['belgeSayisi'] ?? 0} adet',
-                      ),
-                      _buildInfoRow(
-                        '💾 Boyut',
-                        '${(deviceInfo['toplamBoyut'] ?? 0) / 1024} KB',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Sync Manager seçimi
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '⚙️ Sync Manager Seçimi',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<SyncManagerType>(
-                        value: _selectedSyncManager,
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                        items:
-                            SyncManagerType.values.map((type) {
-                              return DropdownMenuItem(
-                                value: type,
-                                child: Text(
-                                  '${type.displayName} ${type.isRecommended ? "⭐" : ""}',
-                                ),
-                              );
-                            }).toList(),
-                        onChanged: (SyncManagerType? newType) {
-                          if (newType != null) {
-                            setState(() {
-                              _selectedSyncManager = newType;
-                            });
-                            _senkronCoordinator.setSyncManagerType(newType);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Auto fallback switch
-                      Row(
-                        children: [
-                          Switch(
-                            value: _autoFallbackEnabled,
-                            onChanged: (bool value) {
-                              setState(() {
-                                _autoFallbackEnabled = value;
-                              });
-                              _senkronCoordinator.setAutoFallback(value);
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Auto Fallback (hata durumunda güvenli manager\'a geç)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Butonlar
-                Row(
+                child: Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        child: const Text('İptal'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _performEnhancedSynchronization();
-                        },
-                        icon: const Icon(Icons.sync_rounded),
-                        label: const Text('Senkronizasyonu Başlat'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
+                    Icon(Icons.star, color: Colors.blue.shade600, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Gelişmiş Yönetici ile senkronizasyon',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _performEnhancedSynchronization();
+              },
+              icon: const Icon(Icons.sync_rounded),
+              label: const Text('Başlat'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         );
       },
     );

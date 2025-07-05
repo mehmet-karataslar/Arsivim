@@ -15,6 +15,7 @@ import '../utils/hash_comparator.dart';
 import '../utils/timestamp_manager.dart';
 
 /// Metadata senkronizasyonu yönetici sınıfı
+/// Çift yönlü metadata senkronizasyonu sağlar
 class MetadataSyncManager {
   static final MetadataSyncManager _instance = MetadataSyncManager._internal();
   static MetadataSyncManager get instance => _instance;
@@ -26,435 +27,414 @@ class MetadataSyncManager {
   final HashComparator _hashComparator = HashComparator.instance;
   final TimestampManager _timestampManager = TimestampManager.instance;
 
-  /// Metadata senkronizasyonu gerçekleştir
-  Future<MetadataSyncResult> syncMetadata(
-    SenkronCihazi targetDevice, {
-    DateTime? since,
-    bool bidirectional = true,
-    String strategy = 'LATEST_WINS',
-  }) async {
-    try {
-      final result = MetadataSyncResult();
+  // Progress callback'leri
+  Function(String message)? onLogMessage;
+  Function(double progress)? onProgressUpdate;
 
-      // 1. Local değişiklikleri al
-      final localChanges = await _getLocalMetadataChanges(since);
-      result.localChangesCount = localChanges.length;
+  /// Metadata senkronizasyonu başlat
+  Future<Map<String, int>> syncMetadata(
+    SenkronCihazi targetDevice,
+    String localDeviceId,
+  ) async {
+    _addLog('📋 Metadata senkronizasyonu başlatılıyor...');
+
+    final stats = {'sent': 0, 'received': 0, 'conflicts': 0, 'errors': 0};
+
+    try {
+      // 1. Local değişiklikleri karşı tarafa gönder
+      _updateProgress(0.2, 'Local değişiklikler gönderiliyor...');
+      final sentChanges = await _sendLocalChanges(targetDevice, localDeviceId);
+      stats['sent'] = sentChanges;
 
       // 2. Remote değişiklikleri al
-      final remoteChanges = await _getRemoteMetadataChanges(
+      _updateProgress(0.5, 'Remote değişiklikler alınıyor...');
+      final receivedChanges = await _receiveRemoteChanges(
         targetDevice,
-        since,
+        localDeviceId,
       );
-      result.remoteChangesCount = remoteChanges.length;
+      stats['received'] = receivedChanges['received'] ?? 0;
+      stats['conflicts'] = receivedChanges['conflicts'] ?? 0;
 
-      // 3. Çakışmaları tespit et
-      final conflicts = await _detectMetadataConflicts(
-        localChanges,
-        remoteChanges,
-      );
-      result.conflictsCount = conflicts.length;
+      // 3. Çakışmaları çöz
+      _updateProgress(0.8, 'Çakışmalar çözülüyor...');
+      await _resolveConflicts(targetDevice, localDeviceId);
 
-      // 4. Çakışmaları çöz
-      final resolvedChanges = await _resolveMetadataConflicts(
-        conflicts,
-        strategy,
-      );
-      result.resolvedConflictsCount = resolvedChanges.length;
+      _updateProgress(1.0, 'Metadata senkronizasyonu tamamlandı');
+      _addLog('✅ Metadata senkronizasyonu başarıyla tamamlandı');
 
-      // 5. Local metadata'yı güncelle
-      if (bidirectional) {
-        await _applyRemoteMetadataChanges(remoteChanges, resolvedChanges);
-        result.appliedRemoteChanges = remoteChanges.length;
-      }
-
-      // 6. Remote metadata'yı güncelle
-      await _sendLocalMetadataChanges(targetDevice, localChanges);
-      result.sentLocalChanges = localChanges.length;
-
-      result.success = true;
-      result.syncTimestamp = DateTime.now();
-
-      return result;
+      return stats;
     } catch (e) {
-      return MetadataSyncResult(
-        success: false,
-        error: 'Metadata sync hatası: $e',
-      );
+      _addLog('❌ Metadata senkronizasyon hatası: $e');
+      stats['errors'] = 1;
+      return stats;
     }
   }
 
-  /// Local metadata değişikliklerini al
-  Future<List<MetadataChange>> _getLocalMetadataChanges(DateTime? since) async {
-    final changes = <MetadataChange>[];
-    final sinceTime = since ?? DateTime.now().subtract(const Duration(days: 1));
-
-    // Belgeler için metadata değişiklikleri
-    final belgeChanges = await _changeTracker.getChangedDocuments(
-      since: sinceTime,
-      limit: 1000,
+  /// Local değişiklikleri karşı tarafa gönder
+  Future<int> _sendLocalChanges(
+    SenkronCihazi targetDevice,
+    String localDeviceId,
+  ) async {
+    // Son senkronizasyon zamanından sonraki değişiklikleri al
+    final lastSyncTime = await _getLastSyncTime(targetDevice.id);
+    final changes = await _changeTracker.getChangedDocuments(
+      lastSyncTime,
+      cihazId: localDeviceId,
     );
 
-    for (final change in belgeChanges) {
-      final belgeId = change['belge_id'] as int;
-      final belge = await _veriTabani.belgeGetir(belgeId);
-
-      if (belge != null) {
-        changes.add(
-          MetadataChange(
-            entityType: 'belge',
-            entityId: belgeId,
-            changeType: change['degisiklik_tipi'] as String,
-            metadata: _belgeToMetadata(belge),
-            timestamp: DateTime.parse(change['olusturma_tarihi'] as String),
-            hash: _hashComparator.generateMetadataHash(belge),
-          ),
-        );
-      }
+    if (changes.isEmpty) {
+      _addLog('📭 Gönderilecek değişiklik bulunamadı');
+      return 0;
     }
 
-    // Kategoriler için değişiklikleri al
-    final kategoriler = await _veriTabani.kategorileriGetir();
-    for (final kategori in kategoriler) {
-      if (kategori.olusturmaTarihi.isAfter(sinceTime)) {
-        changes.add(
-          MetadataChange(
-            entityType: 'kategori',
-            entityId: kategori.id!,
-            changeType: 'UPDATE',
-            metadata: _kategoriToMetadata(kategori),
-            timestamp: kategori.olusturmaTarihi,
-            hash: _generateKategoriHash(kategori),
-          ),
-        );
-      }
-    }
+    _addLog('📤 ${changes.length} değişiklik gönderiliyor...');
 
-    // Kişiler için değişiklikleri al
-    final kisiler = await _veriTabani.kisileriGetir();
-    for (final kisi in kisiler) {
-      if (kisi.guncellemeTarihi.isAfter(sinceTime)) {
-        changes.add(
-          MetadataChange(
-            entityType: 'kisi',
-            entityId: kisi.id!,
-            changeType: 'UPDATE',
-            metadata: _kisiToMetadata(kisi),
-            timestamp: kisi.guncellemeTarihi,
-            hash: _generateKisiHash(kisi),
-          ),
-        );
-      }
-    }
+    try {
+      // Değişiklikleri batch halinde gönder
+      final batchSize = 10;
+      int sentCount = 0;
 
-    return changes;
+      for (int i = 0; i < changes.length; i += batchSize) {
+        final batch = changes.skip(i).take(batchSize).toList();
+
+        final response = await http
+            .post(
+              Uri.parse('http://${targetDevice.ip}:8080/metadata/sync'),
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Device-ID': localDeviceId,
+              },
+              body: json.encode({
+                'changes': batch,
+                'sync_time': DateTime.now().toIso8601String(),
+              }),
+            )
+            .timeout(Duration(seconds: 30));
+
+        if (response.statusCode == 200) {
+          final result = json.decode(response.body);
+          final processedIds = List<int>.from(result['processed_ids'] ?? []);
+
+          // Başarılı olan değişiklikleri synced olarak işaretle
+          await _changeTracker.markChangesAsSynced(processedIds);
+          sentCount += processedIds.length;
+
+          _addLog('📤 ${processedIds.length} değişiklik gönderildi');
+        } else {
+          _addLog('❌ Batch gönderme hatası: ${response.statusCode}');
+        }
+      }
+
+      return sentCount;
+    } catch (e) {
+      _addLog('❌ Değişiklik gönderme hatası: $e');
+      return 0;
+    }
   }
 
-  /// Remote metadata değişikliklerini al
-  Future<List<MetadataChange>> _getRemoteMetadataChanges(
+  /// Remote değişiklikleri al
+  Future<Map<String, int>> _receiveRemoteChanges(
     SenkronCihazi targetDevice,
-    DateTime? since,
+    String localDeviceId,
   ) async {
+    final stats = {'received': 0, 'conflicts': 0};
+
     try {
-      final sinceParam = since?.toIso8601String() ?? '';
+      final lastSyncTime = await _getLastSyncTime(targetDevice.id);
+
       final response = await http
           .get(
             Uri.parse(
-              'http://${targetDevice.ip}:8080/sync/metadata?since=$sinceParam',
+              'http://${targetDevice.ip}:8080/metadata/changes',
+            ).replace(
+              queryParameters: {
+                'since': lastSyncTime.toIso8601String(),
+                'device_id': localDeviceId,
+              },
             ),
-            headers: {'Accept': 'application/json'},
+            headers: {
+              'Accept': 'application/json',
+              'X-Device-ID': localDeviceId,
+            },
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final changesData = data['changes'] as List;
-
-        return changesData
-            .map((change) => MetadataChange.fromJson(change))
-            .toList();
-      } else {
-        throw Exception('Remote metadata alınamadı: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Remote metadata fetch hatası: $e');
-    }
-  }
-
-  /// Metadata çakışmalarını tespit et
-  Future<List<MetadataConflict>> _detectMetadataConflicts(
-    List<MetadataChange> localChanges,
-    List<MetadataChange> remoteChanges,
-  ) async {
-    final conflicts = <MetadataConflict>[];
-
-    for (final localChange in localChanges) {
-      final conflictingRemoteChange = remoteChanges.firstWhere(
-        (remote) =>
-            remote.entityType == localChange.entityType &&
-            remote.entityId == localChange.entityId &&
-            remote.hash != localChange.hash,
-        orElse: () => null as MetadataChange,
-      );
-
-      if (conflictingRemoteChange != null) {
-        conflicts.add(
-          MetadataConflict(
-            entityType: localChange.entityType,
-            entityId: localChange.entityId,
-            localChange: localChange,
-            remoteChange: conflictingRemoteChange,
-            conflictType: _determineConflictType(
-              localChange,
-              conflictingRemoteChange,
-            ),
-          ),
+        final remoteChanges = List<Map<String, dynamic>>.from(
+          data['changes'] ?? [],
         );
-      }
-    }
 
-    return conflicts;
-  }
+        _addLog('📥 ${remoteChanges.length} remote değişiklik alındı');
 
-  /// Metadata çakışmalarını çöz
-  Future<List<MetadataChange>> _resolveMetadataConflicts(
-    List<MetadataConflict> conflicts,
-    String strategy,
-  ) async {
-    final resolvedChanges = <MetadataChange>[];
-
-    for (final conflict in conflicts) {
-      MetadataChange? resolvedChange;
-
-      switch (strategy) {
-        case 'LATEST_WINS':
-          resolvedChange = _resolveLatestWins(conflict);
-          break;
-        case 'LOCAL_WINS':
-          resolvedChange = conflict.localChange;
-          break;
-        case 'REMOTE_WINS':
-          resolvedChange = conflict.remoteChange;
-          break;
-        case 'MANUAL':
-          resolvedChange = await _resolveManualConflict(conflict);
-          break;
-        default:
-          resolvedChange = _resolveLatestWins(conflict);
-      }
-
-      if (resolvedChange != null) {
-        resolvedChanges.add(resolvedChange);
-      }
-    }
-
-    return resolvedChanges;
-  }
-
-  /// Remote metadata değişikliklerini uygula
-  Future<void> _applyRemoteMetadataChanges(
-    List<MetadataChange> remoteChanges,
-    List<MetadataChange> resolvedChanges,
-  ) async {
-    for (final change in remoteChanges) {
-      try {
-        switch (change.entityType) {
-          case 'belge':
-            await _applyBelgeMetadataChange(change);
-            break;
-          case 'kategori':
-            await _applyKategoriMetadataChange(change);
-            break;
-          case 'kisi':
-            await _applyKisiMetadataChange(change);
-            break;
+        for (final change in remoteChanges) {
+          final processed = await _processRemoteChange(change, targetDevice.id);
+          if (processed == 'received') {
+            stats['received'] = stats['received']! + 1;
+          } else if (processed == 'conflict') {
+            stats['conflicts'] = stats['conflicts']! + 1;
+          }
         }
-      } catch (e) {
-        print('Metadata change uygulama hatası: $e');
+      } else {
+        _addLog('❌ Remote değişiklik alma hatası: ${response.statusCode}');
       }
-    }
 
-    // Çözülen çakışmaları uygula
-    for (final resolvedChange in resolvedChanges) {
-      try {
-        switch (resolvedChange.entityType) {
-          case 'belge':
-            await _applyBelgeMetadataChange(resolvedChange);
-            break;
-          case 'kategori':
-            await _applyKategoriMetadataChange(resolvedChange);
-            break;
-          case 'kisi':
-            await _applyKisiMetadataChange(resolvedChange);
-            break;
-        }
-      } catch (e) {
-        print('Resolved change uygulama hatası: $e');
-      }
+      return stats;
+    } catch (e) {
+      _addLog('❌ Remote değişiklik alma hatası: $e');
+      return stats;
     }
   }
 
-  /// Local metadata değişikliklerini gönder
-  Future<void> _sendLocalMetadataChanges(
-    SenkronCihazi targetDevice,
-    List<MetadataChange> localChanges,
+  /// Remote değişikliği işle
+  Future<String> _processRemoteChange(
+    Map<String, dynamic> change,
+    String targetDeviceId,
   ) async {
     try {
-      final changesJson =
-          localChanges.map((change) => change.toJson()).toList();
+      final belgeId = change['belge_id'] as int;
+      final localBelge = await _veriTabani.belgeGetir(belgeId);
 
-      final response = await http
-          .post(
-            Uri.parse('http://${targetDevice.ip}:8080/sync/metadata'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: json.encode({'changes': changesJson}),
-          )
-          .timeout(const Duration(seconds: 60));
-
-      if (response.statusCode != 200) {
-        throw Exception('Local metadata gönderilemedi: ${response.statusCode}');
+      if (localBelge == null) {
+        _addLog('⚠️ Belge bulunamadı: $belgeId');
+        return 'error';
       }
+
+      // Çakışma kontrolü
+      final comparison = await _changeTracker.compareDocumentVersions(
+        localBelge,
+        change,
+      );
+
+      if (comparison['conflict'] == true) {
+        _addLog('⚠️ Çakışma tespit edildi: ${localBelge.dosyaAdi}');
+        await _storeConflict(localBelge, change, targetDeviceId);
+        return 'conflict';
+      }
+
+      // Değişikliği uygula
+      if (comparison['needs_sync'] == true) {
+        final resolution = comparison['resolution'] as String;
+        final mergedBelge = await _changeTracker.mergeDocumentMetadata(
+          localBelge,
+          change,
+          resolution,
+        );
+
+        await _veriTabani.belgeGuncelle(mergedBelge);
+        _addLog('✅ Metadata güncellendi: ${mergedBelge.dosyaAdi}');
+        return 'received';
+      }
+
+      return 'skipped';
     } catch (e) {
-      throw Exception('Local metadata send hatası: $e');
+      _addLog('❌ Remote değişiklik işleme hatası: $e');
+      return 'error';
     }
   }
 
-  /// Helper metodlar
-  Map<String, dynamic> _belgeToMetadata(BelgeModeli belge) {
-    return {
-      'id': belge.id,
-      'dosyaAdi': belge.dosyaAdi,
-      'orijinalDosyaAdi': belge.orijinalDosyaAdi,
-      'baslik': belge.baslik,
-      'aciklama': belge.aciklama,
-      'kategoriId': belge.kategoriId,
-      'kisiId': belge.kisiId,
-      'etiketler': belge.etiketler,
-      'guncellemeTarihi': belge.guncellemeTarihi.toIso8601String(),
-    };
-  }
-
-  Map<String, dynamic> _kategoriToMetadata(KategoriModeli kategori) {
-    return {
-      'id': kategori.id,
-      'kategoriAdi': kategori.kategoriAdi,
-      'renkKodu': kategori.renkKodu,
-      'simgeKodu': kategori.simgeKodu,
-      'aciklama': kategori.aciklama,
-      'olusturmaTarihi': kategori.olusturmaTarihi.toIso8601String(),
-    };
-  }
-
-  Map<String, dynamic> _kisiToMetadata(KisiModeli kisi) {
-    return {
-      'id': kisi.id,
-      'ad': kisi.ad,
-      'soyad': kisi.soyad,
-      'guncellemeTarihi': kisi.guncellemeTarihi.toIso8601String(),
-    };
-  }
-
-  String _generateKategoriHash(KategoriModeli kategori) {
-    final data = json.encode(_kategoriToMetadata(kategori));
-    return sha256.convert(utf8.encode(data)).toString();
-  }
-
-  String _generateKisiHash(KisiModeli kisi) {
-    final data = json.encode(_kisiToMetadata(kisi));
-    return sha256.convert(utf8.encode(data)).toString();
-  }
-
-  String _determineConflictType(MetadataChange local, MetadataChange remote) {
-    if (local.timestamp.isAfter(remote.timestamp)) {
-      return 'LOCAL_NEWER';
-    } else if (remote.timestamp.isAfter(local.timestamp)) {
-      return 'REMOTE_NEWER';
-    } else {
-      return 'SIMULTANEOUS';
-    }
-  }
-
-  MetadataChange _resolveLatestWins(MetadataConflict conflict) {
-    return conflict.localChange.timestamp.isAfter(
-          conflict.remoteChange.timestamp,
-        )
-        ? conflict.localChange
-        : conflict.remoteChange;
-  }
-
-  Future<MetadataChange?> _resolveManualConflict(
-    MetadataConflict conflict,
+  /// Çakışmayı kaydet
+  Future<void> _storeConflict(
+    BelgeModeli localBelge,
+    Map<String, dynamic> remoteChange,
+    String targetDeviceId,
   ) async {
-    // Manuel çakışma çözümü için gelecekte UI entegrasyonu
-    return _resolveLatestWins(conflict);
+    final db = await _veriTabani.database;
+
+    await db.insert('metadata_conflicts', {
+      'belge_id': localBelge.id,
+      'local_metadata': json.encode(localBelge.toJson()),
+      'remote_metadata': json.encode(remoteChange),
+      'conflict_time': DateTime.now().toIso8601String(),
+      'source_device': targetDeviceId,
+      'status': 'PENDING',
+    });
   }
 
-  Future<void> _applyBelgeMetadataChange(MetadataChange change) async {
-    final belge = await _veriTabani.belgeGetir(change.entityId);
-    if (belge != null) {
-      final metadata = change.metadata;
-      final updatedBelge = BelgeModeli(
-        id: belge.id,
-        dosyaAdi: belge.dosyaAdi,
-        orijinalDosyaAdi: belge.orijinalDosyaAdi,
-        dosyaYolu: belge.dosyaYolu,
-        dosyaBoyutu: belge.dosyaBoyutu,
-        dosyaTipi: belge.dosyaTipi,
-        dosyaHash: belge.dosyaHash,
-        kategoriId: metadata['kategoriId'],
-        kisiId: metadata['kisiId'],
-        baslik: metadata['baslik'],
-        aciklama: metadata['aciklama'],
-        etiketler: metadata['etiketler'],
-        olusturmaTarihi: belge.olusturmaTarihi,
-        guncellemeTarihi: DateTime.parse(metadata['guncellemeTarihi']),
-        sonErisimTarihi: belge.sonErisimTarihi,
-        aktif: belge.aktif,
-        senkronDurumu: belge.senkronDurumu,
-      );
+  /// Çakışmaları çöz
+  Future<void> _resolveConflicts(
+    SenkronCihazi targetDevice,
+    String localDeviceId,
+  ) async {
+    final db = await _veriTabani.database;
 
-      await _veriTabani.belgeGuncelle(updatedBelge);
+    // Çakışma tablosunu oluştur
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS metadata_conflicts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        belge_id INTEGER NOT NULL,
+        local_metadata TEXT NOT NULL,
+        remote_metadata TEXT NOT NULL,
+        conflict_time TEXT NOT NULL,
+        source_device TEXT NOT NULL,
+        status TEXT DEFAULT 'PENDING',
+        resolution TEXT,
+        resolved_time TEXT,
+        FOREIGN KEY (belge_id) REFERENCES belgeler(id)
+      )
+    ''');
+
+    // Bekleyen çakışmaları al
+    final conflicts = await db.query(
+      'metadata_conflicts',
+      where: 'status = ? AND source_device = ?',
+      whereArgs: ['PENDING', targetDevice.id],
+    );
+
+    _addLog('🔄 ${conflicts.length} çakışma çözülüyor...');
+
+    for (final conflict in conflicts) {
+      await _resolveConflict(conflict);
     }
   }
 
-  Future<void> _applyKategoriMetadataChange(MetadataChange change) async {
-    final kategori = await _veriTabani.kategoriGetir(change.entityId);
-    if (kategori != null) {
-      final metadata = change.metadata;
-      final updatedKategori = KategoriModeli(
-        id: kategori.id,
-        kategoriAdi: metadata['kategoriAdi'],
-        renkKodu: metadata['renkKodu'],
-        simgeKodu: metadata['simgeKodu'],
-        aciklama: metadata['aciklama'],
-        olusturmaTarihi:
-            metadata['olusturmaTarihi'] != null
-                ? DateTime.parse(metadata['olusturmaTarihi'])
-                : kategori.olusturmaTarihi,
-        aktif: kategori.aktif,
+  /// Tekil çakışmayı çöz
+  Future<void> _resolveConflict(Map<String, dynamic> conflict) async {
+    try {
+      final belgeId = conflict['belge_id'] as int;
+      final localMetadata = json.decode(conflict['local_metadata'] as String);
+      final remoteMetadata = json.decode(conflict['remote_metadata'] as String);
+
+      // Basit çözüm: En yeni metadata'yı al
+      final localTime = DateTime.parse(localMetadata['guncelleme_tarihi']);
+      final remoteTime = DateTime.parse(remoteMetadata['guncelleme_tarihi']);
+
+      final resolution =
+          localTime.isAfter(remoteTime) ? 'local_wins' : 'remote_wins';
+
+      if (resolution == 'remote_wins') {
+        final localBelge = await _veriTabani.belgeGetir(belgeId);
+        if (localBelge != null) {
+          final mergedBelge = await _changeTracker.mergeDocumentMetadata(
+            localBelge,
+            remoteMetadata,
+            resolution,
+          );
+          await _veriTabani.belgeGuncelle(mergedBelge);
+        }
+      }
+
+      // Çakışmayı çözüldü olarak işaretle
+      final db = await _veriTabani.database;
+      await db.update(
+        'metadata_conflicts',
+        {
+          'status': 'RESOLVED',
+          'resolution': resolution,
+          'resolved_time': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [conflict['id']],
       );
 
-      await _veriTabani.kategoriGuncelle(updatedKategori);
+      _addLog('✅ Çakışma çözüldü: $resolution');
+    } catch (e) {
+      _addLog('❌ Çakışma çözümleme hatası: $e');
     }
   }
 
-  Future<void> _applyKisiMetadataChange(MetadataChange change) async {
-    final kisi = await _veriTabani.kisiGetir(change.entityId);
-    if (kisi != null) {
-      final metadata = change.metadata;
-      final updatedKisi = KisiModeli(
-        id: kisi.id,
-        ad: metadata['ad'],
-        soyad: metadata['soyad'],
-        olusturmaTarihi: kisi.olusturmaTarihi,
-        guncellemeTarihi: DateTime.parse(metadata['guncellemeTarihi']),
-        aktif: kisi.aktif,
-      );
+  /// Son senkronizasyon zamanını al
+  Future<DateTime> _getLastSyncTime(String? deviceId) async {
+    if (deviceId == null) return DateTime.now().subtract(Duration(days: 1));
 
-      await _veriTabani.kisiGuncelle(updatedKisi);
+    final db = await _veriTabani.database;
+
+    // Metadata sync tablosunu oluştur
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS metadata_sync_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL,
+        last_sync_time TEXT NOT NULL,
+        sync_type TEXT DEFAULT 'METADATA',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    final result = await db.query(
+      'metadata_sync_log',
+      where: 'device_id = ? AND sync_type = ?',
+      whereArgs: [deviceId, 'METADATA'],
+      orderBy: 'last_sync_time DESC',
+      limit: 1,
+    );
+
+    if (result.isNotEmpty) {
+      return DateTime.parse(result.first['last_sync_time'] as String);
     }
+
+    return DateTime.now().subtract(Duration(days: 1));
+  }
+
+  /// Son senkronizasyon zamanını güncelle
+  Future<void> _updateLastSyncTime(String deviceId) async {
+    final db = await _veriTabani.database;
+    final now = DateTime.now().toIso8601String();
+
+    await db.insert('metadata_sync_log', {
+      'device_id': deviceId,
+      'last_sync_time': now,
+      'sync_type': 'METADATA',
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Log mesajı ekle
+  void _addLog(String message) {
+    print('MetadataSyncManager: $message');
+    onLogMessage?.call(message);
+  }
+
+  /// Progress güncelle
+  void _updateProgress(double progress, String operation) {
+    onProgressUpdate?.call(progress);
+  }
+
+  /// Çakışmaları al
+  Future<List<Map<String, dynamic>>> getPendingConflicts() async {
+    final db = await _veriTabani.database;
+
+    return await db.rawQuery('''
+      SELECT 
+        mc.*,
+        b.dosya_adi,
+        b.baslik
+      FROM metadata_conflicts mc
+      JOIN belgeler b ON mc.belge_id = b.id
+      WHERE mc.status = 'PENDING'
+      ORDER BY mc.conflict_time DESC
+    ''');
+  }
+
+  /// Çakışmayı manuel çöz
+  Future<void> resolveConflictManually(
+    int conflictId,
+    String resolution,
+  ) async {
+    final db = await _veriTabani.database;
+
+    final conflict = await db.query(
+      'metadata_conflicts',
+      where: 'id = ?',
+      whereArgs: [conflictId],
+    );
+
+    if (conflict.isNotEmpty) {
+      await _resolveConflict(conflict.first);
+    }
+  }
+
+  /// Eski çakışma kayıtlarını temizle
+  Future<void> cleanOldConflicts() async {
+    final db = await _veriTabani.database;
+    final cutoffDate = DateTime.now().subtract(Duration(days: 30));
+
+    await db.delete(
+      'metadata_conflicts',
+      where: 'resolved_time < ? AND status = ?',
+      whereArgs: [cutoffDate.toIso8601String(), 'RESOLVED'],
+    );
   }
 }
 

@@ -2,6 +2,12 @@ import 'dart:async';
 import 'senkron_manager_enhanced.dart';
 import 'senkron_manager_working.dart';
 import 'senkron_manager_simple.dart';
+import 'veritabani_servisi.dart';
+import 'dosya_servisi.dart';
+import 'sync_state_tracker.dart';
+import 'document_change_tracker.dart';
+import 'metadata_sync_manager.dart';
+import 'senkron_delta_manager.dart';
 import '../models/senkron_cihazi.dart';
 
 /// Senkronizasyon manager'ları arasında seçim ve koordinasyon
@@ -11,10 +17,21 @@ class SenkronManagerCoordinator {
   static final SenkronManagerCoordinator _instance =
       SenkronManagerCoordinator._internal();
   static SenkronManagerCoordinator get instance => _instance;
-  SenkronManagerCoordinator._internal();
+
+  SenkronManagerCoordinator._internal() {
+    // Enhanced manager'ı initialize et
+    _enhancedManager = SenkronManagerEnhanced(
+      VeriTabaniServisi(),
+      DosyaServisi(),
+      SyncStateTracker.instance,
+      DocumentChangeTracker.instance,
+      MetadataSyncManager.instance,
+      SenkronDeltaManager.instance,
+    );
+  }
 
   // ============== Sync Manager Türleri ==============
-  final SenkronManagerEnhanced _enhancedManager = SenkronManagerEnhanced();
+  late final SenkronManagerEnhanced _enhancedManager;
   final SenkronManagerWorking _workingManager = SenkronManagerWorking.instance;
   final SenkronManagerSimple _simpleManager = SenkronManagerSimple.instance;
 
@@ -116,10 +133,10 @@ class SenkronManagerCoordinator {
     switch (managerType) {
       case SyncManagerType.enhanced:
         // Enhanced manager - gelişmiş özelliklerle
-        return await _enhancedManager.performEnhancedSynchronization(
+        return await _enhancedManager.performFullSync(
           targetDevice,
           bidirectional: bidirectional ?? true,
-          strategy: strategy ?? 'LATEST_WINS',
+          conflictStrategy: strategy ?? 'LATEST_WINS',
           since: since,
         );
 
@@ -160,9 +177,11 @@ class SenkronManagerCoordinator {
   void _setupCallbacks() {
     switch (_currentType) {
       case SyncManagerType.enhanced:
-        _enhancedManager.onProgressUpdate = onProgressUpdate;
-        _enhancedManager.onOperationUpdate = onOperationUpdate;
-        _enhancedManager.onLogMessage = onLogMessage;
+        _enhancedManager.setCallbacks(
+          onProgress: onProgressUpdate,
+          onStatus: onOperationUpdate,
+          onLog: onLogMessage,
+        );
         break;
 
       case SyncManagerType.working:
@@ -184,7 +203,7 @@ class SenkronManagerCoordinator {
     switch (type) {
       case SyncManagerType.enhanced:
         return {
-          'name': 'Enhanced Sync Manager',
+          'name': 'Gelişmiş Senkronizasyon Yöneticisi',
           'features': [
             'Çift yönlü senkronizasyon',
             'Gelişmiş conflict resolution',
@@ -203,7 +222,7 @@ class SenkronManagerCoordinator {
 
       case SyncManagerType.working:
         return {
-          'name': 'Working Sync Manager',
+          'name': 'Çalışan Senkronizasyon Yöneticisi',
           'features': [
             'Basit ve güvenilir',
             'Metadata sync',
@@ -219,7 +238,7 @@ class SenkronManagerCoordinator {
 
       case SyncManagerType.simple:
         return {
-          'name': 'Simple Sync Manager',
+          'name': 'Basit Senkronizasyon Yöneticisi',
           'features': [
             '3 aşamalı sync',
             'Temel validation',
@@ -372,11 +391,11 @@ extension SyncManagerTypeExtension on SyncManagerType {
   String get displayName {
     switch (this) {
       case SyncManagerType.enhanced:
-        return 'Enhanced Manager';
+        return 'Gelişmiş Yönetici';
       case SyncManagerType.working:
-        return 'Working Manager';
+        return 'Çalışan Yönetici';
       case SyncManagerType.simple:
-        return 'Simple Manager';
+        return 'Basit Yönetici';
     }
   }
 

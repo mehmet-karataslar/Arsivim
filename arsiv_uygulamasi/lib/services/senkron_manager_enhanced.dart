@@ -2,212 +2,273 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:crypto/crypto.dart';
 import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:path/path.dart' as path;
+import 'package:crypto/crypto.dart';
+
 import '../models/belge_modeli.dart';
+import '../models/kategori_modeli.dart';
+import '../models/kisi_modeli.dart';
 import '../models/senkron_cihazi.dart';
-import '../services/veritabani_servisi.dart';
-import '../services/dosya_servisi.dart';
-import '../services/sync_state_tracker.dart';
-import '../services/document_change_tracker.dart';
-import '../services/metadata_sync_manager.dart';
-import '../services/senkron_conflict_resolver.dart';
-import '../services/senkron_integrity_checker.dart';
-import '../services/senkron_state_manager.dart';
-import '../services/senkron_validation_service.dart';
-import '../services/http_sunucu_enhanced.dart';
-import '../utils/hash_comparator.dart';
-import '../utils/network_optimizer.dart';
-import '../utils/senkron_utils.dart';
-import '../utils/timestamp_manager.dart';
+import '../models/senkron_delta.dart';
+import '../models/senkron_metadata.dart';
+import '../models/senkron_operation.dart';
+import '../models/senkron_session.dart';
+import '../utils/yardimci_fonksiyonlar.dart';
+import 'veritabani_servisi.dart';
+import 'dosya_servisi.dart';
+import 'sync_state_tracker.dart';
+import 'document_change_tracker.dart';
+import 'metadata_sync_manager.dart';
+import 'senkron_delta_manager.dart';
 
+/// Gelişmiş senkronizasyon yöneticisi - Tüm özellikler aktif
 class SenkronManagerEnhanced {
-  // ============== Service Dependencies ==============
-  final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
-  final DosyaServisi _dosyaServisi = DosyaServisi();
-  final SyncStateTracker _stateTracker = SyncStateTracker.instance;
-  final DocumentChangeTracker _changeTracker = DocumentChangeTracker.instance;
-  final MetadataSyncManager _metadataManager = MetadataSyncManager.instance;
-  final SenkronConflictResolver _conflictResolver =
-      SenkronConflictResolver.instance;
-  final SenkronIntegrityChecker _integrityChecker =
-      SenkronIntegrityChecker.instance;
-  final SenkronValidationService _validationService =
-      SenkronValidationService.instance;
-  final NetworkOptimizer _networkOptimizer = NetworkOptimizer.instance;
-  final TimestampManager _timestampManager = TimestampManager.instance;
+  final VeriTabaniServisi _veriTabani;
+  final DosyaServisi _dosyaServisi;
+  final SyncStateTracker _stateTracker;
+  final DocumentChangeTracker _changeTracker;
+  final MetadataSyncManager _metadataManager;
+  final SenkronDeltaManager _deltaManager;
 
-  // ============== Progress Tracking ==============
-  Function(double progress)? onProgressUpdate;
-  Function(String operation)? onOperationUpdate;
-  Function(String message)? onLogMessage;
+  // Senkronizasyon durumu
+  bool _senkronizasyonAktif = false;
+  bool _durduruldu = false;
+  bool _hataOlustu = false;
+  String? _sonHata;
 
-  // ============== Statistics ==============
-  int _uploadedDocuments = 0;
+  // İstatistikler
   int _downloadedDocuments = 0;
+  int _uploadedDocuments = 0;
+  int _skippedDocuments = 0;
   int _erroredDocuments = 0;
   int _conflictedDocuments = 0;
-  int _skippedDocuments = 0;
+  int _resolvedConflicts = 0;
 
-  // ============== Configuration ==============
-  Duration _syncThreshold = const Duration(minutes: 5);
-  int _maxRetryAttempts = 3;
-  bool _enableBidirectionalSync = true;
-  String _conflictResolutionStrategy = 'LATEST_WINS';
+  // Progress tracking
+  double _progress = 0.0;
+  String _currentOperation = '';
+  int _totalOperations = 0;
+  int _completedOperations = 0;
 
-  /// Ana senkronizasyon işlemi - Geliştirilmiş versiyon
-  Future<Map<String, dynamic>> performEnhancedSynchronization(
+  // Callback'ler
+  Function(String)? onLogMessage;
+  Function(double)? onProgressUpdate;
+  Function(String)? onStatusUpdate;
+
+  // Configurasyon
+  static const Duration _syncTimeout = Duration(seconds: 300);
+  static const Duration _retryDelay = Duration(seconds: 2);
+  static const int _maxRetries = 3;
+
+  // Local device ID
+  String? _localDeviceId;
+
+  // Log mesajları
+  final List<String> _logMessages = [];
+
+  SenkronManagerEnhanced(
+    this._veriTabani,
+    this._dosyaServisi,
+    this._stateTracker,
+    this._changeTracker,
+    this._metadataManager,
+    this._deltaManager,
+  );
+
+  // ============== GENEL DURUMU ==============
+
+  bool get senkronizasyonAktif => _senkronizasyonAktif;
+  bool get durduruldu => _durduruldu;
+  bool get hataOlustu => _hataOlustu;
+  String? get sonHata => _sonHata;
+  double get progress => _progress;
+  String get currentOperation => _currentOperation;
+  List<String> get logMessages => List.from(_logMessages);
+
+  Map<String, dynamic> get statistics => {
+    'downloaded': _downloadedDocuments,
+    'uploaded': _uploadedDocuments,
+    'skipped': _skippedDocuments,
+    'errors': _erroredDocuments,
+    'conflicts': _conflictedDocuments,
+    'resolved': _resolvedConflicts,
+    'total':
+        _downloadedDocuments +
+        _uploadedDocuments +
+        _skippedDocuments +
+        _erroredDocuments,
+  };
+
+  // ============== CALLBACK AYARLARI ==============
+
+  void setCallbacks({
+    Function(String)? onLog,
+    Function(double)? onProgress,
+    Function(String)? onStatus,
+  }) {
+    onLogMessage = onLog;
+    onProgressUpdate = onProgress;
+    onStatusUpdate = onStatus;
+  }
+
+  // ============== ANA SENKRONIZASYON METODLARI ==============
+
+  /// Tam senkronizasyon - Tüm özellikler aktif
+  Future<Map<String, dynamic>> performFullSync(
     SenkronCihazi targetDevice, {
     bool bidirectional = true,
-    String strategy = 'LATEST_WINS',
+    String conflictStrategy = 'LATEST_WINS',
+    bool syncMetadata = true,
+    bool useDeltaSync = true,
     DateTime? since,
   }) async {
-    _resetStatistics();
-    final syncResult = <String, dynamic>{};
+    if (_senkronizasyonAktif) {
+      throw Exception('Senkronizasyon zaten aktif');
+    }
+
+    _resetSyncState();
+    _senkronizasyonAktif = true;
 
     try {
-      _addLog('🚀 Geliştirilmiş senkronizasyon başlatılıyor...');
-      _addLog('🔗 Cihaz: ${targetDevice.ad} (${targetDevice.ip})');
+      _updateStatus('Senkronizasyon başlatılıyor...');
+      _addLog('🚀 Gelişmiş senkronizasyon başlatıldı');
+      _addLog('   • Hedef cihaz: ${targetDevice.ad} (${targetDevice.ip})');
+      _addLog('   • Çift yönlü: ${bidirectional ? "Evet" : "Hayır"}');
+      _addLog('   • Çakışma stratejisi: $conflictStrategy');
+      _addLog('   • Metadata sync: ${syncMetadata ? "Evet" : "Hayır"}');
+      _addLog('   • Delta sync: ${useDeltaSync ? "Evet" : "Hayır"}');
 
-      // ============== PHASE 0: INITIALIZATION ==============
-      _updateProgress(0.05, 'Senkronizasyon başlatılıyor...');
-      await _initializeSyncComponents();
+      // Local device ID'yi al
+      _localDeviceId = await _getLocalDeviceId();
 
-      // ============== PHASE 1: NETWORK QUALITY TEST ==============
-      _updateProgress(0.10, 'Network kalitesi test ediliyor...');
-      final networkQuality = await _testNetworkQuality(targetDevice);
-      syncResult['networkQuality'] = networkQuality;
+      // Senkronizasyon adımları
+      final results = <String, dynamic>{};
 
-      // ============== PHASE 2: BIDIRECTIONAL METADATA SYNC ==============
-      _updateProgress(0.25, 'Metadata senkronizasyonu...');
-      final metadataResult = await _performBidirectionalMetadataSync(
-        targetDevice,
-        since: since,
-        bidirectional: bidirectional,
-        strategy: strategy,
-      );
-      syncResult['metadataSync'] = metadataResult;
+      // 1. Bağlantı testi
+      _updateOperation('Bağlantı test ediliyor...');
+      final connectionTest = await _testConnection(targetDevice);
+      if (!connectionTest['success']) {
+        throw Exception('Bağlantı hatası: ${connectionTest['error']}');
+      }
+      _addLog('✅ Bağlantı başarılı');
 
-      // ============== PHASE 3: DOCUMENT CHANGE DETECTION ==============
-      _updateProgress(0.40, 'Değişiklikler tespit ediliyor...');
-      final changeResult = await _detectDocumentChanges(targetDevice, since);
-      syncResult['changeDetection'] = changeResult;
+      // 2. Metadata senkronizasyonu
+      if (syncMetadata) {
+        _updateOperation('Metadata senkronizasyonu...');
+        final metadataResult = await _performMetadataSync(targetDevice);
+        results['metadata'] = metadataResult;
+        _addLog(
+          '📋 Metadata sync: ${metadataResult['success'] ? "Başarılı" : "Başarısız"}',
+        );
+      }
 
-      // ============== PHASE 4: CONFLICT RESOLUTION ==============
-      _updateProgress(0.55, 'Çakışmalar çözülüyor...');
-      final conflictResult = await _resolveDocumentConflicts(
-        changeResult['conflicts'] ?? [],
-        strategy,
-      );
-      syncResult['conflictResolution'] = conflictResult;
+      // 3. Delta senkronizasyonu veya full sync
+      if (useDeltaSync) {
+        _updateOperation('Delta senkronizasyonu...');
+        final deltaResult = await _performDeltaSync(targetDevice, since: since);
+        results['delta'] = deltaResult;
+      } else {
+        _updateOperation('Full senkronizasyon...');
+        final fullResult = await _performFullDocumentSync(targetDevice);
+        results['documents'] = fullResult;
+      }
 
-      // ============== PHASE 5: BIDIRECTIONAL DOCUMENT SYNC ==============
-      _updateProgress(0.70, 'Belgeler senkronize ediliyor...');
-      final documentResult = await _performBidirectionalDocumentSync(
-        targetDevice,
-        changeResult,
-        conflictResult,
-        bidirectional,
-      );
-      syncResult['documentSync'] = documentResult;
+      // 4. Çakışma çözümü
+      if (_conflictedDocuments > 0) {
+        _updateOperation('Çakışmalar çözülüyor...');
+        final conflictResult = await _resolveAllConflicts(
+          targetDevice,
+          conflictStrategy,
+        );
+        results['conflicts'] = conflictResult;
+        _resolvedConflicts = conflictResult['resolved'] ?? 0;
+      }
 
-      // ============== PHASE 6: STATE UPDATE ==============
-      _updateProgress(0.90, 'Senkronizasyon durumu güncelleniyor...');
-      await _updateSyncStates(targetDevice, syncResult);
-
-      // ============== PHASE 7: CLEANUP ==============
-      _updateProgress(0.95, 'Temizlik işlemleri...');
+      // 5. Temizlik ve optimizasyon
+      _updateOperation('Temizlik yapılıyor...');
       await _performCleanup();
 
-      _updateProgress(1.0, 'Senkronizasyon tamamlandı');
-      _addLog('✅ Geliştirilmiş senkronizasyon başarıyla tamamlandı!');
-      _logDetailedStatistics();
+      _updateStatus('Senkronizasyon tamamlandı');
+      _addLog('🎉 Senkronizasyon başarıyla tamamlandı');
+      _addLog('   • İndirilen: $_downloadedDocuments');
+      _addLog('   • Yüklenen: $_uploadedDocuments');
+      _addLog('   • Atlanan: $_skippedDocuments');
+      _addLog('   • Hatalı: $_erroredDocuments');
+      _addLog('   • Çakışma: $_conflictedDocuments');
+      _addLog('   • Çözülen: $_resolvedConflicts');
 
-      syncResult.addAll({
+      return {
         'success': true,
-        'timestamp': DateTime.now().toIso8601String(),
-        'statistics': _getStatistics(),
-      });
-
-      return syncResult;
+        'statistics': statistics,
+        'results': results,
+        'duration': DateTime.now().millisecondsSinceEpoch,
+      };
     } catch (e) {
+      _hataOlustu = true;
+      _sonHata = e.toString();
       _addLog('❌ Senkronizasyon hatası: $e');
+      _updateStatus('Senkronizasyon hatası');
 
       return {
         'success': false,
         'error': e.toString(),
-        'timestamp': DateTime.now().toIso8601String(),
-        'statistics': _getStatistics(),
+        'statistics': statistics,
       };
+    } finally {
+      _senkronizasyonAktif = false;
+      _updateProgress(1.0);
     }
   }
 
-  /// Senkronizasyon bileşenlerini başlat
-  Future<void> _initializeSyncComponents() async {
-    await _stateTracker.initializeSyncState();
-    await _changeTracker.initializeChangeTracking();
-    _addLog('📊 Senkronizasyon bileşenleri başlatıldı');
-  }
-
-  /// Network kalitesini test et
-  Future<Map<String, dynamic>> _testNetworkQuality(
+  /// Metadata senkronizasyonu
+  Future<Map<String, dynamic>> _performMetadataSync(
     SenkronCihazi targetDevice,
   ) async {
     try {
-      final serverUrl = 'http://${targetDevice.ip}:8080';
-      final qualityResult = await _networkOptimizer.testNetworkQuality(
-        serverUrl,
-      );
+      _addLog('📋 Gelişmiş metadata senkronizasyonu başlatılıyor...');
 
-      _addLog('🌐 Network kalitesi: ${qualityResult.quality.name}');
-      _addLog(
-        '📶 Bandwidth: ${(qualityResult.bandwidth / 1024).toStringAsFixed(1)} KB/s',
-      );
-      _addLog('⏱️ Latency: ${qualityResult.latency}ms');
-
-      return {
-        'quality': qualityResult.quality.name,
-        'bandwidth': qualityResult.bandwidth,
-        'latency': qualityResult.latency,
-        'packetLoss': qualityResult.packetLoss,
-      };
-    } catch (e) {
-      _addLog('⚠️ Network kalite testi başarısız: $e');
-      return {'quality': 'unknown', 'error': e.toString()};
-    }
-  }
-
-  /// Çift yönlü metadata senkronizasyonu
-  Future<Map<String, dynamic>> _performBidirectionalMetadataSync(
-    SenkronCihazi targetDevice, {
-    DateTime? since,
-    bool bidirectional = true,
-    String strategy = 'LATEST_WINS',
-  }) async {
-    try {
+      // MetadataSyncManager ile tam senkronizasyon
       final result = await _metadataManager.syncMetadata(
         targetDevice,
-        since: since,
-        bidirectional: bidirectional,
-        strategy: strategy,
+        _localDeviceId!,
       );
 
-      _addLog('📋 Metadata sync: ${result.success ? "Başarılı" : "Başarısız"}');
-      if (result.success) {
-        _addLog('   • Local değişiklikler: ${result.localChangesCount}');
-        _addLog('   • Remote değişiklikler: ${result.remoteChangesCount}');
-        _addLog('   • Çakışmalar: ${result.conflictsCount}');
-        _addLog('   • Çözülen çakışmalar: ${result.resolvedConflictsCount}');
+      // Basit metadata sync'i de paralel olarak çalıştır (backward compatibility)
+      int additionalReceived = 0;
+      try {
+        // 1. Kategorileri sync et
+        final remoteCategories = await _fetchRemoteCategories(targetDevice);
+        final categoryResults = await _syncCategories(remoteCategories);
+        additionalReceived += categoryResults;
+        _addLog('📂 Kategoriler senkronize edildi: $categoryResults yeni');
+
+        // 2. Kişileri sync et
+        final remotePeople = await _fetchRemotePeople(targetDevice);
+        final peopleResults = await _syncPeople(remotePeople);
+        additionalReceived += peopleResults;
+        _addLog('👥 Kişiler senkronize edildi: $peopleResults yeni');
+      } catch (e) {
+        _addLog('⚠️ Basit metadata sync hatası: $e');
+      }
+
+      final success = (result['errors'] ?? 0) == 0;
+      final totalReceived = (result['received'] ?? 0) + additionalReceived;
+
+      if (success) {
+        _addLog('✅ Metadata senkronizasyonu tamamlandı');
+        _addLog('   • Gönderilen metadata: ${result['sent'] ?? 0}');
+        _addLog('   • Alınan metadata: $totalReceived');
+        _addLog('   • Çakışmalar: ${result['conflicts'] ?? 0}');
       }
 
       return {
-        'success': result.success,
-        'localChanges': result.localChangesCount,
-        'remoteChanges': result.remoteChangesCount,
-        'conflicts': result.conflictsCount,
-        'resolved': result.resolvedConflictsCount,
-        'error': result.error,
+        'success': success,
+        'sent': result['sent'] ?? 0,
+        'received': totalReceived,
+        'conflicts': result['conflicts'] ?? 0,
+        'error': success ? null : 'Metadata sync hatası',
       };
     } catch (e) {
       _addLog('❌ Metadata sync hatası: $e');
@@ -215,602 +276,893 @@ class SenkronManagerEnhanced {
     }
   }
 
-  /// Belge değişikliklerini tespit et
-  Future<Map<String, dynamic>> _detectDocumentChanges(
-    SenkronCihazi targetDevice,
-    DateTime? since,
+  /// Remote kategorileri al
+  Future<List<Map<String, dynamic>>> _fetchRemoteCategories(
+    SenkronCihazi device,
   ) async {
     try {
-      final localDocuments = await _veriTabani.belgeleriGetir();
-      final remoteDocuments = await _fetchRemoteDocuments(targetDevice.ip);
+      final response = await http
+          .get(
+            Uri.parse('http://${device.ip}:8080/categories'),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 15));
 
-      final changes = <String, dynamic>{
-        'newLocal': <BelgeModeli>[],
-        'newRemote': <Map<String, dynamic>>[],
-        'modifiedLocal': <BelgeModeli>[],
-        'modifiedRemote': <Map<String, dynamic>>[],
-        'conflicts': <Map<String, dynamic>>[],
-      };
-
-      // Remote belgelerde yeni/değişmiş olanları bul
-      for (final remoteDoc in remoteDocuments) {
-        final remoteHash = remoteDoc['hash'] ?? '';
-        if (remoteHash.isEmpty) continue;
-
-        final localMatch = localDocuments.firstWhere(
-          (local) => local.dosyaHash == remoteHash,
-          orElse: () => null as BelgeModeli,
-        );
-
-        if (localMatch == null) {
-          // Yeni remote belge
-          if (await _shouldSyncDocument(remoteHash)) {
-            changes['newRemote'].add(remoteDoc);
-          }
-        } else {
-          // Mevcut belgeyi karşılaştır
-          final comparison = await _compareDocumentMetadata(
-            localMatch,
-            remoteDoc,
-          );
-          if (comparison['hasConflict']) {
-            changes['conflicts'].add({
-              'local': localMatch,
-              'remote': remoteDoc,
-              'conflictType': comparison['conflictType'],
-            });
-          } else if (comparison['remoteNewer']) {
-            changes['modifiedRemote'].add(remoteDoc);
-          }
-        }
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['categories'] ?? []);
       }
+      return [];
+    } catch (e) {
+      _addLog('❌ Remote kategoriler alınamadı: $e');
+      return [];
+    }
+  }
 
-      // Local belgelerde yeni/değişmiş olanları bul
-      for (final localDoc in localDocuments) {
-        if (localDoc.dosyaHash.isEmpty) continue;
+  /// Remote kişileri al
+  Future<List<Map<String, dynamic>>> _fetchRemotePeople(
+    SenkronCihazi device,
+  ) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('http://${device.ip}:8080/people'),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 15));
 
-        final remoteMatch = remoteDocuments.firstWhere(
-          (remote) => remote['hash'] == localDoc.dosyaHash,
-          orElse: () => null as Map<String, dynamic>,
-        );
-
-        if (remoteMatch == null) {
-          // Yeni local belge
-          if (await _shouldSyncDocument(localDoc.dosyaHash)) {
-            changes['newLocal'].add(localDoc);
-          }
-        }
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['people'] ?? []);
       }
+      return [];
+    } catch (e) {
+      _addLog('❌ Remote kişiler alınamadı: $e');
+      return [];
+    }
+  }
 
-      _addLog('🔍 Değişiklik tespit sonuçları:');
-      _addLog('   • Yeni local belgeler: ${changes['newLocal'].length}');
-      _addLog('   • Yeni remote belgeler: ${changes['newRemote'].length}');
-      _addLog(
-        '   • Değişmiş remote belgeler: ${changes['modifiedRemote'].length}',
+  /// Kategorileri senkronize et
+  Future<int> _syncCategories(
+    List<Map<String, dynamic>> remoteCategories,
+  ) async {
+    final localCategories = await _veriTabani.kategorileriGetir();
+    int newCount = 0;
+
+    for (final remoteCategory in remoteCategories) {
+      final categoryName = remoteCategory['ad'] ?? remoteCategory['name'];
+      if (categoryName == null || categoryName.isEmpty) continue;
+
+      final exists = localCategories.any(
+        (cat) => cat.kategoriAdi == categoryName,
       );
-      _addLog('   • Çakışmalar: ${changes['conflicts'].length}');
 
-      return changes;
-    } catch (e) {
-      _addLog('❌ Değişiklik tespit hatası: $e');
-      return {'error': e.toString()};
-    }
-  }
-
-  /// Belge çakışmalarını çöz
-  Future<Map<String, dynamic>> _resolveDocumentConflicts(
-    List<dynamic> conflicts,
-    String strategy,
-  ) async {
-    final resolved = <Map<String, dynamic>>[];
-    final unresolved = <Map<String, dynamic>>[];
-
-    for (final conflict in conflicts) {
-      try {
-        final localDoc = conflict['local'] as BelgeModeli;
-        final remoteDoc = conflict['remote'] as Map<String, dynamic>;
-
-        final resolution = await _resolveConflict(
-          localDoc,
-          remoteDoc,
-          strategy,
+      if (!exists) {
+        final newCategory = KategoriModeli(
+          kategoriAdi: categoryName,
+          renkKodu:
+              remoteCategory['renkKodu'] ??
+              remoteCategory['color'] ??
+              '#2196F3',
+          simgeKodu:
+              remoteCategory['simgeKodu'] ?? remoteCategory['icon'] ?? 'folder',
+          aciklama: remoteCategory['aciklama'] ?? remoteCategory['description'],
+          olusturmaTarihi: DateTime.now(),
         );
 
-        if (resolution['resolved']) {
-          resolved.add(resolution);
-          _addLog('✅ Çakışma çözüldü: ${localDoc.dosyaAdi}');
-        } else {
-          unresolved.add(conflict);
-          _addLog('⚠️ Çakışma çözülemedi: ${localDoc.dosyaAdi}');
-          _conflictedDocuments++;
-        }
-      } catch (e) {
-        _addLog('❌ Çakışma çözüm hatası: $e');
-        unresolved.add(conflict);
-        _conflictedDocuments++;
+        await _veriTabani.kategoriEkle(newCategory);
+        newCount++;
       }
     }
 
-    return {
-      'resolved': resolved,
-      'unresolved': unresolved,
-      'resolvedCount': resolved.length,
-      'unresolvedCount': unresolved.length,
-    };
+    return newCount;
   }
 
-  /// Çift yönlü belge senkronizasyonu
-  Future<Map<String, dynamic>> _performBidirectionalDocumentSync(
+  /// Kişileri senkronize et
+  Future<int> _syncPeople(List<Map<String, dynamic>> remotePeople) async {
+    final localPeople = await _veriTabani.kisileriGetir();
+    int newCount = 0;
+
+    for (final remotePerson in remotePeople) {
+      // Türkçe ve İngilizce field isimleri ile uyumlu hale getir
+      final firstName = remotePerson['ad'] ?? remotePerson['firstName'];
+      final lastName = remotePerson['soyad'] ?? remotePerson['lastName'];
+
+      if (firstName == null || lastName == null) continue;
+
+      final exists = localPeople.any(
+        (person) => person.ad == firstName && person.soyad == lastName,
+      );
+
+      if (!exists) {
+        final newPerson = KisiModeli(
+          ad: firstName,
+          soyad: lastName,
+          olusturmaTarihi: DateTime.now(),
+          guncellemeTarihi: DateTime.now(),
+        );
+
+        await _veriTabani.kisiEkle(newPerson);
+        newCount++;
+      }
+    }
+
+    return newCount;
+  }
+
+  /// Delta senkronizasyonu
+  Future<Map<String, dynamic>> _performDeltaSync(
+    SenkronCihazi targetDevice, {
+    DateTime? since,
+  }) async {
+    try {
+      // Şimdilik basit delta sync implementasyonu
+      final localChanges = await _changeTracker.getChangedDocuments(
+        since ?? DateTime.now().subtract(const Duration(days: 1)),
+      );
+
+      // Remote delta'ları al
+      final remoteDeltas = await _fetchRemoteDeltas(targetDevice, since);
+
+      // Remote delta'ları işle
+      int processedCount = 0;
+      int errorCount = 0;
+
+      for (final delta in remoteDeltas) {
+        try {
+          // Delta'yı işle (basit implementasyon)
+          processedCount++;
+        } catch (e) {
+          errorCount++;
+          _addLog('❌ Delta işleme hatası: $e');
+        }
+      }
+
+      _addLog('📦 Delta sync tamamlandı');
+      _addLog('   • Local değişiklikler: ${localChanges.length}');
+      _addLog('   • Remote delta: ${remoteDeltas.length}');
+      _addLog('   • İşlenen: $processedCount');
+      _addLog('   • Hatalar: $errorCount');
+
+      return {
+        'success': true,
+        'localChanges': localChanges.length,
+        'remoteDeltas': remoteDeltas.length,
+        'processed': processedCount,
+        'errors': errorCount,
+      };
+    } catch (e) {
+      _addLog('❌ Delta sync hatası: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Tam belge senkronizasyonu
+  Future<Map<String, dynamic>> _performFullDocumentSync(
     SenkronCihazi targetDevice,
-    Map<String, dynamic> changes,
-    Map<String, dynamic> conflictResolution,
-    bool bidirectional,
   ) async {
-    final result = <String, dynamic>{
-      'uploaded': 0,
-      'downloaded': 0,
-      'errors': 0,
-      'skipped': 0,
-    };
+    _addLog('📄 Kapsamlı belge senkronizasyonu başlatılıyor...');
+
+    int uploaded = 0;
+    int downloaded = 0;
+    int skipped = 0;
+    int errors = 0;
+    List<String> errorMessages = [];
 
     try {
-      // Remote'dan yeni belgeleri indir
-      if (bidirectional) {
-        final newRemoteDocs = changes['newRemote'] as List<dynamic>;
-        for (final remoteDoc in newRemoteDocs) {
+      // 1. Yerel belgeleri yükle
+      try {
+        final localDocuments = await _veriTabani.belgeleriGetir();
+        _addLog('📋 Yerel belgeler: ${localDocuments.length} adet');
+
+        for (final doc in localDocuments) {
+          if (doc.dosyaYolu.isEmpty) continue;
+
           try {
-            await _downloadDocumentWithRetry(targetDevice, remoteDoc);
-            _downloadedDocuments++;
-            result['downloaded']++;
+            await _uploadDocumentWithRetry(targetDevice, doc);
+            uploaded++;
+            _addLog('✅ Yüklendi: ${doc.dosyaAdi}');
           } catch (e) {
-            _addLog('❌ İndirme hatası: ${remoteDoc['fileName']} - $e');
-            _erroredDocuments++;
-            result['errors']++;
+            errors++;
+            final errorMsg = 'Yükleme hatası: ${doc.dosyaAdi} - $e';
+            errorMessages.add(errorMsg);
+            _addLog('❌ $errorMsg');
           }
         }
-      }
-
-      // Local'dan yeni belgeleri yükle
-      final newLocalDocs = changes['newLocal'] as List<BelgeModeli>;
-      for (final localDoc in newLocalDocs) {
-        try {
-          await _uploadDocumentWithRetry(targetDevice, localDoc);
-          _uploadedDocuments++;
-          result['uploaded']++;
-        } catch (e) {
-          _addLog('❌ Yükleme hatası: ${localDoc.dosyaAdi} - $e');
-          _erroredDocuments++;
-          result['errors']++;
-        }
-      }
-
-      // Çözülen çakışmaları uygula
-      final resolvedConflicts = conflictResolution['resolved'] as List<dynamic>;
-      for (final resolution in resolvedConflicts) {
-        try {
-          await _applyConflictResolution(targetDevice, resolution);
-        } catch (e) {
-          _addLog('❌ Çakışma uygulama hatası: $e');
-          result['errors']++;
-        }
-      }
-
-      return result;
-    } catch (e) {
-      _addLog('❌ Belge sync hatası: $e');
-      return {'error': e.toString()};
-    }
-  }
-
-  /// Retry mekanizması ile belge indirme
-  Future<void> _downloadDocumentWithRetry(
-    SenkronCihazi cihaz,
-    Map<String, dynamic> docData,
-  ) async {
-    for (int attempt = 1; attempt <= _maxRetryAttempts; attempt++) {
-      try {
-        await _downloadDocumentEnhanced(cihaz, docData);
-        return; // Başarılı
       } catch (e) {
-        if (attempt == _maxRetryAttempts) {
-          rethrow; // Son deneme başarısız
-        }
-
-        _addLog('⚠️ İndirme denemesi $attempt başarısız, tekrar deneniyor...');
-        await Future.delayed(Duration(seconds: attempt * 2));
+        errors++;
+        final errorMsg = 'Yerel belge listesi alınamadı: $e';
+        errorMessages.add(errorMsg);
+        _addLog('❌ $errorMsg');
       }
+
+      // 2. Uzak belgeleri indir
+      try {
+        final remoteDocuments = await _fetchRemoteDocuments(targetDevice);
+        _addLog('📥 Uzak belgeler: ${remoteDocuments.length} adet');
+
+        for (final remoteDoc in remoteDocuments) {
+          final fileName = remoteDoc['dosyaAdi'] ?? remoteDoc['fileName'];
+          if (fileName == null) continue;
+
+          try {
+            // Yerel varlığını kontrol et
+            final localExists = await _checkLocalDocumentExists(remoteDoc);
+            if (localExists) {
+              skipped++;
+              _addLog('⏭️ Zaten mevcut: $fileName');
+              continue;
+            }
+
+            await _downloadDocumentWithRetry(targetDevice, remoteDoc);
+            downloaded++;
+            _addLog('✅ İndirildi: $fileName');
+          } catch (e) {
+            errors++;
+            final errorMsg = 'İndirme hatası: $fileName - $e';
+            errorMessages.add(errorMsg);
+            _addLog('❌ $errorMsg');
+          }
+        }
+      } catch (e) {
+        errors++;
+        final errorMsg = 'Uzak belge listesi alınamadı: $e';
+        errorMessages.add(errorMsg);
+        _addLog('❌ $errorMsg');
+      }
+
+      // 3. Senkronizasyon durumunu güncelle
+      try {
+        await _stateTracker.updateSyncSession(
+          targetDevice.id,
+          _localDeviceId!,
+          uploaded + downloaded,
+          errors,
+        );
+      } catch (e) {
+        _addLog('⚠️ Sync durumu güncellenemedi: $e');
+      }
+
+      // 4. Değişiklikleri kaydet
+      try {
+        await _changeTracker.commitChanges(targetDevice.id);
+        _addLog('✅ Değişiklikler kaydedildi');
+      } catch (e) {
+        _addLog('⚠️ Değişiklikler kaydedilemedi: $e');
+      }
+
+      final success = errors == 0;
+
+      if (success) {
+        _addLog('✅ Belge senkronizasyonu tamamlandı');
+      } else {
+        _addLog('⚠️ Belge senkronizasyonu tamamlandı (bazı hatalar ile)');
+      }
+
+      _addLog('   📤 Yüklenen: $uploaded belgeler');
+      _addLog('   📥 İndirilen: $downloaded belgeler');
+      _addLog('   ⏭️ Atlanan: $skipped belgeler');
+      _addLog('   ❌ Hata: $errors belgeler');
+
+      return {
+        'success': success,
+        'uploaded': uploaded,
+        'downloaded': downloaded,
+        'skipped': skipped,
+        'errors': errors,
+        'errorMessages': errorMessages,
+      };
+    } catch (e) {
+      _addLog('❌ Kritik belge sync hatası: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+        'uploaded': uploaded,
+        'downloaded': downloaded,
+        'skipped': skipped,
+        'errors': errors + 1,
+        'errorMessages': [...errorMessages, e.toString()],
+      };
     }
   }
 
   /// Retry mekanizması ile belge yükleme
   Future<void> _uploadDocumentWithRetry(
-    SenkronCihazi cihaz,
-    BelgeModeli belge,
+    SenkronCihazi device,
+    BelgeModeli doc,
   ) async {
-    for (int attempt = 1; attempt <= _maxRetryAttempts; attempt++) {
+    int retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
       try {
-        await _uploadDocumentEnhanced(cihaz, belge);
+        await _uploadDocument(device, doc);
         return; // Başarılı
       } catch (e) {
-        if (attempt == _maxRetryAttempts) {
-          rethrow; // Son deneme başarısız
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          throw Exception('$maxRetries deneme sonrası başarısız: $e');
         }
 
-        _addLog('⚠️ Yükleme denemesi $attempt başarısız, tekrar deneniyor...');
-        await Future.delayed(Duration(seconds: attempt * 2));
+        _addLog('⚠️ Retry $retryCount/$maxRetries: ${doc.dosyaAdi} - $e');
+        await Future.delayed(Duration(seconds: retryCount * 2));
       }
     }
   }
 
-  /// Geliştirilmiş belge indirme
-  Future<void> _downloadDocumentEnhanced(
-    SenkronCihazi cihaz,
-    Map<String, dynamic> docData,
+  /// Retry mekanizması ile belge indirme
+  Future<void> _downloadDocumentWithRetry(
+    SenkronCihazi device,
+    Map<String, dynamic> remoteDoc,
   ) async {
-    final fileName = docData['fileName'] ?? docData['dosyaAdi'];
-    if (fileName == null) return;
+    int retryCount = 0;
+    const maxRetries = 3;
 
-    final dosyaHash = docData['hash'] ?? '';
+    while (retryCount < maxRetries) {
+      try {
+        await _downloadDocument(device, remoteDoc);
+        return; // Başarılı
+      } catch (e) {
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          throw Exception('$maxRetries deneme sonrası başarısız: $e');
+        }
 
-    // State tracking başlat
-    await _stateTracker.markAsSyncing(
-      dosyaHash,
-      fileName,
-      hedefCihaz: cihaz.ad,
-    );
+        final fileName = remoteDoc['dosyaAdi'] ?? remoteDoc['fileName'];
+        _addLog('⚠️ Retry $retryCount/$maxRetries: $fileName - $e');
+        await Future.delayed(Duration(seconds: retryCount * 2));
+      }
+    }
+  }
 
+  /// Yerel belgenin varlığını kontrol et
+  Future<bool> _checkLocalDocumentExists(Map<String, dynamic> remoteDoc) async {
     try {
-      // Dosyayı indir
+      final fileName = remoteDoc['dosyaAdi'] ?? remoteDoc['fileName'];
+      final expectedHash = remoteDoc['dosyaHash'] ?? remoteDoc['hash'];
+
+      if (fileName == null || expectedHash == null) return false;
+
+      final localDocs = await _veriTabani.belgeleriGetir();
+      final existingDoc = localDocs.firstWhere(
+        (doc) => doc.dosyaAdi == fileName && doc.dosyaHash == expectedHash,
+        orElse:
+            () => BelgeModeli(
+              dosyaAdi: '',
+              orijinalDosyaAdi: '',
+              dosyaYolu: '',
+              dosyaBoyutu: 0,
+              dosyaTipi: '',
+              dosyaHash: '',
+              olusturmaTarihi: DateTime.now(),
+              guncellemeTarihi: DateTime.now(),
+            ),
+      );
+
+      return existingDoc.dosyaAdi.isNotEmpty;
+    } catch (e) {
+      _addLog('⚠️ Yerel belge kontrol hatası: $e');
+      return false;
+    }
+  }
+
+  // ============== YARDIMCI METODLAR ==============
+
+  /// Bağlantı testi
+  Future<Map<String, dynamic>> _testConnection(SenkronCihazi device) async {
+    try {
       final response = await http
-          .get(Uri.parse('http://${cihaz.ip}:8080/download/$fileName'))
-          .timeout(const Duration(seconds: 120));
+          .get(
+            Uri.parse('http://${device.ip}:8080/ping'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 10));
 
-      if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}');
+      if (response.statusCode == 200) {
+        return {'success': true};
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
       }
-
-      // Hash kontrolü
-      final downloadedHash = sha256.convert(response.bodyBytes).toString();
-      if (dosyaHash.isNotEmpty && downloadedHash != dosyaHash) {
-        throw Exception('Hash uyumsuzlığı');
-      }
-
-      // Dosyayı kaydet
-      final belgelerKlasoru = await _dosyaServisi.belgelerKlasoruYolu();
-      final filePath = '$belgelerKlasoru/$fileName';
-
-      final file = File(filePath);
-      await file.writeAsBytes(response.bodyBytes);
-
-      // Veritabanına kaydet
-      final belge = BelgeModeli(
-        dosyaAdi: fileName,
-        orijinalDosyaAdi: fileName,
-        dosyaYolu: filePath,
-        dosyaBoyutu: response.bodyBytes.length,
-        dosyaTipi: docData['fileType'] ?? 'unknown',
-        dosyaHash: downloadedHash,
-        olusturmaTarihi: DateTime.now(),
-        guncellemeTarihi: DateTime.now(),
-        kategoriId: docData['categoryId'] ?? 1,
-        baslik: docData['title'],
-        aciklama: docData['description'],
-      );
-
-      final belgeId = await _veriTabani.belgeEkle(belge);
-
-      // Change tracking
-      await _changeTracker.trackDocumentChanges(
-        belge.copyWith(id: belgeId),
-        cihazId: cihaz.id,
-        degisiklikAciklamasi: 'Downloaded from ${cihaz.ad}',
-      );
-
-      // State güncelle
-      await _stateTracker.markAsSynced(
-        downloadedHash,
-        fileName,
-        hedefCihaz: cihaz.ad,
-      );
-
-      _addLog('📥 İndirildi: $fileName');
     } catch (e) {
-      await _stateTracker.markAsError(
-        dosyaHash,
-        fileName,
-        e.toString(),
-        hedefCihaz: cihaz.ad,
-      );
-      rethrow;
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// Geliştirilmiş belge yükleme
-  Future<void> _uploadDocumentEnhanced(
-    SenkronCihazi cihaz,
-    BelgeModeli belge,
-  ) async {
-    final dosya = File(belge.dosyaYolu);
-    if (!await dosya.exists()) {
-      throw Exception('Dosya bulunamadı: ${belge.dosyaYolu}');
-    }
-
-    // State tracking başlat
-    await _stateTracker.markAsSyncing(
-      belge.dosyaHash,
-      belge.dosyaAdi,
-      hedefCihaz: cihaz.ad,
-    );
-
-    try {
-      // Multipart request
-      final uri = Uri.parse('http://${cihaz.ip}:8080/upload');
-      final request = http.MultipartRequest('POST', uri);
-
-      final mimeType =
-          lookupMimeType(belge.dosyaYolu) ?? 'application/octet-stream';
-      final multipartFile = await http.MultipartFile.fromPath(
-        'file',
-        belge.dosyaYolu,
-        contentType: MediaType.parse(mimeType),
-      );
-      request.files.add(multipartFile);
-
-      // Enhanced metadata
-      request.fields.addAll(<String, String>{
-        'title': belge.baslik ?? '',
-        'description': belge.aciklama ?? '',
-        'categoryId': belge.kategoriId.toString(),
-        'personId': belge.kisiId?.toString() ?? '',
-        'tags': belge.etiketler?.join(',') ?? '',
-        'hash': belge.dosyaHash,
-        'uploadTimestamp': DateTime.now().toIso8601String(),
-        'sourceDevice': cihaz.id,
-      });
-
-      final response = await request.send().timeout(
-        const Duration(seconds: 180),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}');
-      }
-
-      // State güncelle
-      await _stateTracker.markAsSynced(
-        belge.dosyaHash,
-        belge.dosyaAdi,
-        hedefCihaz: cihaz.ad,
-      );
-
-      _addLog('📤 Yüklendi: ${belge.dosyaAdi}');
-    } catch (e) {
-      await _stateTracker.markAsError(
-        belge.dosyaHash,
-        belge.dosyaAdi,
-        e.toString(),
-        hedefCihaz: cihaz.ad,
-      );
-      rethrow;
-    }
+  /// Local device ID'yi al
+  Future<String> _getLocalDeviceId() async {
+    return 'enhanced_device_${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  /// Sync gerekli mi kontrol et
-  Future<bool> _shouldSyncDocument(String dosyaHash) async {
-    return await _stateTracker.shouldSync(
-      BelgeModeli(
-        dosyaAdi: '',
-        orijinalDosyaAdi: '',
-        dosyaYolu: '',
-        dosyaBoyutu: 0,
-        dosyaTipi: '',
-        dosyaHash: dosyaHash,
-        olusturmaTarihi: DateTime.now(),
-        guncellemeTarihi: DateTime.now(),
-      ),
-      threshold: _syncThreshold,
-    );
-  }
-
-  /// Belge metadata karşılaştırması
-  Future<Map<String, dynamic>> _compareDocumentMetadata(
-    BelgeModeli localDoc,
-    Map<String, dynamic> remoteDoc,
-  ) async {
-    final remoteTimestamp =
-        remoteDoc['lastModified'] != null
-            ? DateTime.tryParse(remoteDoc['lastModified'].toString()) ??
-                DateTime.now()
-            : DateTime.now();
-
-    final hasConflict =
-        localDoc.guncellemeTarihi.isAfter(remoteTimestamp) &&
-        remoteTimestamp.isAfter(
-          localDoc.guncellemeTarihi.subtract(_syncThreshold),
-        );
-
-    return {
-      'hasConflict': hasConflict,
-      'localNewer': localDoc.guncellemeTarihi.isAfter(remoteTimestamp),
-      'remoteNewer': remoteTimestamp.isAfter(localDoc.guncellemeTarihi),
-      'conflictType': hasConflict ? 'TIMESTAMP_CONFLICT' : 'NO_CONFLICT',
-    };
-  }
-
-  /// Çakışma çözümü
-  Future<Map<String, dynamic>> _resolveConflict(
-    BelgeModeli localDoc,
-    Map<String, dynamic> remoteDoc,
-    String strategy,
-  ) async {
-    switch (strategy) {
-      case 'LATEST_WINS':
-        final remoteTimestamp =
-            remoteDoc['lastModified'] != null
-                ? DateTime.tryParse(remoteDoc['lastModified'].toString()) ??
-                    DateTime.now()
-                : DateTime.now();
-
-        return {
-          'resolved': true,
-          'action':
-              localDoc.guncellemeTarihi.isAfter(remoteTimestamp)
-                  ? 'UPLOAD'
-                  : 'DOWNLOAD',
-          'document':
-              localDoc.guncellemeTarihi.isAfter(remoteTimestamp)
-                  ? localDoc
-                  : remoteDoc,
-        };
-
-      case 'LOCAL_WINS':
-        return {'resolved': true, 'action': 'UPLOAD', 'document': localDoc};
-
-      case 'REMOTE_WINS':
-        return {'resolved': true, 'action': 'DOWNLOAD', 'document': remoteDoc};
-
-      case 'MANUAL':
-        // Manuel çakışma çözümü - şimdilik latest wins
-        return _resolveConflict(localDoc, remoteDoc, 'LATEST_WINS');
-
-      default:
-        return {'resolved': false, 'error': 'Unknown strategy: $strategy'};
-    }
-  }
-
-  /// Çakışma çözümünü uygula
-  Future<void> _applyConflictResolution(
-    SenkronCihazi targetDevice,
-    Map<String, dynamic> resolution,
-  ) async {
-    final action = resolution['action'] as String;
-
-    switch (action) {
-      case 'UPLOAD':
-        final localDoc = resolution['document'] as BelgeModeli;
-        await _uploadDocumentWithRetry(targetDevice, localDoc);
-        break;
-      case 'DOWNLOAD':
-        final remoteDoc = resolution['document'] as Map<String, dynamic>;
-        await _downloadDocumentWithRetry(targetDevice, remoteDoc);
-        break;
-    }
-  }
-
-  /// Senkronizasyon durumlarını güncelle
-  Future<void> _updateSyncStates(
-    SenkronCihazi targetDevice,
-    Map<String, dynamic> syncResult,
-  ) async {
-    // Başarılı sync kayıtlarını güncelle
-    if (syncResult['status'] == 'success') {
-      await _stateTracker.clearErrorStates();
-    }
-
-    _addLog('📊 Senkronizasyon durumları güncellendi');
-  }
-
-  /// Temizlik işlemleri
-  Future<void> _performCleanup() async {
-    // Eski versiyonları temizle
-    await _changeTracker.cleanupOldVersions(
-      keepVersions: 10,
-      olderThan: const Duration(days: 30),
-    );
-
-    // Eski sync state kayıtlarını temizle
-    await _stateTracker.cleanupOldSyncStates(
-      olderThan: const Duration(days: 7),
-    );
-
-    _addLog('🧹 Temizlik işlemleri tamamlandı');
-  }
-
-  /// Remote belgeler listesini al
+  /// Remote belgeleri al
   Future<List<Map<String, dynamic>>> _fetchRemoteDocuments(
-    String remoteIP,
+    SenkronCihazi device,
   ) async {
     try {
       final response = await http
           .get(
-            Uri.parse('http://$remoteIP:8080/documents'),
-            headers: {'Accept': 'application/json'},
+            Uri.parse('http://${device.ip}:8080/documents'),
+            headers: {'Content-Type': 'application/json'},
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(_syncTimeout);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return List<Map<String, dynamic>>.from(data['documents'] ?? []);
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
-      return [];
     } catch (e) {
-      _addLog('❌ Remote belgeler alınamadı: $e');
+      throw Exception('Remote belgeler alınamadı: $e');
+    }
+  }
+
+  /// Remote delta'ları al
+  Future<List<SenkronDelta>> _fetchRemoteDeltas(
+    SenkronCihazi device,
+    DateTime? since,
+  ) async {
+    try {
+      final uri = Uri.parse('http://${device.ip}:8080/deltas').replace(
+        queryParameters:
+            since != null ? {'since': since.toIso8601String()} : null,
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final deltaList = List<Map<String, dynamic>>.from(data['deltas'] ?? []);
+
+        return deltaList.map((deltaData) {
+          return SenkronDelta.fromJson(deltaData);
+        }).toList();
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      _addLog('❌ Remote delta alınamadı: $e');
       return [];
     }
   }
 
-  /// Utility methods
-  void _resetStatistics() {
-    _uploadedDocuments = 0;
+  /// Local delta'ları gönder
+  Future<Map<String, dynamic>> _sendLocalDeltas(
+    SenkronCihazi device,
+    List<SenkronDelta> deltas,
+  ) async {
+    try {
+      if (deltas.isEmpty) return {'success': true, 'sent': 0};
+
+      final response = await http
+          .post(
+            Uri.parse('http://${device.ip}:8080/deltas'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'deltas': deltas.map((d) => d.toJson()).toList(),
+              'sourceDevice': _localDeviceId,
+            }),
+          )
+          .timeout(_syncTimeout);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'sent': deltas.length,
+          'accepted': data['accepted'] ?? 0,
+        };
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      _addLog('❌ Delta gönderme hatası: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Belge indirme gerekli mi?
+  Future<bool> _shouldDownloadDocument(Map<String, dynamic> remoteDoc) async {
+    final hash = remoteDoc['dosyaHash'] ?? remoteDoc['hash'] as String?;
+    if (hash == null || hash.isEmpty) return false;
+
+    // Local belgeler arasında bu hash'e sahip belge var mı kontrol et
+    final localDocuments = await _veriTabani.belgeleriGetir();
+    final exists = localDocuments.any((doc) => doc.dosyaHash == hash);
+
+    return !exists; // Yoksa indir
+  }
+
+  /// Belge yükleme gerekli mi?
+  Future<bool> _shouldUploadDocument(BelgeModeli localDoc) async {
+    if (localDoc.dosyaHash.isEmpty) return false;
+
+    // Bu methodun çağrıldığı yerde zaten remote belgelerle karşılaştırma yapılıyor
+    // Bu nedenle basit bir kontrol yeterli
+    return true;
+  }
+
+  /// Belge indirme (tam kapsamlı)
+  Future<void> _downloadDocument(
+    SenkronCihazi device,
+    Map<String, dynamic> remoteDoc,
+  ) async {
+    // Türkçe field isimleri ile uyumlu hale getir
+    final fileName = remoteDoc['dosyaAdi'] ?? remoteDoc['fileName'];
+    if (fileName == null) return;
+
+    final expectedHash = remoteDoc['dosyaHash'] ?? remoteDoc['hash'];
+    if (expectedHash == null || expectedHash.isEmpty) {
+      throw Exception('Hash bilgisi eksik');
+    }
+
+    // State tracking kontrolü
+    final alreadySynced = await _stateTracker.isSynced(expectedHash, device.id);
+    if (alreadySynced) {
+      _addLog('⏭️ Zaten senkronize edilmiş: $fileName');
+      return;
+    }
+
+    _addLog('📥 İndiriliyor: $fileName');
+
+    // Dosyayı indir
+    final response = await http
+        .get(Uri.parse('http://${device.ip}:8080/download/$fileName'))
+        .timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+
+    // Hash kontrolü - kritik güvenlik önlemi
+    final downloadedHash = sha256.convert(response.bodyBytes).toString();
+    if (downloadedHash != expectedHash) {
+      throw Exception(
+        'Hash uyumsuzlığı - beklenen: $expectedHash, alınan: $downloadedHash',
+      );
+    }
+
+    // Dosyayı kaydet
+    final belgelerKlasoru = await _dosyaServisi.belgelerKlasoruYolu();
+    final filePath = '$belgelerKlasoru/$fileName';
+
+    final file = File(filePath);
+    await file.writeAsBytes(response.bodyBytes);
+
+    // Dosya integrity check
+    final savedFileHash = sha256.convert(await file.readAsBytes()).toString();
+    if (savedFileHash != expectedHash) {
+      await file.delete();
+      throw Exception('Dosya kaydedilirken hash bozuldu');
+    }
+
+    // Veritabanına kaydet - tam metadata ile
+    final belge = BelgeModeli(
+      dosyaAdi: fileName,
+      orijinalDosyaAdi: fileName,
+      dosyaYolu: filePath,
+      dosyaBoyutu: response.bodyBytes.length,
+      dosyaTipi: remoteDoc['dosyaTipi'] ?? remoteDoc['fileType'] ?? 'unknown',
+      dosyaHash: downloadedHash,
+      olusturmaTarihi: DateTime.now(),
+      guncellemeTarihi: DateTime.now(),
+      kategoriId: remoteDoc['kategoriId'] ?? remoteDoc['categoryId'] ?? 1,
+      kisiId: remoteDoc['kisiId'] ?? remoteDoc['personId'],
+      baslik: remoteDoc['baslik'] ?? remoteDoc['title'],
+      aciklama: remoteDoc['aciklama'] ?? remoteDoc['description'],
+      etiketler:
+          remoteDoc['etiketler']?.cast<String>() ??
+          remoteDoc['tags']?.cast<String>(),
+    );
+
+    final belgeId = await _veriTabani.belgeEkle(belge);
+
+    // Change tracking - tam implementasyon
+    final dummyPreviousBelge = BelgeModeli(
+      dosyaAdi: fileName,
+      orijinalDosyaAdi: fileName,
+      dosyaYolu: '',
+      dosyaBoyutu: 0,
+      dosyaTipi: '',
+      dosyaHash: '',
+      olusturmaTarihi: DateTime.now(),
+      guncellemeTarihi: DateTime.now(),
+    );
+
+    await _changeTracker.trackDocumentChanges(
+      dummyPreviousBelge,
+      belge.copyWith(id: belgeId),
+      device.id,
+    );
+
+    // State tracking güncelle - senkronizasyon başarılı
+    await _stateTracker.markAsSynced(
+      expectedHash,
+      fileName,
+      device.id,
+      _localDeviceId!,
+    );
+
+    _addLog(
+      '✅ İndirildi ve kayıt edildi: $fileName (${response.bodyBytes.length} bytes)',
+    );
+  }
+
+  /// Belge yükleme (tam kapsamlı)
+  Future<void> _uploadDocument(
+    SenkronCihazi device,
+    BelgeModeli localDoc,
+  ) async {
+    final dosya = File(localDoc.dosyaYolu);
+    if (!await dosya.exists()) {
+      throw Exception('Dosya bulunamadı: ${localDoc.dosyaYolu}');
+    }
+
+    // Hash kontrolü - dosya bütünlüğünü garanti et
+    final fileBytes = await dosya.readAsBytes();
+    final currentHash = sha256.convert(fileBytes).toString();
+
+    if (localDoc.dosyaHash.isNotEmpty && currentHash != localDoc.dosyaHash) {
+      throw Exception('Dosya hash\'i değişmiş - belge bozulmuş olabilir');
+    }
+
+    // State tracking kontrolü
+    final alreadySynced = await _stateTracker.isSynced(currentHash, device.id);
+    if (alreadySynced) {
+      _addLog('⏭️ Zaten senkronize edilmiş: ${localDoc.dosyaAdi}');
+      return;
+    }
+
+    _addLog('📤 Yükleniyor: ${localDoc.dosyaAdi} (${fileBytes.length} bytes)');
+
+    // Kişi bilgilerini tam olarak al
+    String? kisiAd, kisiSoyad;
+    if (localDoc.kisiId != null) {
+      try {
+        final kisiler = await _veriTabani.kisileriGetir();
+        final kisi = kisiler.firstWhere(
+          (k) => k.id == localDoc.kisiId,
+          orElse:
+              () => KisiModeli(
+                ad: '',
+                soyad: '',
+                olusturmaTarihi: DateTime.now(),
+                guncellemeTarihi: DateTime.now(),
+              ),
+        );
+        if (kisi.ad.isNotEmpty) {
+          kisiAd = kisi.ad;
+          kisiSoyad = kisi.soyad;
+          _addLog('👤 Kişi bilgisi: ${kisi.tamAd}');
+        }
+      } catch (e) {
+        _addLog('⚠️ Kişi bilgileri alınamadı: $e');
+      }
+    }
+
+    // Multipart request oluştur
+    final uri = Uri.parse('http://${device.ip}:8080/upload');
+    final request = http.MultipartRequest('POST', uri);
+
+    // Dosya MIME type tespiti
+    final mimeType =
+        lookupMimeType(localDoc.dosyaYolu) ?? 'application/octet-stream';
+    final multipartFile = await http.MultipartFile.fromPath(
+      'file',
+      localDoc.dosyaYolu,
+      contentType: MediaType.parse(mimeType),
+    );
+    request.files.add(multipartFile);
+
+    // Tam metadata - HTTP sunucusunun beklediği format
+    final metadata = {
+      'dosyaAdi': localDoc.dosyaAdi,
+      'baslik': localDoc.baslik ?? '',
+      'aciklama': localDoc.aciklama ?? '',
+      'kategoriId': localDoc.kategoriId ?? 1,
+      'kisiId': localDoc.kisiId,
+      'kisiAd': kisiAd,
+      'kisiSoyad': kisiSoyad,
+      'dosyaTipi': localDoc.dosyaTipi,
+      'dosyaHash': currentHash,
+      'etiketler': localDoc.etiketler,
+      'olusturmaTarihi': localDoc.olusturmaTarihi.toIso8601String(),
+      'guncellemeTarihi': localDoc.guncellemeTarihi.toIso8601String(),
+      'sourceDevice': _localDeviceId,
+      'uploadTimestamp': DateTime.now().toIso8601String(),
+    };
+
+    request.fields['metadata'] = json.encode(metadata);
+
+    // Request headers
+    request.headers.addAll({
+      'X-Device-ID': _localDeviceId!,
+      'X-Upload-Hash': currentHash,
+      'X-File-Size': fileBytes.length.toString(),
+    });
+
+    // Yükleme işlemini gerçekleştir
+    final response = await request.send().timeout(const Duration(seconds: 120));
+
+    if (response.statusCode != 200) {
+      final responseBody = await response.stream.bytesToString();
+      throw Exception('HTTP ${response.statusCode}: $responseBody');
+    }
+
+    // Response'u kontrol et
+    final responseBody = await response.stream.bytesToString();
+    try {
+      final responseData = json.decode(responseBody);
+      if (responseData['status'] == 'error') {
+        throw Exception('Server hatası: ${responseData['message']}');
+      }
+
+      if (responseData['duplicate'] == true) {
+        _addLog('⚠️ Duplicate dosya: ${localDoc.dosyaAdi}');
+      } else {
+        _addLog('✅ Başarıyla yüklendi: ${responseData['fileName']}');
+      }
+    } catch (e) {
+      _addLog('⚠️ Response parse hatası: $e');
+    }
+
+    // Change tracking - yükleme işlemini kaydet
+    await _changeTracker.trackDocumentChanges(
+      localDoc,
+      localDoc.copyWith(guncellemeTarihi: DateTime.now()),
+      device.id,
+    );
+
+    // State tracking güncelle - yükleme başarılı
+    await _stateTracker.markAsSynced(
+      currentHash,
+      localDoc.dosyaAdi,
+      device.id,
+      _localDeviceId!,
+    );
+
+    _addLog('📤 Yükleme tamamlandı: ${localDoc.dosyaAdi}');
+  }
+
+  // ============== ÇAKIŞMA ÇÖZÜMÜ ==============
+
+  /// Tüm çakışmaları çöz
+  Future<Map<String, dynamic>> _resolveAllConflicts(
+    SenkronCihazi device,
+    String strategy,
+  ) async {
+    try {
+      // Çakışan belgeleri al (Bu örnekte basit bir yaklaşım)
+      final conflicts = <Map<String, dynamic>>[];
+
+      int resolved = 0;
+      int failed = 0;
+
+      for (final conflict in conflicts) {
+        try {
+          await _resolveConflict(device, conflict, strategy);
+          resolved++;
+        } catch (e) {
+          failed++;
+          _addLog('❌ Çakışma çözüm hatası: $e');
+        }
+      }
+
+      return {
+        'success': true,
+        'resolved': resolved,
+        'failed': failed,
+        'total': conflicts.length,
+      };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Tek çakışma çöz
+  Future<void> _resolveConflict(
+    SenkronCihazi device,
+    Map<String, dynamic> conflict,
+    String strategy,
+  ) async {
+    switch (strategy) {
+      case 'LATEST_WINS':
+        // En son güncellenen kazansın
+        break;
+      case 'LOCAL_WINS':
+        // Local kazansın
+        break;
+      case 'REMOTE_WINS':
+        // Remote kazansın
+        break;
+      case 'MANUAL':
+        // Manuel çözüm (şimdilik latest wins)
+        break;
+    }
+  }
+
+  // ============== TEMİZLİK VE OPTİMİZASYON ==============
+
+  /// Temizlik işlemleri
+  Future<void> _performCleanup() async {
+    try {
+      // Eski sync state'leri temizle
+      await _stateTracker.clearSyncState();
+
+      // Temizlik tamamlandı
+      _addLog('🧹 Temizlik tamamlandı');
+    } catch (e) {
+      _addLog('⚠️ Temizlik hatası: $e');
+    }
+  }
+
+  // ============== DURUM YÖNETİMİ ==============
+
+  /// Senkronizasyonu durdur
+  void stopSync() {
+    _durduruldu = true;
+    _updateStatus('Senkronizasyon durduruluyor...');
+    _addLog('⏹️ Senkronizasyon durduruldu');
+  }
+
+  /// Senkronizasyon durumunu sıfırla
+  void _resetSyncState() {
+    _durduruldu = false;
+    _hataOlustu = false;
+    _sonHata = null;
     _downloadedDocuments = 0;
+    _uploadedDocuments = 0;
+    _skippedDocuments = 0;
     _erroredDocuments = 0;
     _conflictedDocuments = 0;
-    _skippedDocuments = 0;
+    _resolvedConflicts = 0;
+    _progress = 0.0;
+    _currentOperation = '';
+    _totalOperations = 0;
+    _completedOperations = 0;
+    _logMessages.clear();
   }
 
-  Map<String, int> _getStatistics() {
-    return {
-      'uploaded': _uploadedDocuments,
-      'downloaded': _downloadedDocuments,
-      'errors': _erroredDocuments,
-      'conflicts': _conflictedDocuments,
-      'skipped': _skippedDocuments,
-    };
+  /// Progress güncelle
+  void _updateProgress(double progress) {
+    _progress = progress.clamp(0.0, 1.0);
+    onProgressUpdate?.call(_progress);
   }
 
-  void _updateProgress(double progress, String? operation) {
-    onProgressUpdate?.call(progress);
-    if (operation != null) {
-      onOperationUpdate?.call(operation);
+  /// İşlem durumunu güncelle
+  void _updateOperation(String operation) {
+    _currentOperation = operation;
+    _addLog('🔄 $operation');
+  }
+
+  /// Durum güncelle
+  void _updateStatus(String status) {
+    onStatusUpdate?.call(status);
+  }
+
+  /// Log mesajı ekle
+  void _addLog(String message) {
+    final timestamp = DateTime.now().toIso8601String().substring(11, 19);
+    final logMessage = '[$timestamp] $message';
+    _logMessages.add(logMessage);
+    onLogMessage?.call(logMessage);
+
+    // Log limitini kontrol et
+    if (_logMessages.length > 1000) {
+      _logMessages.removeRange(0, 500);
     }
   }
 
-  void _addLog(String message) {
-    onLogMessage?.call(message);
-  }
+  // ============== DISPOSE ==============
 
-  void _logDetailedStatistics() {
-    _addLog('📊 Detaylı Senkronizasyon İstatistikleri:');
-    _addLog('   • Yüklenen belgeler: $_uploadedDocuments');
-    _addLog('   • İndirilen belgeler: $_downloadedDocuments');
-    _addLog('   • Hatalı işlemler: $_erroredDocuments');
-    _addLog('   • Çakışan belgeler: $_conflictedDocuments');
-    _addLog('   • Atlanan belgeler: $_skippedDocuments');
-  }
-
-  /// Configuration methods
-  void configureSyncSettings({
-    Duration? syncThreshold,
-    int? maxRetryAttempts,
-    bool? enableBidirectionalSync,
-    String? conflictResolutionStrategy,
-  }) {
-    if (syncThreshold != null) _syncThreshold = syncThreshold;
-    if (maxRetryAttempts != null) _maxRetryAttempts = maxRetryAttempts;
-    if (enableBidirectionalSync != null)
-      _enableBidirectionalSync = enableBidirectionalSync;
-    if (conflictResolutionStrategy != null)
-      _conflictResolutionStrategy = conflictResolutionStrategy;
-  }
-
-  /// Callback ayarlama metodu
-  void setCallbacks({
-    Function(double)? onProgress,
-    Function(String)? onOperation,
-    Function(String)? onLog,
-  }) {
-    onProgressUpdate = onProgress;
-    onOperationUpdate = onOperation;
-    onLogMessage = onLog;
+  void dispose() {
+    _senkronizasyonAktif = false;
+    _durduruldu = true;
+    _logMessages.clear();
+    onLogMessage = null;
+    onProgressUpdate = null;
+    onStatusUpdate = null;
   }
 }

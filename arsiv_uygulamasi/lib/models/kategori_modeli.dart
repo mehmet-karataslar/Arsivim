@@ -1,28 +1,24 @@
 import '../utils/yardimci_fonksiyonlar.dart';
 
-// Kategori yapısı ve hiyerarşi yönetimi
+// Kategori yapısı ve yönetimi
 class KategoriModeli {
   int? id;
   String kategoriAdi;
-  int? ustKategoriId;
   String renkKodu;
   String simgeKodu;
   String? aciklama;
   DateTime olusturmaTarihi;
   bool aktif;
-  List<KategoriModeli>? altKategoriler;
   int? belgeSayisi; // Bu kategorideki belge sayısı
 
   KategoriModeli({
     this.id,
     required this.kategoriAdi,
-    this.ustKategoriId,
     this.renkKodu = '#2196F3',
     this.simgeKodu = 'folder',
     this.aciklama,
     required this.olusturmaTarihi,
     this.aktif = true,
-    this.altKategoriler,
     this.belgeSayisi = 0,
   });
 
@@ -31,7 +27,6 @@ class KategoriModeli {
     return KategoriModeli(
       id: json['id'],
       kategoriAdi: json['kategori_adi'],
-      ustKategoriId: json['ust_kategori_id'],
       renkKodu: json['renk_kodu'] ?? '#2196F3',
       simgeKodu: json['simge_kodu'] ?? 'folder',
       aciklama: json['aciklama'],
@@ -46,7 +41,6 @@ class KategoriModeli {
     return {
       'id': id,
       'kategori_adi': kategoriAdi,
-      'ust_kategori_id': ustKategoriId,
       'renk_kodu': renkKodu,
       'simge_kodu': simgeKodu,
       'aciklama': aciklama,
@@ -61,7 +55,6 @@ class KategoriModeli {
     return {
       'id': id,
       'kategori_adi': kategoriAdi,
-      'ust_kategori_id': ustKategoriId,
       'renk_kodu': renkKodu,
       'simge_kodu': simgeKodu,
       'aciklama': aciklama,
@@ -75,7 +68,6 @@ class KategoriModeli {
     return KategoriModeli(
       id: map['id'],
       kategoriAdi: map['kategori_adi'],
-      ustKategoriId: map['ust_kategori_id'],
       renkKodu: map['renk_kodu'] ?? '#2196F3',
       simgeKodu: map['simge_kodu'] ?? 'folder',
       aciklama: map['aciklama'],
@@ -89,25 +81,21 @@ class KategoriModeli {
   KategoriModeli copyWith({
     int? id,
     String? kategoriAdi,
-    int? ustKategoriId,
     String? renkKodu,
     String? simgeKodu,
     String? aciklama,
     DateTime? olusturmaTarihi,
     bool? aktif,
-    List<KategoriModeli>? altKategoriler,
     int? belgeSayisi,
   }) {
     return KategoriModeli(
       id: id ?? this.id,
       kategoriAdi: kategoriAdi ?? this.kategoriAdi,
-      ustKategoriId: ustKategoriId ?? this.ustKategoriId,
       renkKodu: renkKodu ?? this.renkKodu,
       simgeKodu: simgeKodu ?? this.simgeKodu,
       aciklama: aciklama ?? this.aciklama,
       olusturmaTarihi: olusturmaTarihi ?? this.olusturmaTarihi,
       aktif: aktif ?? this.aktif,
-      altKategoriler: altKategoriler ?? this.altKategoriler,
       belgeSayisi: belgeSayisi ?? this.belgeSayisi,
     );
   }
@@ -119,13 +107,6 @@ class KategoriModeli {
 
   /// Alias for kategoriAdi
   String get ad => kategoriAdi;
-
-  // Ana kategori mi kontrolü
-  bool get anaKategoriMi => ustKategoriId == null;
-
-  // Alt kategori var mı kontrolü
-  bool get altKategoriVarMi =>
-      altKategoriler != null && altKategoriler!.isNotEmpty;
 
   // Öntanımlı kategoriler
   static List<KategoriModeli> ontanimliKategoriler() {
@@ -275,6 +256,6 @@ class KategoriModeli {
 
   @override
   String toString() {
-    return 'KategoriModeli{id: $id, kategoriAdi: $kategoriAdi, ustKategoriId: $ustKategoriId, belgeSayisi: $belgeSayisi}';
+    return 'KategoriModeli{id: $id, kategoriAdi: $kategoriAdi, belgeSayisi: $belgeSayisi}';
   }
 }

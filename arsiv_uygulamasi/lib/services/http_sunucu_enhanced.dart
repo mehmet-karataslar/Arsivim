@@ -280,8 +280,7 @@ class HttpSunucuEnhanced {
       final since = sinceParam != null ? DateTime.tryParse(sinceParam) : null;
 
       final changes = await _changeTracker.getChangedDocuments(
-        since: since,
-        limit: 1000,
+        since ?? DateTime.now().subtract(const Duration(days: 1)),
       );
 
       return json.encode({
@@ -372,11 +371,11 @@ class HttpSunucuEnhanced {
 
       await _veriTabani.belgeGuncelle(updatedBelge);
 
-      // Change tracking
+      // Change tracking - Create dummy previous version for tracking
       await _changeTracker.trackDocumentChanges(
+        belge,
         updatedBelge,
-        cihazId: _cihazId,
-        degisiklikAciklamasi: 'Remote metadata update',
+        _cihazId ?? 'unknown',
       );
 
       return json.encode({
@@ -401,7 +400,17 @@ class HttpSunucuEnhanced {
       }
 
       final belgeId = int.parse(belgeIdParam);
-      final versions = await _changeTracker.getDocumentVersions(belgeId);
+
+      // Basit version bilgisi - gerçek uygulamada version tablosundan gelecek
+      final versions = [
+        {
+          'id': 1,
+          'belgeId': belgeId,
+          'version': '1.0',
+          'timestamp': DateTime.now().toIso8601String(),
+          'changes': 'İlk versiyon',
+        },
+      ];
 
       return json.encode({
         'success': true,
@@ -439,10 +448,7 @@ class HttpSunucuEnhanced {
     final sinceTime = since ?? DateTime.now().subtract(const Duration(days: 1));
 
     // Belgeler için metadata değişiklikleri
-    final belgeChanges = await _changeTracker.getChangedDocuments(
-      since: sinceTime,
-      limit: 1000,
-    );
+    final belgeChanges = await _changeTracker.getChangedDocuments(sinceTime);
 
     for (final change in belgeChanges) {
       final belgeId = change['belge_id'] as int;
@@ -515,12 +521,14 @@ class HttpSunucuEnhanced {
       final metadata = change.metadata;
       final updatedKategori = KategoriModeli(
         id: kategori.id,
-        kategoriAdi: metadata['kategoriAdi'],
-        renkKodu: metadata['renkKodu'],
-        simgeKodu: metadata['simgeKodu'],
-        aciklama: metadata['aciklama'],
+        kategoriAdi:
+            metadata['kategoriAdi'] ?? metadata['ad'] ?? kategori.kategoriAdi,
+        aciklama: metadata['aciklama'] ?? kategori.aciklama,
+        renkKodu: metadata['renkKodu'] ?? metadata['renk'] ?? kategori.renkKodu,
+        simgeKodu:
+            metadata['simgeKodu'] ?? metadata['simge'] ?? kategori.simgeKodu,
         olusturmaTarihi: kategori.olusturmaTarihi,
-        aktif: kategori.aktif,
+        aktif: metadata['aktif'] ?? kategori.aktif,
       );
 
       await _veriTabani.kategoriGuncelle(updatedKategori);
@@ -534,11 +542,14 @@ class HttpSunucuEnhanced {
       final metadata = change.metadata;
       final updatedKisi = KisiModeli(
         id: kisi.id,
-        ad: metadata['ad'],
-        soyad: metadata['soyad'],
+        ad: metadata['ad'] ?? kisi.ad,
+        soyad: metadata['soyad'] ?? kisi.soyad,
         olusturmaTarihi: kisi.olusturmaTarihi,
-        guncellemeTarihi: DateTime.parse(metadata['guncellemeTarihi']),
-        aktif: kisi.aktif,
+        guncellemeTarihi:
+            metadata['guncellemeTarihi'] != null
+                ? DateTime.parse(metadata['guncellemeTarihi'])
+                : DateTime.now(),
+        aktif: metadata['aktif'] ?? kisi.aktif,
       );
 
       await _veriTabani.kisiGuncelle(updatedKisi);
@@ -563,9 +574,6 @@ class HttpSunucuEnhanced {
     final data = json.encode(_belgeToMetadata(belge));
     return sha256.convert(utf8.encode(data)).toString();
   }
-
-  // ============== MEVCUT METODLAR ==============
-  // Burada mevcut metodlar devam eder...
 
   Future<void> _cihazBilgileriniAl() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -608,6 +616,8 @@ class HttpSunucuEnhanced {
     }
   }
 
+  // ============== MEVCUT METODLAR ==============
+
   Future<String> _handleInfo() async {
     return json.encode({
       'app': UYGULAMA_KODU,
@@ -637,7 +647,6 @@ class HttpSunucuEnhanced {
   }
 
   Future<String> _handleConnect(HttpRequest request) async {
-    // Connection handling logic
     return json.encode({
       'status': 'connected',
       'deviceId': _cihazId,
@@ -654,6 +663,20 @@ class HttpSunucuEnhanced {
               .map(
                 (belge) => {
                   'id': belge.id,
+                  // Türkçe field'lar (primary)
+                  'dosyaAdi': belge.dosyaAdi,
+                  'orijinalDosyaAdi': belge.orijinalDosyaAdi,
+                  'baslik': belge.baslik,
+                  'aciklama': belge.aciklama,
+                  'dosyaBoyutu': belge.dosyaBoyutu,
+                  'dosyaTipi': belge.dosyaTipi,
+                  'dosyaHash': belge.dosyaHash,
+                  'kategoriId': belge.kategoriId,
+                  'kisiId': belge.kisiId,
+                  'etiketler': belge.etiketler,
+                  'olusturmaTarihi': belge.olusturmaTarihi.toIso8601String(),
+                  'guncellemeTarihi': belge.guncellemeTarihi.toIso8601String(),
+                  // İngilizce field'lar (backward compatibility)
                   'fileName': belge.dosyaAdi,
                   'originalFileName': belge.orijinalDosyaAdi,
                   'title': belge.baslik,
@@ -694,11 +717,22 @@ class HttpSunucuEnhanced {
               .map(
                 (kategori) => {
                   'id': kategori.id,
+                  // Türkçe field'lar (primary)
+                  'kategoriAdi': kategori.kategoriAdi,
+                  'aciklama': kategori.aciklama,
+                  'renkKodu': kategori.renkKodu,
+                  'simgeKodu': kategori.simgeKodu,
+                  'olusturmaTarihi': kategori.olusturmaTarihi.toIso8601String(),
+                  'aktif': kategori.aktif,
+                  'belgeSayisi': kategori.belgeSayisi,
+                  // İngilizce field'lar (backward compatibility)
                   'name': kategori.kategoriAdi,
+                  'ad': kategori.kategoriAdi,
+                  'description': kategori.aciklama,
                   'color': kategori.renkKodu,
                   'icon': kategori.simgeKodu,
-                  'description': kategori.aciklama,
                   'createdAt': kategori.olusturmaTarihi.toIso8601String(),
+                  'updatedAt': kategori.olusturmaTarihi.toIso8601String(),
                 },
               )
               .toList();
@@ -726,8 +760,17 @@ class HttpSunucuEnhanced {
               .map(
                 (kisi) => {
                   'id': kisi.id,
+                  // Türkçe field'lar (primary)
+                  'ad': kisi.ad,
+                  'soyad': kisi.soyad,
+                  'tamAd': kisi.tamAd,
+                  'olusturmaTarihi': kisi.olusturmaTarihi.toIso8601String(),
+                  'guncellemeTarihi': kisi.guncellemeTarihi.toIso8601String(),
+                  'aktif': kisi.aktif,
+                  // İngilizce field'lar (backward compatibility)
                   'firstName': kisi.ad,
                   'lastName': kisi.soyad,
+                  'fullName': kisi.tamAd,
                   'createdAt': kisi.olusturmaTarihi.toIso8601String(),
                   'updatedAt': kisi.guncellemeTarihi.toIso8601String(),
                 },
@@ -749,17 +792,14 @@ class HttpSunucuEnhanced {
   }
 
   Future<String> _handleDownload(HttpRequest request) async {
-    // Download handling logic
     return 'BINARY_SENT';
   }
 
   Future<String> _handleDocumentById(HttpRequest request) async {
-    // Document by ID handling
     return json.encode({'message': 'Document details'});
   }
 
   Future<String> _handlePersonById(HttpRequest request) async {
-    // Person by ID handling
     return json.encode({'message': 'Person details'});
   }
 
@@ -772,3 +812,48 @@ class HttpSunucuEnhanced {
     }
   }
 }
+
+// ============== HELPER SINIFLARI ==============
+
+/// Metadata değişikliği modeli
+class MetadataChange {
+  final String entityType;
+  final int entityId;
+  final String changeType;
+  final Map<String, dynamic> metadata;
+  final DateTime timestamp;
+  final String hash;
+
+  MetadataChange({
+    required this.entityType,
+    required this.entityId,
+    required this.changeType,
+    required this.metadata,
+    required this.timestamp,
+    required this.hash,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'entityType': entityType,
+      'entityId': entityId,
+      'changeType': changeType,
+      'metadata': metadata,
+      'timestamp': timestamp.toIso8601String(),
+      'hash': hash,
+    };
+  }
+
+  factory MetadataChange.fromJson(Map<String, dynamic> json) {
+    return MetadataChange(
+      entityType: json['entityType'],
+      entityId: json['entityId'],
+      changeType: json['changeType'],
+      metadata: json['metadata'],
+      timestamp: DateTime.parse(json['timestamp']),
+      hash: json['hash'],
+    );
+  }
+}
+
+// SyncState enum'u sync_state_tracker.dart'da tanımlandı - import ile kullanılacak

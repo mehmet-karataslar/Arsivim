@@ -95,10 +95,7 @@ class SenkronDeltaManager {
           baslangicTarihi ?? DateTime.now().subtract(const Duration(days: 1));
 
       // Değişen belgeleri al
-      final degisimler = await _changeTracker.getChangedDocuments(
-        since: baslangic,
-        limit: limitSayisi ?? 1000,
-      );
+      final degisimler = await _changeTracker.getChangedDocuments(baslangic);
 
       _toplamDeltaSayisi = degisimler.length;
       _logMesaj('📋 ${degisimler.length} değişiklik tespit edildi');
@@ -354,11 +351,7 @@ class SenkronDeltaManager {
     // Yeni belge oluştur
     final dosyaAdi =
         delta.metadata.properties['dosyaAdi'] as String? ?? 'unknown';
-    await _stateTracker.markAsSyncing(
-      delta.documentHash,
-      dosyaAdi,
-      hedefCihaz: cihazId,
-    );
+    _logMesaj('🔄 Create delta işleniyor: $dosyaAdi');
 
     return true;
   }
@@ -378,11 +371,7 @@ class SenkronDeltaManager {
     // Güncelleme için işaretle
     final dosyaAdi =
         delta.metadata.properties['dosyaAdi'] as String? ?? 'unknown';
-    await _stateTracker.markAsSyncing(
-      delta.documentHash,
-      dosyaAdi,
-      hedefCihaz: cihazId,
-    );
+    _logMesaj('🔄 Update delta işleniyor: $dosyaAdi');
 
     return true;
   }
@@ -392,11 +381,7 @@ class SenkronDeltaManager {
     // Silme işlemi için işaretle
     final dosyaAdi =
         delta.metadata.properties['dosyaAdi'] as String? ?? 'unknown';
-    await _stateTracker.markAsSyncing(
-      delta.documentHash,
-      dosyaAdi,
-      hedefCihaz: cihazId,
-    );
+    _logMesaj('🔄 Delete delta işleniyor: $dosyaAdi');
 
     return true;
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'veritabani_servisi.dart';
 import '../models/belge_modeli.dart';
@@ -26,30 +27,33 @@ class DocumentChangeTracker {
       CREATE TABLE IF NOT EXISTS belge_versiyonlari (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         belge_id INTEGER NOT NULL,
-        versiyon_numarasi INTEGER NOT NULL,
         dosya_hash TEXT NOT NULL,
         metadata_hash TEXT NOT NULL,
-        content_hash TEXT NOT NULL,
-        dosya_boyutu INTEGER NOT NULL,
+        versiyon_numarasi INTEGER NOT NULL,
         olusturma_tarihi TEXT NOT NULL,
-        degisiklik_tipi TEXT NOT NULL,
-        degisiklik_aciklamasi TEXT,
-        kullanici_id TEXT,
-        cihaz_id TEXT,
+        guncelleme_tarihi TEXT NOT NULL,
+        baslik TEXT,
+        aciklama TEXT,
+        etiketler TEXT,
+        kategori_id INTEGER,
+        kisi_id INTEGER,
+        change_type TEXT DEFAULT 'UPDATE',
         FOREIGN KEY (belge_id) REFERENCES belgeler(id)
       )
     ''');
 
-    // Metadata değişiklikleri tablosu
+    // Metadata değişiklik logu tablosu
     await db.execute('''
       CREATE TABLE IF NOT EXISTS metadata_degisiklikleri (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         belge_id INTEGER NOT NULL,
-        alan_adi TEXT NOT NULL,
+        degisiklik_tipi TEXT NOT NULL,
         eski_deger TEXT,
         yeni_deger TEXT,
-        degisiklik_tarihi TEXT NOT NULL,
+        degisiklik_alani TEXT NOT NULL,
+        degisiklik_zamani TEXT NOT NULL,
         cihaz_id TEXT,
+        sync_edildi INTEGER DEFAULT 0,
         FOREIGN KEY (belge_id) REFERENCES belgeler(id)
       )
     ''');
@@ -66,8 +70,13 @@ class DocumentChangeTracker {
     ''');
 
     await db.execute('''
-      CREATE INDEX IF NOT EXISTS idx_metadata_degisiklikleri_belge_id 
-      ON metadata_degisiklikleri(belge_id)
+      CREATE INDEX IF NOT EXISTS idx_metadata_degisiklikleri_entity_id 
+      ON metadata_degisiklikleri(entity_id)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_metadata_degisiklikleri_zaman 
+      ON metadata_degisiklikleri(degisiklik_zamani)
     ''');
 
     print('📝 DocumentChangeTracker initialized');
@@ -75,187 +84,349 @@ class DocumentChangeTracker {
 
   /// Belge değişikliklerini takip et
   Future<void> trackDocumentChanges(
-    BelgeModeli belge, {
+    BelgeModeli eskiBelge,
+    BelgeModeli yeniBelge,
     String? cihazId,
-    String? kullaniciId,
-    String? degisiklikAciklamasi,
-  }) async {
+  ) async {
     final db = await _veriTabani.database;
-
-    // Mevcut versiyon numarasını al
-    final versionResult = await db.query(
-      'belge_versiyonlari',
-      where: 'belge_id = ?',
-      whereArgs: [belge.id],
-      orderBy: 'versiyon_numarasi DESC',
-      limit: 1,
-    );
-
-    final yeniVersionNo =
-        versionResult.isNotEmpty
-            ? (versionResult.first['versiyon_numarasi'] as int) + 1
-            : 1;
-
-    // Hash değerlerini hesapla
-    final contentHash = await _calculateContentHash(belge.dosyaYolu);
-    final metadataHash = _hashComparator.generateMetadataHash(belge);
-
-    // Değişiklik tipini belirle
-    final degisiklikTipi = await _determineDegisiklikTipi(belge, versionResult);
-
-    // Versiyon kaydını oluştur
-    await db.insert('belge_versiyonlari', {
-      'belge_id': belge.id,
-      'versiyon_numarasi': yeniVersionNo,
-      'dosya_hash': belge.dosyaHash,
-      'metadata_hash': metadataHash,
-      'content_hash': contentHash,
-      'dosya_boyutu': belge.dosyaBoyutu,
-      'olusturma_tarihi': DateTime.now().toIso8601String(),
-      'degisiklik_tipi': degisiklikTipi,
-      'degisiklik_aciklamasi': degisiklikAciklamasi,
-      'kullanici_id': kullaniciId,
-      'cihaz_id': cihazId ?? 'unknown',
-    });
-
-    // Metadata değişikliklerini kaydet
-    await _trackMetadataChanges(belge, cihazId);
-  }
-
-  /// Metadata değişikliklerini takip et
-  Future<void> _trackMetadataChanges(BelgeModeli belge, String? cihazId) async {
-    final db = await _veriTabani.database;
-
-    // Önceki metadata'yı al
-    final previousVersion = await db.query(
-      'belge_versiyonlari',
-      where: 'belge_id = ?',
-      whereArgs: [belge.id],
-      orderBy: 'versiyon_numarasi DESC',
-      limit: 1,
-      offset: 1, // Bir önceki versiyonu al
-    );
-
-    if (previousVersion.isEmpty) return;
-
-    // Önceki belgeyi al
-    final previousBelge = await _veriTabani.belgeGetir(belge.id!);
-    if (previousBelge == null) return;
-
-    // Metadata değişikliklerini karşılaştır
-    final changes = _compareMetadata(previousBelge, belge);
-
     final now = DateTime.now().toIso8601String();
 
-    for (final change in changes) {
+    // Değişiklikleri tespit et
+    final degisiklikler = _detectChanges(eskiBelge, yeniBelge);
+
+    if (degisiklikler.isEmpty) return;
+
+    // Her değişiklik için log kaydı oluştur
+    for (final degisiklik in degisiklikler) {
       await db.insert('metadata_degisiklikleri', {
-        'belge_id': belge.id,
-        'alan_adi': change['field'],
-        'eski_deger': change['oldValue'],
-        'yeni_deger': change['newValue'],
-        'degisiklik_tarihi': now,
-        'cihaz_id': cihazId ?? 'unknown',
+        'entity_type': 'BELGE',
+        'entity_id': yeniBelge.id,
+        'degisiklik_tipi': degisiklik['type'] ?? '',
+        'eski_deger': degisiklik['old_value'] ?? '',
+        'yeni_deger': degisiklik['new_value'] ?? '',
+        'degisiklik_zamani': now,
+        'cihaz_id': cihazId,
+        'sync_edildi': 0,
       });
     }
+
+    // Versiyon kaydı oluştur
+    await _createVersionRecord(yeniBelge, cihazId);
   }
 
-  /// Metadata değişikliklerini karşılaştır
-  List<Map<String, dynamic>> _compareMetadata(
-    BelgeModeli eski,
-    BelgeModeli yeni,
+  /// Değişiklikleri tespit et
+  List<Map<String, dynamic>> _detectChanges(
+    BelgeModeli eskiBelge,
+    BelgeModeli yeniBelge,
   ) {
-    final changes = <Map<String, dynamic>>[];
+    final degisiklikler = <Map<String, dynamic>>[];
 
     // Başlık değişikliği
-    if (eski.baslik != yeni.baslik) {
-      changes.add({
+    if (eskiBelge.baslik != yeniBelge.baslik) {
+      degisiklikler.add({
+        'type': 'TITLE_CHANGE',
         'field': 'baslik',
-        'oldValue': eski.baslik,
-        'newValue': yeni.baslik,
+        'old_value': eskiBelge.baslik ?? '',
+        'new_value': yeniBelge.baslik ?? '',
       });
     }
 
     // Açıklama değişikliği
-    if (eski.aciklama != yeni.aciklama) {
-      changes.add({
+    if (eskiBelge.aciklama != yeniBelge.aciklama) {
+      degisiklikler.add({
+        'type': 'DESCRIPTION_CHANGE',
         'field': 'aciklama',
-        'oldValue': eski.aciklama,
-        'newValue': yeni.aciklama,
-      });
-    }
-
-    // Kategori değişikliği
-    if (eski.kategoriId != yeni.kategoriId) {
-      changes.add({
-        'field': 'kategori_id',
-        'oldValue': eski.kategoriId?.toString(),
-        'newValue': yeni.kategoriId?.toString(),
-      });
-    }
-
-    // Kişi değişikliği
-    if (eski.kisiId != yeni.kisiId) {
-      changes.add({
-        'field': 'kisi_id',
-        'oldValue': eski.kisiId?.toString(),
-        'newValue': yeni.kisiId?.toString(),
+        'old_value': eskiBelge.aciklama ?? '',
+        'new_value': yeniBelge.aciklama ?? '',
       });
     }
 
     // Etiket değişikliği
-    if (eski.etiketler != yeni.etiketler) {
-      changes.add({
+    if (eskiBelge.etiketler != yeniBelge.etiketler) {
+      degisiklikler.add({
+        'type': 'TAGS_CHANGE',
         'field': 'etiketler',
-        'oldValue': eski.etiketler,
-        'newValue': yeni.etiketler,
+        'old_value': eskiBelge.etiketler?.join(',') ?? '',
+        'new_value': yeniBelge.etiketler?.join(',') ?? '',
       });
     }
 
-    return changes;
+    // Kategori değişikliği
+    if (eskiBelge.kategoriId != yeniBelge.kategoriId) {
+      degisiklikler.add({
+        'type': 'CATEGORY_CHANGE',
+        'field': 'kategori_id',
+        'old_value': eskiBelge.kategoriId?.toString() ?? '',
+        'new_value': yeniBelge.kategoriId?.toString() ?? '',
+      });
+    }
+
+    // Kişi değişikliği
+    if (eskiBelge.kisiId != yeniBelge.kisiId) {
+      degisiklikler.add({
+        'type': 'PERSON_CHANGE',
+        'field': 'kisi_id',
+        'old_value': eskiBelge.kisiId?.toString() ?? '',
+        'new_value': yeniBelge.kisiId?.toString() ?? '',
+      });
+    }
+
+    return degisiklikler;
   }
 
-  /// Değişiklik tipini belirle
-  Future<String> _determineDegisiklikTipi(
-    BelgeModeli belge,
-    List<Map<String, dynamic>> previousVersions,
+  /// Versiyon kaydı oluştur
+  Future<void> _createVersionRecord(BelgeModeli belge, String? cihazId) async {
+    final db = await _veriTabani.database;
+    final now = DateTime.now().toIso8601String();
+
+    // Mevcut versiyon sayısını al
+    final versionCount = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM belge_versiyonlari WHERE belge_id = ?',
+      [belge.id],
+    );
+
+    final nextVersion = (versionCount.first['count'] as int) + 1;
+    final metadataHash = _hashComparator.generateMetadataHash(belge);
+
+    await db.insert('belge_versiyonlari', {
+      'belge_id': belge.id,
+      'dosya_hash': belge.dosyaHash,
+      'metadata_hash': metadataHash,
+      'versiyon_numarasi': nextVersion,
+      'olusturma_tarihi': now,
+      'guncelleme_tarihi': now,
+      'baslik': belge.baslik,
+      'aciklama': belge.aciklama,
+      'etiketler': belge.etiketler,
+      'kategori_id': belge.kategoriId,
+      'kisi_id': belge.kisiId,
+      'change_type': 'UPDATE',
+    });
+  }
+
+  /// Belge versiyonlarını karşılaştır
+  Future<Map<String, dynamic>> compareDocumentVersions(
+    BelgeModeli localBelge,
+    Map<String, dynamic> remoteMetadata,
   ) async {
-    if (previousVersions.isEmpty) {
-      return 'CREATE';
+    final localMetadataHash = _hashComparator.generateMetadataHash(localBelge);
+    final remoteMetadataHash = remoteMetadata['metadata_hash'] ?? '';
+
+    final result = {
+      'needs_sync': localMetadataHash != remoteMetadataHash,
+      'local_hash': localMetadataHash,
+      'remote_hash': remoteMetadataHash,
+      'conflict': false,
+      'resolution': 'none',
+    };
+
+    if (result['needs_sync'] == true) {
+      // Çakışma analizi
+      final conflictAnalysis = await _analyzeConflict(
+        localBelge,
+        remoteMetadata,
+      );
+      result['conflict'] = conflictAnalysis['has_conflict'];
+      result['resolution'] = conflictAnalysis['resolution'];
     }
 
-    final previousVersion = previousVersions.first;
-    final previousHash = previousVersion['content_hash'] as String;
-    final currentHash = await _calculateContentHash(belge.dosyaYolu);
-
-    if (previousHash != currentHash) {
-      return 'CONTENT_UPDATE';
-    }
-
-    final previousMetadataHash = previousVersion['metadata_hash'] as String;
-    final currentMetadataHash = _hashComparator.generateMetadataHash(belge);
-
-    if (previousMetadataHash != currentMetadataHash) {
-      return 'METADATA_UPDATE';
-    }
-
-    return 'NO_CHANGE';
+    return result;
   }
 
-  /// Değişen belgeleri al
-  Future<List<Map<String, dynamic>>> getChangedDocuments({
-    DateTime? since,
+  /// Çakışma analizi
+  Future<Map<String, dynamic>> _analyzeConflict(
+    BelgeModeli localBelge,
+    Map<String, dynamic> remoteMetadata,
+  ) async {
+    final db = await _veriTabani.database;
+
+    // Son değişiklik zamanlarını karşılaştır
+    final localLastModified = localBelge.guncellemeTarihi;
+    final remoteLastModifiedString =
+        remoteMetadata['guncelleme_tarihi']?.toString() ??
+        localBelge.guncellemeTarihi.toIso8601String();
+    final remoteLastModified = DateTime.parse(remoteLastModifiedString);
+
+    // Pending değişiklik var mı kontrol et
+    final pendingChanges = await db.query(
+      'metadata_degisiklikleri',
+      where: 'entity_type = ? AND entity_id = ? AND sync_edildi = ?',
+      whereArgs: ['BELGE', localBelge.id, 0],
+    );
+
+    final timeDiff = localLastModified.difference(remoteLastModified).inMinutes;
+    final hasPendingChanges = pendingChanges.isNotEmpty;
+
+    if (timeDiff.abs() < 5 && !hasPendingChanges) {
+      // Yakın zamanda değişiklik, çakışma yok
+      return {'has_conflict': false, 'resolution': 'merge'};
+    } else if (localLastModified.isAfter(remoteLastModified)) {
+      // Local daha yeni
+      return {'has_conflict': hasPendingChanges, 'resolution': 'local_wins'};
+    } else {
+      // Remote daha yeni
+      return {'has_conflict': hasPendingChanges, 'resolution': 'remote_wins'};
+    }
+  }
+
+  /// Metadata'ları birleştir
+  Future<BelgeModeli> mergeDocumentMetadata(
+    BelgeModeli localBelge,
+    Map<String, dynamic> remoteMetadata,
+    String resolution,
+  ) async {
+    switch (resolution) {
+      case 'local_wins':
+        return localBelge;
+
+      case 'remote_wins':
+        return BelgeModeli(
+          id: localBelge.id,
+          dosyaAdi: localBelge.dosyaAdi,
+          orijinalDosyaAdi: localBelge.orijinalDosyaAdi,
+          dosyaYolu: localBelge.dosyaYolu,
+          dosyaBoyutu: localBelge.dosyaBoyutu,
+          dosyaTipi: localBelge.dosyaTipi,
+          dosyaHash: localBelge.dosyaHash,
+          baslik: remoteMetadata['baslik']?.toString(),
+          aciklama: remoteMetadata['aciklama']?.toString(),
+          etiketler: _parseEtiketler(remoteMetadata['etiketler']?.toString()),
+          kategoriId: remoteMetadata['kategori_id'] as int?,
+          kisiId: remoteMetadata['kisi_id'] as int?,
+          olusturmaTarihi: localBelge.olusturmaTarihi,
+          guncellemeTarihi: DateTime.parse(
+            remoteMetadata['guncelleme_tarihi']?.toString() ??
+                DateTime.now().toIso8601String(),
+          ),
+          sonErisimTarihi: localBelge.sonErisimTarihi,
+          aktif: localBelge.aktif,
+          senkronDurumu: localBelge.senkronDurumu,
+        );
+
+      case 'merge':
+        // Akıllı birleştirme
+        return _intelligentMerge(localBelge, remoteMetadata);
+
+      default:
+        return localBelge;
+    }
+  }
+
+  /// Akıllı birleştirme
+  BelgeModeli _intelligentMerge(
+    BelgeModeli localBelge,
+    Map<String, dynamic> remoteMetadata,
+  ) {
+    // Basit birleştirme stratejisi: boş olmayan değerleri tercih et
+    return BelgeModeli(
+      id: localBelge.id,
+      dosyaAdi: localBelge.dosyaAdi,
+      orijinalDosyaAdi: localBelge.orijinalDosyaAdi,
+      dosyaYolu: localBelge.dosyaYolu,
+      dosyaBoyutu: localBelge.dosyaBoyutu,
+      dosyaTipi: localBelge.dosyaTipi,
+      dosyaHash: localBelge.dosyaHash,
+      baslik:
+          (remoteMetadata['baslik']?.toString().isNotEmpty == true)
+              ? remoteMetadata['baslik']?.toString()
+              : localBelge.baslik,
+      aciklama:
+          (remoteMetadata['aciklama']?.toString().isNotEmpty == true)
+              ? remoteMetadata['aciklama']?.toString()
+              : localBelge.aciklama,
+      etiketler: _mergeEtiketler(
+        localBelge.etiketler,
+        remoteMetadata['etiketler']?.toString(),
+      ),
+      kategoriId:
+          remoteMetadata['kategori_id'] as int? ?? localBelge.kategoriId,
+      kisiId: remoteMetadata['kisi_id'] as int? ?? localBelge.kisiId,
+      olusturmaTarihi: localBelge.olusturmaTarihi,
+      guncellemeTarihi: DateTime.now(),
+      sonErisimTarihi: localBelge.sonErisimTarihi,
+      aktif: localBelge.aktif,
+      senkronDurumu: localBelge.senkronDurumu,
+    );
+  }
+
+  /// Etiketleri string'den List<String>?'e çevir
+  List<String>? _parseEtiketler(String? etiketlerString) {
+    if (etiketlerString == null || etiketlerString.isEmpty) return null;
+    return etiketlerString
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  /// Etiketleri birleştir
+  List<String>? _mergeEtiketler(
+    List<String>? localEtiketler,
+    String? remoteEtiketlerString,
+  ) {
+    final remoteEtiketler = _parseEtiketler(remoteEtiketlerString);
+
+    if (localEtiketler == null && remoteEtiketler == null) return null;
+    if (localEtiketler == null) return remoteEtiketler;
+    if (remoteEtiketler == null) return localEtiketler;
+
+    final localTagSet = localEtiketler.toSet();
+    final remoteTagSet = remoteEtiketler.toSet();
+
+    localTagSet.addAll(remoteTagSet);
+
+    return localTagSet.where((tag) => tag.isNotEmpty).toList();
+  }
+
+  /// Etiketleri birleştir (deprecated - eskiyi desteklemek için)
+  String? _mergeTags(String? localTags, String? remoteTags) {
+    if (localTags == null && remoteTags == null) return null;
+    if (localTags == null) return remoteTags;
+    if (remoteTags == null) return localTags;
+
+    final localTagList = localTags.split(',').map((e) => e.trim()).toSet();
+    final remoteTagList = remoteTags.split(',').map((e) => e.trim()).toSet();
+
+    localTagList.addAll(remoteTagList);
+
+    return localTagList.where((tag) => tag.isNotEmpty).join(', ');
+  }
+
+  /// Dosyanın belirli tarihten beri değişip değişmediğini kontrol et
+  Future<bool> hasChangedSince(String dosyaHash, DateTime since) async {
+    final db = await _veriTabani.database;
+
+    // Belge tablosundan son güncelleme zamanını kontrol et
+    final belgeResult = await db.query(
+      'belgeler',
+      where: 'dosya_hash = ? AND guncelleme_tarihi > ?',
+      whereArgs: [dosyaHash, since.toIso8601String()],
+    );
+
+    if (belgeResult.isNotEmpty) {
+      return true;
+    }
+
+    // Metadata değişiklikleri tablosundan kontrol et
+    final metadataResult = await db.query(
+      'metadata_degisiklikleri',
+      where: 'entity_type = ? AND degisiklik_zamani > ?',
+      whereArgs: ['belge', since.toIso8601String()],
+    );
+
+    return metadataResult.isNotEmpty;
+  }
+
+  /// Değişen belgeleri getir
+  Future<List<Map<String, dynamic>>> getChangedDocuments(
+    DateTime since, {
     String? cihazId,
-    int? limit,
   }) async {
     final db = await _veriTabani.database;
 
-    String whereClause = '1=1';
-    List<dynamic> whereArgs = [];
-
-    if (since != null) {
-      whereClause += ' AND olusturma_tarihi > ?';
-      whereArgs.add(since.toIso8601String());
-    }
+    // Null argüman sorununu çöz
+    final whereArgs = [since.toIso8601String(), 0];
+    String whereClause = 'degisiklik_zamani > ? AND sync_edildi = ?';
 
     if (cihazId != null) {
       whereClause += ' AND cihaz_id = ?';
@@ -263,181 +434,60 @@ class DocumentChangeTracker {
     }
 
     return await db.query(
-      'belge_versiyonlari',
+      'metadata_degisiklikleri',
       where: whereClause,
       whereArgs: whereArgs,
-      orderBy: 'olusturma_tarihi DESC',
-      limit: limit,
+      orderBy: 'degisiklik_zamani DESC',
     );
   }
 
-  /// Belge versiyonlarını karşılaştır
-  Future<DocumentComparisonResult> compareDocumentVersions(
-    BelgeModeli belge1,
-    BelgeModeli belge2,
-  ) async {
-    final result = await _hashComparator.compareDocuments(belge1, belge2);
+  /// Değişiklikleri senkronize edildi olarak işaretle
+  Future<void> markChangesAsSynced(List<int> changeIds) async {
+    final db = await _veriTabani.database;
 
-    return DocumentComparisonResult(
-      isContentSame: result.isMatch,
-      isMetadataSame: result.metadataHashMatch,
-      hasConflict: !result.isMatch && result.metadataHashMatch,
-      contentHash1: belge1.dosyaHash,
-      contentHash2: belge2.dosyaHash,
-      metadataHash1: _hashComparator.generateMetadataHash(belge1),
-      metadataHash2: _hashComparator.generateMetadataHash(belge2),
-      differences: _compareMetadata(belge1, belge2),
-    );
-  }
-
-  /// Belge metadata'sını birleştir
-  Future<BelgeModeli> mergeDocumentMetadata(
-    BelgeModeli localBelge,
-    BelgeModeli remoteBelge, {
-    String mergeStrategy = 'LATEST_WINS',
-  }) async {
-    switch (mergeStrategy) {
-      case 'LATEST_WINS':
-        return _mergeLatestWins(localBelge, remoteBelge);
-      case 'LOCAL_WINS':
-        return localBelge;
-      case 'REMOTE_WINS':
-        return remoteBelge;
-      case 'MANUAL':
-        return _createMergeConflict(localBelge, remoteBelge);
-      default:
-        return _mergeLatestWins(localBelge, remoteBelge);
+    for (final id in changeIds) {
+      await db.update(
+        'metadata_degisiklikleri',
+        {'sync_edildi': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
     }
   }
 
-  /// En son güncellenen kazanır stratejisi
-  BelgeModeli _mergeLatestWins(BelgeModeli local, BelgeModeli remote) {
-    final localTime = local.guncellemeTarihi;
-    final remoteTime = remote.guncellemeTarihi;
-
-    if (remoteTime.isAfter(localTime)) {
-      return remote.copyWith(id: local.id);
-    } else {
-      return local;
-    }
-  }
-
-  /// Merge conflict oluştur
-  BelgeModeli _createMergeConflict(BelgeModeli local, BelgeModeli remote) {
-    return local.copyWith(
-      aciklama:
-          '${local.aciklama ?? ''}\n\n[CONFLICT]\nRemote: ${remote.aciklama ?? ''}',
-    );
-  }
-
-  /// Belge versiyonlarını al
-  Future<List<Map<String, dynamic>>> getDocumentVersions(int belgeId) async {
+  /// Eski değişiklik kayıtlarını temizle
+  Future<void> cleanOldChangeRecords() async {
     final db = await _veriTabani.database;
-    return await db.query(
-      'belge_versiyonlari',
-      where: 'belge_id = ?',
-      whereArgs: [belgeId],
-      orderBy: 'versiyon_numarasi DESC',
-    );
-  }
+    final cutoffDate = DateTime.now().subtract(Duration(days: 30));
 
-  /// Metadata değişikliklerini al
-  Future<List<Map<String, dynamic>>> getMetadataChanges(int belgeId) async {
-    final db = await _veriTabani.database;
-    return await db.query(
+    await db.delete(
       'metadata_degisiklikleri',
-      where: 'belge_id = ?',
-      whereArgs: [belgeId],
-      orderBy: 'degisiklik_tarihi DESC',
+      where: 'degisiklik_zamani < ? AND sync_edildi = ?',
+      whereArgs: [cutoffDate.toIso8601String(), 1],
     );
   }
 
-  /// Eski versiyonları temizle
-  Future<void> cleanupOldVersions({
-    int? keepVersions,
-    Duration? olderThan,
-  }) async {
-    final db = await _veriTabani.database;
+  /// Değişiklikleri commit et
+  Future<void> commitChanges(String deviceId) async {
+    try {
+      // Son 1 saat içindeki değişiklikleri commit et
+      final since = DateTime.now().subtract(const Duration(hours: 1));
+      final pendingChanges = await _veriTabani.sonDegisiklikleriGetir(since);
 
-    if (keepVersions != null) {
-      // Her belge için belirli sayıda versiyon tut
-      final belgeIds = await db.query('belgeler', columns: ['id']);
-
-      for (final belgeMap in belgeIds) {
-        final belgeId = belgeMap['id'] as int;
-
-        await db.delete(
-          'belge_versiyonlari',
-          where: '''
-            belge_id = ? AND versiyon_numarasi NOT IN (
-              SELECT versiyon_numarasi 
-              FROM belge_versiyonlari 
-              WHERE belge_id = ? 
-              ORDER BY versiyon_numarasi DESC 
-              LIMIT ?
-            )
-          ''',
-          whereArgs: [belgeId, belgeId, keepVersions],
+      for (final change in pendingChanges) {
+        // Belgenin metadata'sını güncelle
+        await _veriTabani.metadataGuncelle(
+          change['id'],
+          change['baslik'],
+          change['aciklama'],
+          change['etiketler'],
+          'committed_${DateTime.now().millisecondsSinceEpoch}',
         );
       }
-    }
 
-    if (olderThan != null) {
-      final cutoffDate = DateTime.now().subtract(olderThan).toIso8601String();
-
-      await db.delete(
-        'belge_versiyonlari',
-        where: 'olusturma_tarihi < ?',
-        whereArgs: [cutoffDate],
-      );
-
-      await db.delete(
-        'metadata_degisiklikleri',
-        where: 'degisiklik_tarihi < ?',
-        whereArgs: [cutoffDate],
-      );
-    }
-  }
-
-  /// Content hash hesaplama helper metodu
-  Future<String> _calculateContentHash(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        throw FileSystemException('Dosya bulunamadı', filePath);
-      }
-
-      final bytes = await file.readAsBytes();
-      return sha256.convert(bytes).toString();
+      print('Değişiklikler commit edildi: ${pendingChanges.length} adet');
     } catch (e) {
-      throw Exception('Content hash hesaplama hatası: $e');
+      print('Değişiklikler commit edilemedi: $e');
     }
   }
-}
-
-/// Belge karşılaştırma sonucu
-class DocumentComparisonResult {
-  final bool isContentSame;
-  final bool isMetadataSame;
-  final bool hasConflict;
-  final String contentHash1;
-  final String contentHash2;
-  final String metadataHash1;
-  final String metadataHash2;
-  final List<Map<String, dynamic>> differences;
-
-  DocumentComparisonResult({
-    required this.isContentSame,
-    required this.isMetadataSame,
-    required this.hasConflict,
-    required this.contentHash1,
-    required this.contentHash2,
-    required this.metadataHash1,
-    required this.metadataHash2,
-    required this.differences,
-  });
-
-  bool get isIdentical => isContentSame && isMetadataSame;
-  bool get hasMetadataOnlyChanges => !isContentSame && isMetadataSame;
-  bool get hasContentChanges => !isContentSame;
 }
