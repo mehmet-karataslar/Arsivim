@@ -62,22 +62,77 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
       ),
       child: Column(
         children: [
-          // Ana belge bilgileri
-          ListTile(
-            contentPadding: const EdgeInsets.all(12),
-            leading: _buildLeading(),
-            title: _buildTitle(),
-            subtitle: _buildCompactSubtitle(),
-            onTap:
-                widget.onTap ??
-                () => _belgeIslemleri.belgeAc(widget.belge, context),
-            onLongPress: widget.onLongPress,
+          // Üst kısım - Ana belge bilgileri
+          Container(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                // İlk satır: Dosya ikonu, başlık ve kategori
+                Row(
+                  children: [
+                    _buildLeading(),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildTitle(),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              // Kategori sağ üstte
+                              if (_getKategoriAdi() != null)
+                                _buildKategoriChip(),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                // İkinci satır: Tarih ve kişi bilgisi
+                Row(
+                  children: [
+                    Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        widget.belge.zamanFarki,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[500],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    // Kişi bilgisi sağda
+                    if (_getKisiAdi() != null) _buildKisiChip(),
+                  ],
+                ),
+
+                // Etiketler alt kısımda
+                if (_getEtiketler().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _buildEtiketlerRow(),
+                ],
+              ],
+            ),
           ),
 
-          // Kategori, kişi ve etiket bilgileri
-          if (_hasExtraInfo()) _buildExtraInfoSection(),
-
-          // Aksiyon butonları
+          // Alt kısım - Aksiyon butonları
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -89,7 +144,6 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Aç butonu
                 _buildCompactActionButton(
                   icon: Icons.open_in_new,
                   label: 'Aç',
@@ -98,8 +152,6 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                       widget.onAc ??
                       () => _belgeIslemleri.belgeAc(widget.belge, context),
                 ),
-
-                // Paylaş butonu
                 _buildCompactActionButton(
                   icon: Icons.share,
                   label: 'Paylaş',
@@ -108,16 +160,12 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                       widget.onPaylas ??
                       () => _belgeIslemleri.belgePaylas(widget.belge, context),
                 ),
-
-                // Düzenle butonu
                 _buildCompactActionButton(
                   icon: Icons.edit,
                   label: 'Düzenle',
                   color: Colors.orange,
                   onTap: widget.onDuzenle ?? () => _belgeDuzenle(context),
                 ),
-
-                // Sil butonu
                 _buildCompactActionButton(
                   icon: Icons.delete,
                   label: 'Sil',
@@ -152,6 +200,28 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  // Üst satır: Başlık ve kategori
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.belge.baslik ?? widget.belge.orijinalDosyaAdi,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // Kategori sağ üstte
+                      if (_getKategoriAdi() != null) _buildKategoriChip(),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Orta kısım: Dosya ikonu ve bilgiler
                   Row(
                     children: [
                       // Dosya ikonu
@@ -175,21 +245,7 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Başlık
-                            Text(
-                              widget.belge.baslik ??
-                                  widget.belge.orijinalDosyaAdi,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-
                             // Dosya tipi ve boyut
                             Text(
                               '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
@@ -197,7 +253,6 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                                   ?.copyWith(color: Colors.grey[600]),
                             ),
                             const SizedBox(height: 4),
-
                             // Zaman bilgisi
                             Text(
                               widget.belge.zamanFarki,
@@ -207,13 +262,16 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                           ],
                         ),
                       ),
+
+                      // Kişi bilgisi sağda
+                      if (_getKisiAdi() != null) _buildKisiChip(),
                     ],
                   ),
 
-                  // Kategori, kişi ve etiket bilgileri
-                  if (_hasExtraInfo()) ...[
+                  // Etiketler alt kısımda
+                  if (_getEtiketler().isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    _buildExtraInfoSection(),
+                    _buildEtiketlerRow(),
                   ],
                 ],
               ),
@@ -232,7 +290,6 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Aç butonu
                 _buildActionButton(
                   icon: Icons.open_in_new,
                   label: 'Aç',
@@ -241,8 +298,6 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                       widget.onAc ??
                       () => _belgeIslemleri.belgeAc(widget.belge, context),
                 ),
-
-                // Paylaş butonu
                 _buildActionButton(
                   icon: Icons.share,
                   label: 'Paylaş',
@@ -251,16 +306,12 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
                       widget.onPaylas ??
                       () => _belgeIslemleri.belgePaylas(widget.belge, context),
                 ),
-
-                // Düzenle butonu
                 _buildActionButton(
                   icon: Icons.edit,
                   label: 'Düzenle',
                   color: Colors.orange,
                   onTap: widget.onDuzenle ?? () => _belgeDuzenle(context),
                 ),
-
-                // Sil butonu
                 _buildActionButton(
                   icon: Icons.delete,
                   label: 'Sil',
@@ -303,124 +354,75 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
     );
   }
 
-  Widget _buildCompactSubtitle() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Colors.grey[600],
-            fontSize: widget.compactMode ? 12 : 14,
-          ),
+  Widget _buildKategoriChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _getKategoriRengi(),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        _getKategoriAdi()!,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
         ),
-        const SizedBox(height: 2),
-        Text(
-          widget.belge.zamanFarki,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Colors.grey[500],
-            fontSize: widget.compactMode ? 11 : 13,
+      ),
+    );
+  }
+
+  Widget _buildKisiChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        _getKisiAdi()!,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey[800],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEtiketlerRow() {
+    return Row(
+      children: [
+        Icon(Icons.label, size: 16, color: Colors.grey[600]),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            children:
+                _getEtiketler().map((etiket) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Text(
+                      etiket,
+                      style: TextStyle(
+                        fontSize: widget.compactMode ? 10 : 11,
+                        color: Colors.blue[700],
+                      ),
+                    ),
+                  );
+                }).toList(),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildExtraInfoSection() {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Kategori bilgisi
-          if (_getKategoriAdi() != null) ...[
-            Row(
-              children: [
-                Icon(Icons.category, size: 16, color: _getKategoriRengi()),
-                const SizedBox(width: 4),
-                Text(
-                  _getKategoriAdi()!,
-                  style: TextStyle(
-                    fontSize: widget.compactMode ? 11 : 12,
-                    fontWeight: FontWeight.w500,
-                    color: _getKategoriRengi(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-          ],
-
-          // Kişi bilgisi
-          if (_getKisiAdi() != null) ...[
-            Row(
-              children: [
-                Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  _getKisiAdi()!,
-                  style: TextStyle(
-                    fontSize: widget.compactMode ? 11 : 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-          ],
-
-          // Etiketler
-          if (_getEtiketler().isNotEmpty) ...[
-            Row(
-              children: [
-                Icon(Icons.label, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 2,
-                    children:
-                        _getEtiketler().map((etiket) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue[50],
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.blue[200]!),
-                            ),
-                            child: Text(
-                              etiket,
-                              style: TextStyle(
-                                fontSize: widget.compactMode ? 10 : 11,
-                                color: Colors.blue[700],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrailing() {
-    return Icon(
-      Icons.arrow_forward_ios_rounded,
-      size: 16,
-      color: Colors.grey[400],
     );
   }
 

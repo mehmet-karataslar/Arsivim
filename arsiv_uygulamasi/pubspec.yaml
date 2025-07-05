@@ -3,19 +3,16 @@ description: "Arşivim - Kişisel Belge Arşiv Uygulaması"
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-
-version: 1.0.0+1
+version: 2.0.0+2
 
 environment:
   sdk: ^3.7.2
-
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-
 
   cupertino_icons: ^1.0.8
   
@@ -25,12 +22,12 @@ dependencies:
   
   # Dosya işlemleri
   path_provider: ^2.1.4
-  file_picker: ^8.1.2
+  file_picker: ^10.2.0
   path: ^1.9.1
   
   # Dosya açma ve paylaşma
   open_filex: ^4.3.4
-  share_plus: ^7.2.2
+  share_plus: ^11.0.0
   
   # Güvenlik ve hash
   crypto: ^3.0.6
@@ -40,19 +37,17 @@ dependencies:
   
   # Network
   http: ^1.2.2
+  connectivity_plus: ^6.1.4
   
-  # QR Code (mobil için)
+  # QR Code (senkronizasyon için)
   qr_flutter: ^4.1.0
-  mobile_scanner: ^5.0.0
+  mobile_scanner: ^5.2.3  # Stable version - QR kod okuma için
   
-  # İzinler
-  permission_handler: ^11.3.1
+  # İzinler (Windows tarayıcı için gerekli)
+  permission_handler: ^12.0.1
   
   # Ayarlar ve tercihler
   shared_preferences: ^2.2.2
-  
-  # Network bilgileri
-  connectivity_plus: ^5.0.2
   
   # Internationalization
   intl: ^0.19.0
@@ -71,13 +66,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-
   flutter_lints: ^5.0.0
 
-
 flutter:
-
-
   uses-material-design: true
 
   # App icon

@@ -3,7 +3,10 @@
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
+#include <memory>
+
 #include "resource.h"
+#include "scanner_plugin.h"
 
 namespace {
 
@@ -264,11 +267,17 @@ void Win32Window::SetQuitOnClose(bool quit_on_close) {
 }
 
 bool Win32Window::OnCreate() {
+  // Initialize scanner plugin
+  InitializeScannerPlugin();
+  
   // No-op; provided for subclasses.
   return true;
 }
 
 void Win32Window::OnDestroy() {
+  // Cleanup scanner plugin
+  CleanupScannerPlugin();
+  
   // No-op; provided for subclasses.
 }
 

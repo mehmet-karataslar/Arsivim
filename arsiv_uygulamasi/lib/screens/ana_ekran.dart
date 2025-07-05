@@ -17,6 +17,7 @@ import 'yedekleme_ekrani.dart';
 import 'senkronizasyon_ekrani.dart';
 import 'auth/login_screen.dart';
 import '../widgets/belge_karti_widget.dart';
+import 'tarayici_ekrani.dart';
 
 // Ana dashboard ve navigasyon
 class AnaEkran extends StatefulWidget {
@@ -411,24 +412,30 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         selectedItemColor: Theme.of(context).primaryColor,
         unselectedItemColor: Colors.grey[500],
         selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.home_rounded),
             label: 'Ana Sayfa',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.folder_rounded),
             label: 'Belgeler',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.category_rounded),
             label: 'Kategoriler',
           ),
-          BottomNavigationBarItem(
+          // Tarayıcı sekmesi sadece Windows'da görünür
+          if (Platform.isWindows)
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.scanner_rounded),
+              label: 'Tarayıcı',
+            ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.people_rounded),
             label: 'Kişiler',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.sync_rounded),
             label: 'Senkron',
           ),
@@ -466,19 +473,40 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   }
 
   Widget _buildTabContent() {
-    switch (_secilenTab) {
-      case 0:
-        return _buildAnaEkran();
-      case 1:
-        return _buildBelgelerEkrani();
-      case 2:
-        return _buildKategorilerEkrani();
-      case 3:
-        return _buildKisilerEkrani();
-      case 4:
-        return _buildSenkronizasyonEkrani();
-      default:
-        return _buildAnaEkran();
+    if (Platform.isWindows) {
+      // Windows'da tarayıcı sekmesi var
+      switch (_secilenTab) {
+        case 0:
+          return _buildAnaEkran();
+        case 1:
+          return _buildBelgelerEkrani();
+        case 2:
+          return _buildKategorilerEkrani();
+        case 3:
+          return const TarayiciEkrani();
+        case 4:
+          return _buildKisilerEkrani();
+        case 5:
+          return _buildSenkronizasyonEkrani();
+        default:
+          return _buildAnaEkran();
+      }
+    } else {
+      // Diğer platformlarda tarayıcı sekmesi yok
+      switch (_secilenTab) {
+        case 0:
+          return _buildAnaEkran();
+        case 1:
+          return _buildBelgelerEkrani();
+        case 2:
+          return _buildKategorilerEkrani();
+        case 3:
+          return _buildKisilerEkrani();
+        case 4:
+          return _buildSenkronizasyonEkrani();
+        default:
+          return _buildAnaEkran();
+      }
     }
   }
 
@@ -737,7 +765,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
               _buildKompaktHizliIslemKarti('Kişiler', Icons.people_rounded, [
                 Colors.purple,
                 Colors.deepPurple,
-              ], () => setState(() => _secilenTab = 3)),
+              ], () => setState(() => _secilenTab = 4)),
             ],
           )
         else
@@ -769,7 +797,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
               _buildHizliIslemKarti('Kişiler', Icons.people_rounded, [
                 Colors.purple,
                 Colors.deepPurple,
-              ], () => setState(() => _secilenTab = 3)),
+              ], () => setState(() => _secilenTab = 4)),
             ],
           ),
 
@@ -792,7 +820,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                   'Cihazlar arası veri senkronizasyonu',
                   Icons.sync_rounded,
                   [Colors.teal, Colors.cyan],
-                  () => setState(() => _secilenTab = 4),
+                  () => setState(() => _secilenTab = 5),
                 ),
               ),
               const SizedBox(width: 12),

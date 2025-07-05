@@ -3,8 +3,13 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
 
 #include <memory>
+#include <string>
+#include <sstream>
+#include <ctime>
 
 #include "win32_window.h"
 
@@ -28,6 +33,22 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+  
+  // Scanner method channel
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> scanner_channel_;
+  
+  // Method channel handlers
+  void RegisterScannerMethodChannel();
+  void HandleFindScanners(const flutter::MethodCall<flutter::EncodableValue>& call,
+                          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleFindWIAScanners(const flutter::MethodCall<flutter::EncodableValue>& call,
+                             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleScanDocument(const flutter::MethodCall<flutter::EncodableValue>& call,
+                          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleCheckScannerStatus(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleGetScannerSettings(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
