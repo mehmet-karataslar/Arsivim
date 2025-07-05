@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'dart:io' show Platform;
+// import 'package:shared_preferences/shared_preferences.dart'; // Gerekli değil
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io' show Platform;
 
 // Screens
 import 'screens/ana_ekran.dart';
 import 'screens/splash_screen.dart';
+import 'screens/auth/login_screen.dart';
 
 // Services
 import 'services/http_sunucu_servisi.dart';
@@ -159,8 +161,6 @@ Future<void> _initializeServices() async {
     // 3. Database Service
     print('📁 Initializing database service...');
     final veriTabani = VeriTabaniServisi();
-
-
 
     await veriTabani.database; // This triggers initialization
     print('✅ Database service initialized');

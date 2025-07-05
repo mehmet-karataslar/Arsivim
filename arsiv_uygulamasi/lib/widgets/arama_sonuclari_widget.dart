@@ -6,6 +6,7 @@ import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../services/belge_islemleri_servisi.dart';
 import '../services/veritabani_servisi.dart';
+import '../utils/screen_utils.dart';
 import 'belge_karti_widget.dart';
 import 'belge_detay_dialog.dart';
 
@@ -684,7 +685,7 @@ class AramaSonuclariWidget extends StatelessWidget {
         // Hem mobil hem PC için detaylı kart kullan
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: BelgeKartiWidget(
+          child: OptimizedBelgeKartiWidget(
             belge: belge,
             onTap: () => _belgeDetayGoster(context, belge),
             onLongPress: () => _belgeDetayGoster(context, belge),
@@ -692,6 +693,7 @@ class AramaSonuclariWidget extends StatelessWidget {
             onPaylas: () => _belgePaylas(context, belge),
             onDuzenle: () => _belgeDuzenle(context, belge),
             onSil: () => _belgeSil(context, belge),
+            compactMode: true,
           ),
         );
       },

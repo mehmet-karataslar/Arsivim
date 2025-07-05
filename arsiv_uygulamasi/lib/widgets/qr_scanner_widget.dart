@@ -15,6 +15,7 @@ class QRScannerScreen extends StatefulWidget {
 class _QRScannerScreenState extends State<QRScannerScreen> {
   MobileScannerController cameraController = MobileScannerController();
   bool isScanning = true;
+  bool hasScannedCode = false;
 
   @override
   void dispose() {
@@ -49,10 +50,15 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                 MobileScanner(
                   controller: cameraController,
                   onDetect: (capture) {
-                    if (isScanning && capture.barcodes.isNotEmpty) {
+                    if (isScanning &&
+                        !hasScannedCode &&
+                        capture.barcodes.isNotEmpty) {
                       final String? code = capture.barcodes.first.rawValue;
                       if (code != null) {
+                        hasScannedCode = true;
                         isScanning = false;
+
+                        // QR kod callback'ini çağır
                         widget.onQRScanned(code);
                       }
                     }
@@ -70,6 +76,28 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                     ),
                   ),
                 ),
+                // Scanning indicator
+                if (hasScannedCode)
+                  Container(
+                    color: Colors.black54,
+                    child: const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.green,
+                            ),
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'QR kod işleniyor...',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -77,18 +105,22 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             flex: 1,
             child: Container(
               padding: const EdgeInsets.all(16),
-              child: const Column(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'QR kodu kamera ile tarayın',
-                    style: TextStyle(fontSize: 16),
+                    hasScannedCode
+                        ? 'QR kod işleniyor...'
+                        : 'QR kodu kamera ile tarayın',
+                    style: const TextStyle(fontSize: 16),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
-                    'Arşivim bağlantı QR kodunu tarayın',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    hasScannedCode
+                        ? 'Lütfen bekleyin'
+                        : 'Arşivim bağlantı QR kodunu tarayın',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                     textAlign: TextAlign.center,
                   ),
                 ],

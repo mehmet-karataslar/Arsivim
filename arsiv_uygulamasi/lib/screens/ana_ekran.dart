@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
 import '../services/auth_servisi.dart';
+import '../services/cache_servisi.dart';
 import '../models/belge_modeli.dart';
 import '../utils/screen_utils.dart';
 import 'belgeler_ekrani.dart';
@@ -25,6 +27,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   int _secilenTab = 0;
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final DosyaServisi _dosyaServisi = DosyaServisi();
+  final CacheServisi _cacheServisi = CacheServisi();
 
   int _toplamBelgeSayisi = 0;
   int _toplamDosyaBoyutu = 0;
@@ -61,11 +64,30 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     });
 
     try {
-      // Paralel veri yükleme
+      // Önce cache'ten kontrol et
+      final cachedIstatistikler =
+          await _cacheServisi.cachedIstatistikleriGetir();
+      final cachedBelgeler = await _cacheServisi.cachedBelgeleriGetir();
+
+      if (cachedIstatistikler != null && cachedBelgeler != null) {
+        // Cache'ten verileri yükle
+        if (!mounted) return;
+        setState(() {
+          _toplamBelgeSayisi = cachedIstatistikler['belge_sayisi'] ?? 0;
+          _toplamDosyaBoyutu = cachedIstatistikler['dosya_boyutu'] ?? 0;
+          _sonBelgeler = cachedBelgeler;
+          _yukleniyor = false;
+        });
+        _animationController.forward();
+        _debugPrint('Veriler cache ten yuklendi');
+        return;
+      }
+
+      // Cache yoksa veritabanından yükle
       final futures = await Future.wait([
         _veriTabani.toplamBelgeSayisi(),
         _veriTabani.toplamDosyaBoyutu(),
-        _veriTabani.onceakliBelgeleriGetir(limit: 5), // Optimize edilmiş metod
+        _veriTabani.onceakliBelgeleriGetir(limit: 5),
       ]);
 
       if (!mounted) return;
@@ -77,6 +99,13 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         _yukleniyor = false;
       });
 
+      // Verileri cache'le
+      await _cacheServisi.istatistikleriCacheEt({
+        'belge_sayisi': _toplamBelgeSayisi,
+        'dosya_boyutu': _toplamDosyaBoyutu,
+      });
+      await _cacheServisi.belgeleriCacheEt(_sonBelgeler);
+
       _animationController.forward();
     } catch (e) {
       if (!mounted) return;
@@ -84,6 +113,12 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         _yukleniyor = false;
       });
       _hataGoster('Veriler yüklenirken hata oluştu: $e');
+    }
+  }
+
+  void _debugPrint(String message) {
+    if (kDebugMode) {
+      print(message);
     }
   }
 

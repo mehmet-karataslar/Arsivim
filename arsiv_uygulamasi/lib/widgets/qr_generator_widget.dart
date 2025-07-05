@@ -699,30 +699,6 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
     );
   }
 
-  void _qrKoduTara() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => QRScannerScreen(onQRScanned: _qrKoduTarandi),
-      ),
-    );
-  }
-
-  void _qrKoduTarandi(String qrData) {
-    Navigator.of(context).pop(); // QR scanner'ı kapat
-
-    try {
-      final connectionInfo = json.decode(qrData);
-
-      if (connectionInfo['type'] == 'arsivim_connection') {
-        _cihazBagla(connectionInfo);
-      } else {
-        _hataGoster('Geçersiz QR kod');
-      }
-    } catch (e) {
-      _hataGoster('QR kod okunamadı: $e');
-    }
-  }
-
   void _cihazBagla(Map<String, dynamic> connectionInfo) {
     setState(() {
       _bagliCihazlar.add({
@@ -773,5 +749,50 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
+  }
+
+  void _qrKoduTara() {
+    print('📱 QR kod tarayıcısı açılıyor (QR Connection)...');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (context) => QRScannerScreen(
+              onQRScanned: (qrData) {
+                print('📷 QR kod tarandı (QR Connection): $qrData');
+
+                // QR kod tarandığında hemen kapansın
+                Navigator.of(context).pop();
+                print('🔄 QR scanner hemen kapatıldı (QR Connection)');
+
+                // Arka planda bağlantı işlemlerini yap
+                _processQRCodeConnection(qrData);
+              },
+            ),
+      ),
+    );
+  }
+
+  void _processQRCodeConnection(String qrData) async {
+    try {
+      print('🔄 QR kod işleniyor (QR Connection): $qrData');
+      final connectionInfo = json.decode(qrData);
+
+      if (connectionInfo['type'] == 'arsivim_connection') {
+        print('✅ Geçerli Arşivim QR kodu, bağlantı simüle ediliyor...');
+
+        // Gerçek bağlantı işlemini burada yapın
+        // Şimdilik simüle ediyoruz
+        await Future.delayed(const Duration(seconds: 1));
+
+        // Cihazı bağla
+        _cihazBagla(connectionInfo);
+      } else {
+        print('❌ Geçersiz QR kod formatı');
+        _hataGoster('Geçersiz QR kod');
+      }
+    } catch (e) {
+      print('❌ QR kod işleme hatası: $e');
+      _hataGoster('QR kod okunamadı: $e');
+    }
   }
 }

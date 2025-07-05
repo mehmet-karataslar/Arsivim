@@ -8,6 +8,10 @@ import 'dosya_servisi.dart';
 import '../models/belge_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../models/kategori_modeli.dart';
+// import '../utils/sabitler.dart';
+// import '../utils/network_optimizer.dart';
+// import '../utils/timestamp_manager.dart';
+// import 'senkronizasyon_yonetici_servisi.dart';
 
 class HttpSunucuServisi {
   static const int SUNUCU_PORTU = 8080;
@@ -151,7 +155,7 @@ class HttpSunucuServisi {
               break;
             case '/connect':
               if (request.method == 'POST') {
-              responseBody = await _handleConnect(request);
+                responseBody = await _handleConnect(request);
               } else {
                 statusCode = 405;
                 responseBody = json.encode({'error': 'Method not allowed'});
@@ -233,17 +237,17 @@ class HttpSunucuServisi {
               responseBody = await _handleSyncStatus();
               break;
             default:
-                statusCode = 404;
+              statusCode = 404;
               responseBody = json.encode({'error': 'Endpoint bulunamadi'});
           }
 
           // Response gonder
-            final responseBytes = utf8.encode(responseBody);
-            request.response
-              ..statusCode = statusCode
-              ..add(responseBytes);
+          final responseBytes = utf8.encode(responseBody);
+          request.response
+            ..statusCode = statusCode
+            ..add(responseBytes);
 
-            await request.response.close();
+          await request.response.close();
           print('HTTP Yanit gonderildi: $statusCode');
         } catch (e) {
           print('Istek isleme hatasi: $e');
@@ -409,6 +413,7 @@ class HttpSunucuServisi {
         // Mevcut cihazin bilgilerini guncelle
         mevcutCihaz['last_seen'] = DateTime.now().toIso8601String();
         mevcutCihaz['status'] = 'connected';
+        mevcutCihaz['online'] = true;
         print('Mevcut cihaz bilgileri guncellendi: $deviceName');
       } else {
         // Yeni cihaz ekle
@@ -416,18 +421,19 @@ class HttpSunucuServisi {
           'device_id': deviceId,
           'device_name': deviceName,
           'platform': platform ?? 'Unknown',
-        'ip': clientIP,
+          'ip': clientIP,
           'connected_at': DateTime.now().toIso8601String(),
           'last_seen': DateTime.now().toIso8601String(),
           'status': 'connected',
           'connection_type': 'incoming',
+          'online': true,
         };
 
         _bagliCihazlar.add(yeniCihaz);
         print('Yeni cihaz eklendi: $deviceName ($deviceId)');
 
         // UI'ya bildirim gonder
-      if (_onDeviceConnected != null) {
+        if (_onDeviceConnected != null) {
           print('UI\'ya baglanti bildirimi gonderiliyor...');
           Future.microtask(() => _onDeviceConnected!(yeniCihaz));
         }
@@ -487,7 +493,7 @@ class HttpSunucuServisi {
 
       if (removedDevice.isNotEmpty) {
         _bagliCihazlar.removeWhere((device) => device['device_id'] == deviceId);
-      print(
+        print(
           'Cihaz baglantisi kesildi: ${removedDevice['device_name']} ($deviceId)',
         );
         print('Sebep: ${reason ?? 'Belirtilmedi'}');
@@ -504,7 +510,7 @@ class HttpSunucuServisi {
           Future.microtask(() => _onDeviceDisconnected!(disconnectionInfo));
         }
 
-      return json.encode({
+        return json.encode({
           'success': true,
           'message': 'Baglanti kesildi',
           'timestamp': DateTime.now().toIso8601String(),
@@ -643,9 +649,9 @@ class HttpSunucuServisi {
         Future.microtask(() => _onDeviceConnected!(deviceInfo));
       } else {
         print('Device connected callback tanimlanmamis!');
-        }
+      }
 
-        return json.encode({
+      return json.encode({
         'status': 'success',
         'message': 'Baglanti bildirimi alindi',
         'server_device_id': _cihazId,
@@ -695,16 +701,16 @@ class HttpSunucuServisi {
         Future.microtask(() => _onDeviceDisconnected!(disconnectionInfo));
       } else {
         print('Device disconnected callback tanimlanmamis!');
-          }
+      }
 
-          return json.encode({
+      return json.encode({
         'status': 'success',
         'message': 'Baglanti kesme bildirimi alindi',
         'timestamp': DateTime.now().toIso8601String(),
       });
-      } catch (e) {
+    } catch (e) {
       print('Device disconnected handler hatasi: $e');
-        return json.encode({
+      return json.encode({
         'error': 'Baglanti kesme bildirimi hatasi',
         'message': e.toString(),
       });
@@ -721,13 +727,13 @@ class HttpSunucuServisi {
       int bestPriority = 0;
 
       for (final interface in interfaces) {
-            print(
+        print(
           'Interface: ${interface.name}, addresses: ${interface.addresses.length}',
         );
 
         for (final addr in interface.addresses) {
           if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
-              print(
+            print(
               '  📍 Address: ${addr.address}, Interface: ${interface.name}',
             );
 
@@ -829,7 +835,7 @@ class HttpSunucuServisi {
     try {
       print('📄 Senkronizasyon bekleyen belgeler istendi');
 
-      final belgeler = await _veriTabani.belgeleriGetir();
+      final belgeler = await _veriTabani.belgeleriGetir(limit: 50);
       final bekleyenBelgeler =
           belgeler
               .where(
@@ -841,19 +847,35 @@ class HttpSunucuServisi {
 
       print('📊 ${bekleyenBelgeler.length} bekleyen belge bulundu');
 
-      final belgelerJson =
-          bekleyenBelgeler.map((belge) {
-            final belgeMap = belge.toMap();
-            // Dosya içeriğini base64 olarak ekle
-            try {
-              final dosyaBytes = File(belge.dosyaYolu).readAsBytesSync();
-              belgeMap['dosya_icerigi'] = base64Encode(dosyaBytes);
-            } catch (e) {
-              print('⚠️ Dosya okunamadı: ${belge.dosyaAdi} - $e');
-              belgeMap['dosya_icerigi'] = null;
-            }
-            return belgeMap;
-          }).toList();
+      final belgelerJson = <Map<String, dynamic>>[];
+
+      for (final belge in bekleyenBelgeler) {
+        final belgeMap = belge.toMap();
+
+        // Dosya boyutu kontrolü - 10MB üzeri dosyalar için farklı strateji
+        try {
+          final dosyaBytes = File(belge.dosyaYolu).readAsBytesSync();
+
+          if (dosyaBytes.length > 10 * 1024 * 1024) {
+            // 10MB
+            print(
+              '⚠️ Büyük dosya atlanıyor: ${belge.dosyaAdi} (${dosyaBytes.length} bytes)',
+            );
+            belgeMap['dosya_icerigi'] = null;
+            belgeMap['buyuk_dosya'] = true;
+            belgeMap['dosya_boyutu'] = dosyaBytes.length;
+          } else {
+            belgeMap['dosya_icerigi'] = base64Encode(dosyaBytes);
+            belgeMap['buyuk_dosya'] = false;
+          }
+        } catch (e) {
+          print('⚠️ Dosya okunamadı: ${belge.dosyaAdi} - $e');
+          belgeMap['dosya_icerigi'] = null;
+          belgeMap['buyuk_dosya'] = false;
+        }
+
+        belgelerJson.add(belgeMap);
+      }
 
       return json.encode({
         'success': true,
@@ -976,7 +998,7 @@ class HttpSunucuServisi {
             } else {
               print('⏭️ Kategori zaten mevcut: ${kategori.ad}');
             }
-    } catch (e) {
+          } catch (e) {
             print('❌ Kategori ekleme hatası: $e');
             hatalar++;
           }
@@ -1042,7 +1064,7 @@ class HttpSunucuServisi {
               print('⚠️ Belge içeriği bulunamadı: ${belge.dosyaAdi}');
               hatalar++;
             }
-        } catch (e) {
+          } catch (e) {
             print('❌ Belge kaydetme hatası: $e');
             hatalar++;
           }
@@ -1180,7 +1202,7 @@ class HttpSunucuServisi {
                   DateTime.now().subtract(const Duration(days: 1)),
                 ),
               )
-        .toList();
+              .toList();
 
       print('📊 ${bekleyenKategoriler.length} bekleyen kategori bulundu');
 

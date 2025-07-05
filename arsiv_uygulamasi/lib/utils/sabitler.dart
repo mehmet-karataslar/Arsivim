@@ -57,4 +57,14 @@ class Sabitler {
   // Güncelleme sabitleri
   static const String GUNCELLEME_KONTROL_URL = 'https://api.arsiv.app/version';
   static const String INDIRME_URL_BASE = 'https://releases.arsiv.app/';
+
+  // Cache ayarları
+  static const int CACHE_SURESI_DAKIKA = 10; // 10 dakika
+  static const int MAKSIMUM_BELGE_CACHE = 50; // Maksimum 50 belge
+  static const int MAKSIMUM_DOSYA_BOYUTU_MB =
+      10; // 10MB üzeri dosyalar cache'lenmez
+
+  // Performans ayarları
+  static const int SAYFA_BOYUTU = 20; // Pagination için
+  static const int MINIMUM_ARAMA_UZUNLUGU = 2; // Minimum arama karakter sayısı
 }

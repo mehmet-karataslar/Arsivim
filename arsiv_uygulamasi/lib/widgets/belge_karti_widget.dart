@@ -1,77 +1,133 @@
 import 'package:flutter/material.dart';
 import '../models/belge_modeli.dart';
-import '../services/veritabani_servisi.dart';
+import '../utils/screen_utils.dart';
+import '../services/belge_islemleri_servisi.dart';
 
-class BelgeKartiWidget extends StatefulWidget {
+class OptimizedBelgeKartiWidget extends StatefulWidget {
   final BelgeModeli belge;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-  final VoidCallback onAc;
-  final VoidCallback onPaylas;
-  final VoidCallback onDuzenle;
-  final VoidCallback onSil;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onAc;
+  final VoidCallback? onPaylas;
+  final VoidCallback? onDuzenle;
+  final VoidCallback? onSil;
+  final bool compactMode;
 
-  const BelgeKartiWidget({
+  const OptimizedBelgeKartiWidget({
     Key? key,
     required this.belge,
-    required this.onTap,
-    required this.onLongPress,
-    required this.onAc,
-    required this.onPaylas,
-    required this.onDuzenle,
-    required this.onSil,
+    this.onTap,
+    this.onLongPress,
+    this.onAc,
+    this.onPaylas,
+    this.onDuzenle,
+    this.onSil,
+    this.compactMode = false,
   }) : super(key: key);
 
   @override
-  State<BelgeKartiWidget> createState() => _BelgeKartiWidgetState();
+  State<OptimizedBelgeKartiWidget> createState() =>
+      _OptimizedBelgeKartiWidgetState();
 }
 
-class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
-  final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
-  String? _kisiAdi;
-  String? _kategoriAdi;
-
-  @override
-  void initState() {
-    super.initState();
-    _kisiAdiniYukle();
-    _kategoriAdiniYukle();
-  }
-
-  Future<void> _kisiAdiniYukle() async {
-    if (widget.belge.kisiId != null) {
-      try {
-        final kisi = await _veriTabani.kisiGetir(widget.belge.kisiId!);
-        if (kisi != null && mounted) {
-          setState(() {
-            _kisiAdi = kisi.ad;
-          });
-        }
-      } catch (e) {
-        // Hata durumunda sessizce devam et
-      }
-    }
-  }
-
-  Future<void> _kategoriAdiniYukle() async {
-    if (widget.belge.kategoriId != null) {
-      try {
-        final kategori = await _veriTabani.kategoriGetir(
-          widget.belge.kategoriId!,
-        );
-        if (kategori != null && mounted) {
-          setState(() {
-            _kategoriAdi = kategori.kategoriAdi;
-          });
-        }
-      } catch (e) {
-        // Hata durumunda sessizce devam et
-      }
-    }
-  }
+class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
+  final BelgeIslemleriServisi _belgeIslemleri = BelgeIslemleriServisi();
 
   @override
   Widget build(BuildContext context) {
+    if (widget.compactMode) {
+      return _buildCompactCard();
+    } else {
+      return _buildFullCard();
+    }
+  }
+
+  Widget _buildCompactCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Ana belge bilgileri
+          ListTile(
+            contentPadding: const EdgeInsets.all(12),
+            leading: _buildLeading(),
+            title: _buildTitle(),
+            subtitle: _buildSubtitle(),
+            onTap:
+                widget.onTap ??
+                () => _belgeIslemleri.belgeAc(widget.belge, context),
+            onLongPress: widget.onLongPress,
+          ),
+          // Aksiyon butonları
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(8),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Aç butonu
+                _buildCompactActionButton(
+                  icon: Icons.open_in_new,
+                  label: 'Aç',
+                  color: Colors.blue,
+                  onTap:
+                      widget.onAc ??
+                      () => _belgeIslemleri.belgeAc(widget.belge, context),
+                ),
+
+                // Paylaş butonu
+                _buildCompactActionButton(
+                  icon: Icons.share,
+                  label: 'Paylaş',
+                  color: Colors.green,
+                  onTap:
+                      widget.onPaylas ??
+                      () => _belgeIslemleri.belgePaylas(widget.belge, context),
+                ),
+
+                // Düzenle butonu
+                _buildCompactActionButton(
+                  icon: Icons.edit,
+                  label: 'Düzenle',
+                  color: Colors.orange,
+                  onTap: widget.onDuzenle ?? () => _belgeDuzenle(context),
+                ),
+
+                // Sil butonu
+                _buildCompactActionButton(
+                  icon: Icons.delete,
+                  label: 'Sil',
+                  color: Colors.red,
+                  onTap:
+                      widget.onSil ??
+                      () => _belgeIslemleri.belgeSil(widget.belge, context),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFullCard() {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -80,7 +136,9 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
         children: [
           // Ana belge bilgileri
           InkWell(
-            onTap: widget.onTap,
+            onTap:
+                widget.onTap ??
+                () => _belgeIslemleri.belgeAc(widget.belge, context),
             onLongPress: widget.onLongPress,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: Padding(
@@ -92,9 +150,7 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: _senkronDurumuRenk(
-                        widget.belge.senkronDurumu,
-                      ).withValues(alpha: 0.1),
+                      color: Theme.of(context).primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
@@ -125,44 +181,10 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                         const SizedBox(height: 4),
 
                         // Dosya tipi ve boyut
-                        Row(
-                          children: [
-                            Flexible(
-                              flex: 0,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[200],
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  widget.belge.dosyaTipi.toUpperCase().length >
-                                          4
-                                      ? widget.belge.dosyaTipi
-                                          .toUpperCase()
-                                          .substring(0, 4)
-                                      : widget.belge.dosyaTipi.toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey[700],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                widget.belge.formatliDosyaBoyutu,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: Colors.grey[600]),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 4),
 
@@ -172,122 +194,6 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: Colors.grey[500]),
                         ),
-
-                        // Kişi ve Kategori bilgisi (varsa)
-                        if ((_kisiAdi != null && _kisiAdi!.isNotEmpty) ||
-                            (_kategoriAdi != null &&
-                                _kategoriAdi!.isNotEmpty)) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              // Kişi bilgisi
-                              if (_kisiAdi != null && _kisiAdi!.isNotEmpty) ...[
-                                Icon(
-                                  Icons.person,
-                                  size: 14,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  flex: 1,
-                                  child: Text(
-                                    _kisiAdi!,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[600],
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-
-                              // Ayırıcı (her ikisi de varsa)
-                              if ((_kisiAdi != null && _kisiAdi!.isNotEmpty) &&
-                                  (_kategoriAdi != null &&
-                                      _kategoriAdi!.isNotEmpty)) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  width: 1,
-                                  height: 12,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-
-                              // Kategori bilgisi
-                              if (_kategoriAdi != null &&
-                                  _kategoriAdi!.isNotEmpty) ...[
-                                Icon(
-                                  Icons.folder,
-                                  size: 14,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  flex: 1,
-                                  child: Text(
-                                    _kategoriAdi!,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall?.copyWith(
-                                      color: Colors.grey[600],
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-
-                        // Etiketler (varsa)
-                        if (widget.belge.etiketler != null &&
-                            widget.belge.etiketler!.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children:
-                                widget.belge.etiketler!.take(3).map((etiket) {
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue[50],
-
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      etiket,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.blue[700],
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                          ),
-                        ],
-
-                        // Açıklama (varsa)
-                        if (widget.belge.aciklama != null &&
-                            widget.belge.aciklama!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.belge.aciklama!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -313,7 +219,9 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                   icon: Icons.open_in_new,
                   label: 'Aç',
                   color: Colors.blue,
-                  onTap: widget.onAc,
+                  onTap:
+                      widget.onAc ??
+                      () => _belgeIslemleri.belgeAc(widget.belge, context),
                 ),
 
                 // Paylaş butonu
@@ -321,7 +229,9 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                   icon: Icons.share,
                   label: 'Paylaş',
                   color: Colors.green,
-                  onTap: widget.onPaylas,
+                  onTap:
+                      widget.onPaylas ??
+                      () => _belgeIslemleri.belgePaylas(widget.belge, context),
                 ),
 
                 // Düzenle butonu
@@ -329,7 +239,7 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                   icon: Icons.edit,
                   label: 'Düzenle',
                   color: Colors.orange,
-                  onTap: widget.onDuzenle,
+                  onTap: widget.onDuzenle ?? () => _belgeDuzenle(context),
                 ),
 
                 // Sil butonu
@@ -337,75 +247,60 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
                   icon: Icons.delete,
                   label: 'Sil',
                   color: Colors.red,
-                  onTap: widget.onSil,
+                  onTap:
+                      widget.onSil ??
+                      () => _belgeIslemleri.belgeSil(widget.belge, context),
                 ),
               ],
             ),
           ),
-
-          // Senkronizasyon durumu göstergesi (sadece senkronize ediliyorsa)
-          if (widget.belge.senkronDurumu == 1) // Senkronize ediliyor
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(12),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.sync, size: 16, color: Colors.blue[700]),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Senkronize Ediliyor...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
   }
 
-  IconData _senkronDurumuIcon(SenkronDurumu durum) {
-    switch (durum) {
-      case SenkronDurumu.SENKRONIZE:
-        return Icons.check_circle;
-      case SenkronDurumu.BEKLEMEDE:
-        return Icons.schedule;
-      case SenkronDurumu.CAKISMA:
-        return Icons.warning;
-      case SenkronDurumu.HATA:
-        return Icons.error;
-      case SenkronDurumu.YEREL_DEGISIM:
-        return Icons.upload;
-      case SenkronDurumu.UZAK_DEGISIM:
-        return Icons.download;
-    }
+  Widget _buildLeading() {
+    return Container(
+      padding: EdgeInsets.all(widget.compactMode ? 8 : 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(widget.compactMode ? 6 : 10),
+      ),
+      child: Text(
+        widget.belge.dosyaTipiSimgesi,
+        style: TextStyle(fontSize: widget.compactMode ? 16 : 20),
+      ),
+    );
   }
 
-  Color _senkronDurumuRenk(SenkronDurumu durum) {
-    switch (durum) {
-      case SenkronDurumu.SENKRONIZE:
-        return Colors.green;
-      case SenkronDurumu.BEKLEMEDE:
-        return Colors.orange;
-      case SenkronDurumu.CAKISMA:
-        return Colors.red;
-      case SenkronDurumu.HATA:
-        return Colors.red;
-      case SenkronDurumu.YEREL_DEGISIM:
-        return Colors.blue;
-      case SenkronDurumu.UZAK_DEGISIM:
-        return Colors.purple;
-    }
+  Widget _buildTitle() {
+    return Text(
+      widget.belge.baslik ?? widget.belge.orijinalDosyaAdi,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: widget.compactMode ? 14 : 16,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _buildSubtitle() {
+    return Text(
+      '${widget.belge.dosyaTipi.toUpperCase()} • ${widget.belge.formatliDosyaBoyutu}',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: Colors.grey[600],
+        fontSize: widget.compactMode ? 12 : 14,
+      ),
+    );
+  }
+
+  Widget _buildTrailing() {
+    return Icon(
+      Icons.arrow_forward_ios_rounded,
+      size: 16,
+      color: Colors.grey[400],
+    );
   }
 
   // Aksiyon butonları için widget builder
@@ -437,5 +332,41 @@ class _BelgeKartiWidgetState extends State<BelgeKartiWidget> {
         ),
       ),
     );
+  }
+
+  // Kompakt mod için aksiyon butonları
+  Widget _buildCompactActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _belgeDuzenle(BuildContext context) {
+    // Belge düzenleme sayfasına git
+    Navigator.pushNamed(context, '/belge-duzenle', arguments: widget.belge);
   }
 }

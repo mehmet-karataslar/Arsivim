@@ -25,89 +25,184 @@ class CihazBaglantiPaneli extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.devices, color: Theme.of(context).primaryColor),
-                const SizedBox(width: 8),
-                Text(
-                  'Cihaz Bağlantıları',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${yonetici.bagliCihazlar.length} cihaz',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildQRBaglantiButonlari(context),
-            const SizedBox(height: 16),
-            yonetici.bagliCihazlar.isEmpty
-                ? _buildBagliCihazYok(context)
-                : _buildBagliCihazListesi(context),
-          ],
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).primaryColor.withOpacity(0.05),
+              Colors.white,
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context),
+              const SizedBox(height: 20),
+              _buildConnectionButtons(context),
+              const SizedBox(height: 20),
+              _buildDeviceList(context),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildQRBaglantiButonlari(BuildContext context) {
+  Widget _buildHeader(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: _buildQRButon(
-            context,
-            _pcPlatform ? 'QR Kod Göster' : 'QR Kod Tara',
-            _pcPlatform ? Icons.qr_code : Icons.qr_code_scanner,
-            Colors.blue,
-            _pcPlatform ? onQRKodGoster : onQRKodTara,
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            Icons.devices_rounded,
+            color: Theme.of(context).primaryColor,
+            size: 24,
           ),
         ),
-        // Tam ekran QR butonu sadece PC'de görünsün
-        if (_pcPlatform) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildQRButon(
-              context,
-              'Tam Ekran QR',
-              Icons.fullscreen,
-              Colors.purple,
-              onTamEkranQR,
-            ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Cihaz Bağlantıları',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${yonetici.bagliCihazlar.length} aktif bağlantı',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              ),
+            ],
           ),
-        ],
-        // Mobil için cihaz listesi butonu
-        if (!_pcPlatform) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildQRButon(
-              context,
-              'Bağlı Cihazlar',
-              Icons.devices,
-              Colors.green,
-              () => _bagliCihazlariGoster(context),
-            ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color:
+                yonetici.bagliCihazlar.isNotEmpty
+                    ? Colors.green
+                    : Colors.orange,
+            borderRadius: BorderRadius.circular(20),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                yonetici.bagliCihazlar.isNotEmpty ? Icons.wifi : Icons.wifi_off,
+                color: Colors.white,
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                yonetici.bagliCihazlar.isNotEmpty ? 'Bağlı' : 'Bekleniyor',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildQRButon(
+  Widget _buildConnectionButtons(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          Text(
+            _pcPlatform ? 'Bağlantı Yönetimi' : 'Sunucuya Bağlan',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_pcPlatform) ...[
+            // PC için butonlar
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    context,
+                    'QR Kod Göster',
+                    Icons.qr_code_rounded,
+                    Colors.blue,
+                    onQRKodGoster,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildActionButton(
+                    context,
+                    'Tam Ekran QR',
+                    Icons.fullscreen_rounded,
+                    Colors.purple,
+                    onTamEkranQR,
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            // Mobil için butonlar
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    context,
+                    'QR Kod Tara',
+                    Icons.qr_code_scanner_rounded,
+                    Colors.green,
+                    onQRKodTara,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildActionButton(
+                    context,
+                    'Cihaz Listesi',
+                    Icons.list_rounded,
+                    Colors.orange,
+                    () => _showDeviceList(context),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
     BuildContext context,
-    String text,
+    String title,
     IconData icon,
     Color color,
     VoidCallback onTap,
@@ -116,26 +211,25 @@ class CihazBaglantiPaneli extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [color.withOpacity(0.1), Colors.transparent],
-            ),
-            borderRadius: BorderRadius.circular(8),
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withOpacity(0.3)),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(height: 6),
+              Icon(icon, color: color, size: 28),
+              const SizedBox(height: 8),
               Text(
-                text,
+                title,
                 style: TextStyle(
                   color: color,
                   fontWeight: FontWeight.w600,
-                  fontSize: 11,
+                  fontSize: 12,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -146,29 +240,64 @@ class CihazBaglantiPaneli extends StatelessWidget {
     );
   }
 
-  Widget _buildBagliCihazYok(BuildContext context) {
+  Widget _buildDeviceList(BuildContext context) {
+    if (yonetici.bagliCihazlar.isEmpty) {
+      return _buildEmptyState(context);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Bağlı Cihazlar',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).primaryColor,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...yonetici.bagliCihazlar.map(
+          (device) => _buildDeviceCard(context, device),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey[200]!),
       ),
       child: Column(
         children: [
-          Icon(Icons.device_unknown, size: 48, color: Colors.grey[400]),
-          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(50),
+            ),
+            child: Icon(
+              Icons.devices_other_rounded,
+              size: 48,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 16),
           Text(
-            'Henüz bağlı cihaz yok',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+            'Henüz cihaz bağlı değil',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[600],
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             _pcPlatform
-                ? 'Diğer cihazlardan bu IP\'ye bağlanabilirsiniz'
-                : 'Sunucu açık olduğunda cihazlar görünecek',
+                ? 'Mobil cihazınızla QR kodunu tarayarak bağlanın'
+                : 'QR kodu tarayarak sunucuya bağlanın',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
@@ -179,43 +308,80 @@ class CihazBaglantiPaneli extends StatelessWidget {
     );
   }
 
-  Widget _buildBagliCihazListesi(BuildContext context) {
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: yonetici.bagliCihazlar.length,
-      itemBuilder: (context, index) {
-        final cihaz = yonetici.bagliCihazlar[index];
-        return _buildCihazKarti(context, cihaz);
-      },
-    );
-  }
+  Widget _buildDeviceCard(BuildContext context, Map<String, dynamic> device) {
+    final deviceName = device['name'] ?? 'Bilinmeyen Cihaz';
+    final deviceType = device['platform'] ?? device['type'] ?? 'unknown';
 
-  Widget _buildCihazKarti(BuildContext context, Map<String, dynamic> cihaz) {
+    // Online durumunu belirleme - status ve online field'larını kontrol et
+    final status = device['status'] ?? '';
+    final onlineField = device['online'] ?? false;
+    final isOnline = status == 'connected' || onlineField;
+
+    // Son görülme zamanını formatlama
+    final connectedAt = device['connected_at'];
+    String lastSeen = 'Bilinmiyor';
+
+    if (connectedAt != null) {
+      if (connectedAt is DateTime) {
+        final now = DateTime.now();
+        final difference = now.difference(connectedAt);
+
+        if (difference.inMinutes < 1) {
+          lastSeen = 'Az önce';
+        } else if (difference.inMinutes < 60) {
+          lastSeen = '${difference.inMinutes} dakika önce';
+        } else if (difference.inHours < 24) {
+          lastSeen = '${difference.inHours} saat önce';
+        } else {
+          lastSeen = '${difference.inDays} gün önce';
+        }
+      }
+    }
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.green[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green[200]!),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(Icons.smartphone, color: Colors.green[600], size: 20),
-          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _getDeviceColor(deviceType).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              _getDeviceIcon(deviceType),
+              color: _getDeviceColor(deviceType),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  cihaz['name'] ?? 'Bilinmeyen Cihaz',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  deviceName,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  cihaz['ip'] ?? 'IP Bilinmiyor',
+                  'Bağlantı: $lastSeen',
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
@@ -226,16 +392,27 @@ class CihazBaglantiPaneli extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.green,
+              color: isOnline ? Colors.green : Colors.grey[300],
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text(
-              'Bağlı',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isOnline ? Icons.circle : Icons.circle_outlined,
+                  color: isOnline ? Colors.white : Colors.grey[600],
+                  size: 8,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isOnline ? 'Çevrimiçi' : 'Çevrimdışı',
+                  style: TextStyle(
+                    color: isOnline ? Colors.white : Colors.grey[600],
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -243,264 +420,100 @@ class CihazBaglantiPaneli extends StatelessWidget {
     );
   }
 
-  void _bagliCihazlariGoster(BuildContext context) {
+  IconData _getDeviceIcon(String deviceType) {
+    switch (deviceType.toLowerCase()) {
+      case 'mobile':
+      case 'android':
+      case 'ios':
+        return Icons.smartphone_rounded;
+      case 'desktop':
+      case 'windows':
+      case 'linux':
+      case 'macos':
+        return Icons.computer_rounded;
+      case 'tablet':
+        return Icons.tablet_rounded;
+      default:
+        return Icons.device_unknown_rounded;
+    }
+  }
+
+  Color _getDeviceColor(String deviceType) {
+    switch (deviceType.toLowerCase()) {
+      case 'mobile':
+      case 'android':
+        return Colors.green;
+      case 'ios':
+        return Colors.blue;
+      case 'desktop':
+      case 'windows':
+        return Colors.purple;
+      case 'linux':
+        return Colors.orange;
+      case 'macos':
+        return Colors.grey;
+      case 'tablet':
+        return Colors.teal;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  void _showDeviceList(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder:
-          (context) => DraggableScrollableSheet(
-            initialChildSize: 0.7,
-            maxChildSize: 0.9,
-            minChildSize: 0.5,
-            builder:
-                (context, scrollController) => Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.devices, color: Colors.white),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Bağlı Cihazlar (${yonetici.bagliCihazlar.length})',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.close, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child:
-                          yonetici.bagliCihazlar.isEmpty
-                              ? const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.devices_other,
-                                      size: 64,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(height: 16),
-                                    Text(
-                                      'Henüz bağlı cihaz yok',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              : ListView.builder(
-                                controller: scrollController,
-                                padding: const EdgeInsets.all(16),
-                                itemCount: yonetici.bagliCihazlar.length,
-                                itemBuilder: (context, index) {
-                                  final cihaz = yonetici.bagliCihazlar[index];
-                                  return _buildDetayliCihazKarti(
-                                    context,
-                                    cihaz,
-                                    index,
-                                  );
-                                },
-                              ),
-                    ),
-                  ],
-                ),
-          ),
-    );
-  }
-
-  Widget _buildDetayliCihazKarti(
-    BuildContext context,
-    Map<String, dynamic> cihaz,
-    int index,
-  ) {
-    final isIncoming = cihaz['connection_type'] == 'incoming';
-    final connectedAt = cihaz['connected_at'] as DateTime;
-    final platform = cihaz['platform'] ?? 'Unknown';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          (context) => Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isIncoming ? Colors.blue[100] : Colors.green[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    _getPlatformIcon(platform),
-                    color: isIncoming ? Colors.blue[600] : Colors.green[600],
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
                     children: [
-                      Text(
-                        cihaz['name'] ?? 'Bilinmeyen Cihaz',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                      Icon(
+                        Icons.devices_rounded,
+                        color: Theme.of(context).primaryColor,
                       ),
+                      const SizedBox(width: 12),
                       Text(
-                        '${cihaz['ip']} • $platform',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
+                        'Tüm Cihazlar',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
                       ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Bağlı',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                const SizedBox(width: 4),
-                Text(
-                  'Bağlantı: ${TimestampManager.instance.formatRelativeTimestamp(connectedAt)}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-                const Spacer(),
-                Icon(
-                  isIncoming ? Icons.call_received : Icons.call_made,
-                  size: 14,
-                  color: isIncoming ? Colors.blue[600] : Colors.green[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  isIncoming ? 'Gelen' : 'Giden',
-                  style: TextStyle(
-                    color: isIncoming ? Colors.blue[600] : Colors.green[600],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
                 Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _cihazBaglantisiniKes(context, index),
-                    icon: const Icon(Icons.link_off, size: 16),
-                    label: const Text('Bağlantıyı Kes'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _cihazaSenkronBaslat(context, cihaz),
-                    icon: const Icon(Icons.sync, size: 16),
-                    label: const Text('Senkron'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).primaryColor,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
+                  child:
+                      yonetici.bagliCihazlar.isEmpty
+                          ? _buildEmptyState(context)
+                          : ListView.builder(
+                            padding: const EdgeInsets.all(20),
+                            itemCount: yonetici.bagliCihazlar.length,
+                            itemBuilder: (context, index) {
+                              return _buildDeviceCard(
+                                context,
+                                yonetici.bagliCihazlar[index],
+                              );
+                            },
+                          ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _getPlatformIcon(String platform) {
-    switch (platform.toLowerCase()) {
-      case 'android':
-      case 'ios':
-        return Icons.smartphone;
-      case 'windows':
-      case 'linux':
-      case 'macos':
-        return Icons.computer;
-      default:
-        return Icons.device_unknown;
-    }
-  }
-
-  void _cihazBaglantisiniKes(BuildContext context, int index) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Bağlantıyı Kes'),
-            content: Text(
-              '${yonetici.bagliCihazlar[index]['name']} cihazının bağlantısını kesmek istediğinizden emin misiniz?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('İptal'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  yonetici.cihazBaglantisiniKes(index);
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop(); // Bottom sheet'i de kapat
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('Kes'),
-              ),
-            ],
           ),
     );
-  }
-
-  void _cihazaSenkronBaslat(BuildContext context, Map<String, dynamic> cihaz) {
-    Navigator.of(context).pop(); // Bottom sheet'i kapat
-    yonetici.cihazaSenkronBaslat(cihaz);
   }
 }

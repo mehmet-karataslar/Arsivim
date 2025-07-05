@@ -5,7 +5,6 @@ import 'dart:async';
 import '../services/senkronizasyon_yonetici_servisi.dart';
 import '../widgets/senkronizasyon_kartlari.dart';
 import '../widgets/cihaz_baglanti_paneli.dart';
-
 import '../widgets/qr_generator_widget.dart';
 import '../widgets/qr_scanner_widget.dart';
 import '../models/belge_modeli.dart';
@@ -199,12 +198,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                         onQRKodTara: _qrKodTara,
                         onTamEkranQR: _tamEkranQRGoster,
                       ),
-                      const SizedBox(height: 16),
-                      SenkronizasyonKartlari.buildSenkronizasyonGecmisi(
-                        context,
-                        _yonetici,
-                      ),
-                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -246,13 +239,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               onQRKodTara: _qrKodTara,
               onTamEkranQR: _tamEkranQRGoster,
             ),
-            const SizedBox(height: 16),
-            SenkronizasyonKartlari.buildSenkronizasyonGecmisi(
-              context,
-              _yonetici,
-            ),
-            const SizedBox(height: 16),
-
             const SizedBox(height: 80), // Bottom padding
           ],
         ),
@@ -352,22 +338,44 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   void _qrKodTara() {
+    print('📱 QR kod tarayıcısı açılıyor...');
     Navigator.of(context).push(
       MaterialPageRoute(
         builder:
             (context) => QRScannerScreen(
               onQRScanned: (qrData) {
-                Navigator.of(context).pop(); // QR scanner'ı kapat
-                _yonetici.qrKoduTarandi(qrData);
+                print('📷 QR kod tarandı: $qrData');
 
-                // Başarılı bağlantı durumunda bildirim göster
-                if (_yonetici.bagliCihazlar.isNotEmpty) {
-                  _cihazBaglantiBasarili(_yonetici.bagliCihazlar.last['name']);
-                }
+                // QR kod tarandığında hemen kapansın
+                Navigator.of(context).pop();
+                print('🔄 QR scanner hemen kapatıldı');
+
+                // Arka planda bağlantı işlemlerini yap
+                _processQRCode(qrData);
               },
             ),
       ),
     );
+  }
+
+  void _processQRCode(String qrData) async {
+    try {
+      print('🔄 QR kod işleniyor: $qrData');
+
+      // QR kod işlemini başlat
+      final baglantiBasarili = await _yonetici.qrKoduTarandi(qrData);
+      print('🔄 Bağlantı sonucu: $baglantiBasarili');
+
+      // Başarılı bağlantı durumunda bildirim göster
+      if (baglantiBasarili && _yonetici.bagliCihazlar.isNotEmpty) {
+        final sonBagliCihaz = _yonetici.bagliCihazlar.last;
+        print('🎉 Başarı dialogu gösteriliyor: ${sonBagliCihaz['name']}');
+        _cihazBaglantiBasarili(sonBagliCihaz['name'] ?? 'Bilinmeyen Cihaz');
+      }
+    } catch (e) {
+      print('❌ QR kod işleme hatası: $e');
+      _hataGoster('QR kod işleme hatası: $e');
+    }
   }
 
   void _tamEkranQRGoster() {

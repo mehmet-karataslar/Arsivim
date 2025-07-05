@@ -71,6 +71,7 @@ class SenkronizasyonYoneticiServisi {
           'connected_at': DateTime.now(),
           'connection_type': 'incoming',
           'status': 'connected',
+          'online': true,
           'timestamp': DateTime.now().toIso8601String(),
         };
 
@@ -299,6 +300,7 @@ class SenkronizasyonYoneticiServisi {
             'device_id': deviceId,
             'connection_type': pcPlatform ? 'incoming' : 'outgoing',
             'status': 'connected',
+            'online': true,
           };
 
           _bagliCihazlar.add(newDevice);
@@ -397,6 +399,7 @@ class SenkronizasyonYoneticiServisi {
         'device_id': deviceId,
         'connection_type': 'incoming',
         'status': 'connected',
+        'online': true,
       };
 
       _bagliCihazlar.add(newDevice);
@@ -448,29 +451,41 @@ class SenkronizasyonYoneticiServisi {
     Future.microtask(() => cihazlaSenkronizasyonBaslat(cihaz));
   }
 
-  void qrKoduTarandi(String qrData) async {
+  Future<bool> qrKoduTarandi(String qrData) async {
     try {
-      print('📷 QR kod tarandı: $qrData');
+      print('📷 QR kod tarandı (Yönetici): $qrData');
       final connectionInfo = json.decode(qrData);
 
       if (connectionInfo['type'] == 'arsivim_connection') {
         print('✅ Geçerli Arşivim QR kodu, bağlantı başlatılıyor...');
+        print(
+          '📋 Bağlantı bilgileri: ${connectionInfo['device_name']} - ${connectionInfo['ip']}:${connectionInfo['port']}',
+        );
+
         final success = await yeniCihazBagla(connectionInfo);
+
         if (success) {
           print('✅ Cihaz başarıyla bağlandı!');
+          print('📊 Toplam bağlı cihaz sayısı: ${_bagliCihazlar.length}');
+
           onSuccess?.call(
             'Cihaz başarıyla bağlandı: ${connectionInfo['device_name']}',
           );
+          return true;
         } else {
           print('❌ Cihaz bağlantısı başarısız!');
+          onError?.call('Cihaz bağlantısı başarısız');
+          return false;
         }
       } else {
         print('❌ Geçersiz QR kod formatı: ${connectionInfo['type']}');
         onError?.call('Geçersiz QR kod formatı');
+        return false;
       }
     } catch (e) {
       print('❌ QR kod okunamadı: $e');
       onError?.call('QR kod okunamadı: $e');
+      return false;
     }
   }
 
@@ -1086,75 +1101,6 @@ class SenkronizasyonYoneticiServisi {
       print('❌ Cihaz senkronizasyonu hatası: $e');
       onError?.call('Cihaz senkronizasyonu hatası: $e');
       return false;
-    }
-  }
-
-  /// Senkronizasyon geçmişini al
-  Future<List<Map<String, dynamic>>> getSenkronizasyonGecmisi() async {
-    try {
-      final logServisi = LogServisi.instance;
-      final senkronLoglar = await logServisi.getRecentSyncLogs();
-
-      // Log verilerini UI formatına dönüştür
-      List<Map<String, dynamic>> gecmis = [];
-
-      for (var log in senkronLoglar) {
-        final mesaj = log['mesaj'] ?? '';
-        final zaman = log['zaman'] ?? '';
-
-        String tip = 'bilinmiyor';
-        if (mesaj.contains('başarılı') || mesaj.contains('tamamlandı')) {
-          tip = 'basarili';
-        } else if (mesaj.contains('bağlandı') || mesaj.contains('bağlantı')) {
-          tip = 'baglanti';
-        } else if (mesaj.contains('dosya') || mesaj.contains('belge')) {
-          tip = 'dosya';
-        } else if (mesaj.contains('hata') || mesaj.contains('başarısız')) {
-          tip = 'hata';
-        }
-
-        gecmis.add({
-          'tip': tip,
-          'mesaj': mesaj,
-          'zaman': _formatZaman(zaman),
-          'raw_time': zaman,
-        });
-      }
-
-      // Zamanına göre sırala (en yeni önce)
-      gecmis.sort(
-        (a, b) => DateTime.parse(
-          b['raw_time'],
-        ).compareTo(DateTime.parse(a['raw_time'])),
-      );
-
-      return gecmis;
-    } catch (e) {
-      print('❌ Senkronizasyon geçmişi alınırken hata: $e');
-      return [];
-    }
-  }
-
-  /// Zamanı kullanıcı dostu formata dönüştür
-  String _formatZaman(String isoTime) {
-    try {
-      final dateTime = DateTime.parse(isoTime);
-      final now = DateTime.now();
-      final difference = now.difference(dateTime);
-
-      if (difference.inMinutes < 1) {
-        return 'Az önce';
-      } else if (difference.inMinutes < 60) {
-        return '${difference.inMinutes} dakika önce';
-      } else if (difference.inHours < 24) {
-        return '${difference.inHours} saat önce';
-      } else if (difference.inDays < 7) {
-        return '${difference.inDays} gün önce';
-      } else {
-        return '${(difference.inDays / 7).floor()} hafta önce';
-      }
-    } catch (e) {
-      return 'Bilinmeyen zaman';
     }
   }
 
