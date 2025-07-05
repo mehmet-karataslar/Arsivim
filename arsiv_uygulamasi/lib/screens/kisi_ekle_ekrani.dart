@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
+import '../utils/screen_utils.dart';
 
 class KisiEkleEkrani extends StatefulWidget {
   final KisiModeli? kisi; // Düzenleme için mevcut kişi
@@ -59,39 +60,11 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
   }
 
   void _hataGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    ScreenUtils.showErrorSnackBar(context, mesaj);
   }
 
   void _basariMesajiGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.green.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    ScreenUtils.showSuccessSnackBar(context, mesaj);
   }
 
   @override
@@ -100,18 +73,8 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: Text(
-          duzenlemeModundaMi ? 'Kişiyi Düzenle' : 'Yeni Kişi Ekle',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_ios),
-        ),
+      appBar: ScreenUtils.buildAppBar(
+        title: duzenlemeModundaMi ? 'Kişiyi Düzenle' : 'Yeni Kişi Ekle',
         actions: [
           if (!_kayitEdiliyor)
             Container(

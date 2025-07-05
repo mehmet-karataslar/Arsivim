@@ -3,6 +3,7 @@ import '../models/kategori_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../widgets/kategori_karti_widget.dart';
 import '../widgets/kategori_form_dialog.dart';
+import '../utils/screen_utils.dart';
 import '../screens/belgeler_ekrani.dart';
 
 class KategorilerEkrani extends StatefulWidget {
@@ -77,11 +78,9 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kategoriler'),
-        elevation: 0,
+      appBar: ScreenUtils.buildAppBar(
+        title: 'Kategoriler',
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
         actions: [
           IconButton(
             onPressed: _yeniKategoriEkle,
@@ -151,14 +150,8 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.purple.shade50, Colors.white],
-          ),
-        ),
+      body: ScreenUtils.buildGradientContainer(
+        colors: [Colors.purple.shade50, Colors.white],
         child:
             _yukleniyor
                 ? const Center(child: CircularProgressIndicator())
@@ -284,39 +277,12 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
   }
 
   Widget _buildBosListe() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.category_outlined, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Henüz kategori eklenmemiş',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'İlk kategorinizi eklemek için + butonuna tıklayın',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _yeniKategoriEkle,
-            icon: const Icon(Icons.add),
-            label: const Text('Kategori Ekle'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-          ),
-        ],
-      ),
+    return ScreenUtils.buildEmptyState(
+      icon: Icons.category_outlined,
+      title: 'Henüz kategori eklenmemiş',
+      message: 'İlk kategorinizi eklemek için + butonuna tıklayın',
+      actionText: 'Kategori Ekle',
+      onAction: _yeniKategoriEkle,
     );
   }
 
@@ -555,15 +521,11 @@ class _KategorilerEkraniState extends State<KategorilerEkrani> {
   }
 
   void _basariGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mesaj), backgroundColor: Colors.green),
-    );
+    ScreenUtils.showSuccessSnackBar(context, mesaj);
   }
 
   void _hataGoster(String mesaj) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(mesaj), backgroundColor: Colors.red));
+    ScreenUtils.showErrorSnackBar(context, mesaj);
   }
 
   // Toplu silme dialog'u

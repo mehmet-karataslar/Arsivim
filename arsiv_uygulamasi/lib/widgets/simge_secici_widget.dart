@@ -102,7 +102,9 @@ class SimgeSeciciWidget extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   color:
-                      secili ? Colors.blue.withOpacity(0.1) : Colors.grey[100],
+                      secili
+                          ? Colors.blue.withValues(alpha: 0.1)
+                          : Colors.grey[100],
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: secili ? Colors.blue : Colors.grey[300]!,

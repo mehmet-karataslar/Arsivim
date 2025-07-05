@@ -1,6 +1,7 @@
+import 'base_model.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 
-// Senkronizasyon durumu enum'u
+/// Senkronizasyon durumu enum'u
 enum SenkronDurumu {
   SENKRONIZE,
   BEKLEMEDE,
@@ -10,8 +11,8 @@ enum SenkronDurumu {
   UZAK_DEGISIM,
 }
 
-// Belge veri yapısı ve iş mantığı
-class BelgeModeli {
+/// Belge modeli - optimize edilmiş ve basitleştirilmiş
+class BelgeModeli extends BaseModel {
   int? id;
   String dosyaAdi;
   String orijinalDosyaAdi;
@@ -50,59 +51,38 @@ class BelgeModeli {
     this.senkronDurumu = SenkronDurumu.YEREL_DEGISIM,
   });
 
-  // JSON'dan model oluşturma
-  factory BelgeModeli.fromJson(Map<String, dynamic> json) {
+  /// Map'ten model oluştur
+  factory BelgeModeli.fromMap(Map<String, dynamic> map) {
     return BelgeModeli(
-      id: json['id'],
-      dosyaAdi: json['dosya_adi'],
-      orijinalDosyaAdi: json['orijinal_dosya_adi'],
-      dosyaYolu: json['dosya_yolu'],
-      dosyaBoyutu: json['dosya_boyutu'],
-      dosyaTipi: json['dosya_tipi'],
-      dosyaHash: json['dosya_hash'],
-      kategoriId: json['kategori_id'],
-      kisiId: json['kisi_id'],
-      baslik: json['baslik'],
-      aciklama: json['aciklama'],
-      etiketler:
-          json['etiketler'] != null
-              ? List<String>.from(json['etiketler'].split(','))
-              : null,
-      olusturmaTarihi: DateTime.parse(json['olusturma_tarihi']),
-      guncellemeTarihi: DateTime.parse(json['guncelleme_tarihi']),
+      id: map['id'],
+      dosyaAdi: map['dosya_adi'],
+      orijinalDosyaAdi: map['orijinal_dosya_adi'],
+      dosyaYolu: map['dosya_yolu'],
+      dosyaBoyutu: map['dosya_boyutu'],
+      dosyaTipi: map['dosya_tipi'],
+      dosyaHash: map['dosya_hash'],
+      kategoriId: map['kategori_id'],
+      kisiId: map['kisi_id'],
+      baslik: map['baslik'],
+      aciklama: map['aciklama'],
+      etiketler: map['etiketler']?.split(',').cast<String>(),
+      olusturmaTarihi: DateTime.parse(map['olusturma_tarihi']),
+      guncellemeTarihi: DateTime.parse(map['guncelleme_tarihi']),
       sonErisimTarihi:
-          json['son_erisim_tarihi'] != null
-              ? DateTime.parse(json['son_erisim_tarihi'])
+          map['son_erisim_tarihi'] != null
+              ? DateTime.parse(map['son_erisim_tarihi'])
               : null,
-      aktif: json['aktif'] == 1,
-      senkronDurumu: SenkronDurumu.values[json['senkron_durumu'] ?? 0],
+      aktif: map['aktif'] == 1,
+      senkronDurumu: SenkronDurumu.values[map['senkron_durumu'] ?? 0],
     );
   }
 
-  // Model'den JSON'a dönüştürme
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'dosya_adi': dosyaAdi,
-      'orijinal_dosya_adi': orijinalDosyaAdi,
-      'dosya_yolu': dosyaYolu,
-      'dosya_boyutu': dosyaBoyutu,
-      'dosya_tipi': dosyaTipi,
-      'dosya_hash': dosyaHash,
-      'kategori_id': kategoriId,
-      'kisi_id': kisiId,
-      'baslik': baslik,
-      'aciklama': aciklama,
-      'etiketler': etiketler?.join(','),
-      'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
-      'guncelleme_tarihi': guncellemeTarihi.toIso8601String(),
-      'son_erisim_tarihi': sonErisimTarihi?.toIso8601String(),
-      'aktif': aktif ? 1 : 0,
-      'senkron_durumu': senkronDurumu.index,
-    };
-  }
+  /// JSON'dan model oluştur
+  factory BelgeModeli.fromJson(Map<String, dynamic> json) =>
+      BelgeModeli.fromMap(json);
 
-  // Veritabanı için Map
+  /// Model'i Map'e dönüştür
+  @override
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -125,36 +105,7 @@ class BelgeModeli {
     };
   }
 
-  // Map'ten model oluşturma
-  factory BelgeModeli.fromMap(Map<String, dynamic> map) {
-    return BelgeModeli(
-      id: map['id'],
-      dosyaAdi: map['dosya_adi'],
-      orijinalDosyaAdi: map['orijinal_dosya_adi'],
-      dosyaYolu: map['dosya_yolu'],
-      dosyaBoyutu: map['dosya_boyutu'],
-      dosyaTipi: map['dosya_tipi'],
-      dosyaHash: map['dosya_hash'],
-      kategoriId: map['kategori_id'],
-      kisiId: map['kisi_id'],
-      baslik: map['baslik'],
-      aciklama: map['aciklama'],
-      etiketler:
-          map['etiketler'] != null
-              ? List<String>.from(map['etiketler'].split(','))
-              : null,
-      olusturmaTarihi: DateTime.parse(map['olusturma_tarihi']),
-      guncellemeTarihi: DateTime.parse(map['guncelleme_tarihi']),
-      sonErisimTarihi:
-          map['son_erisim_tarihi'] != null
-              ? DateTime.parse(map['son_erisim_tarihi'])
-              : null,
-      aktif: map['aktif'] == 1,
-      senkronDurumu: SenkronDurumu.values[map['senkron_durumu'] ?? 0],
-    );
-  }
-
-  // Kopyalama metodu
+  /// Model'i kopyala
   BelgeModeli copyWith({
     int? id,
     String? dosyaAdi,
@@ -195,7 +146,7 @@ class BelgeModeli {
     );
   }
 
-  // Yardımcı getter'lar
+  /// Yardımcı getter'lar
   String get formatliDosyaBoyutu =>
       YardimciFonksiyonlar.dosyaBoyutuFormatla(dosyaBoyutu);
   String get dosyaTipiSimgesi =>
@@ -206,12 +157,12 @@ class BelgeModeli {
       YardimciFonksiyonlar.tarihFormatla(guncellemeTarihi);
   String get zamanFarki => YardimciFonksiyonlar.zamanFarki(guncellemeTarihi);
 
-  // Hash doğrulama
-  static bool hashGecerliMi(String hash) {
-    return YardimciFonksiyonlar.hashGecerliMi(hash);
-  }
+  /// Model'in geçerli olup olmadığını kontrol et
+  @override
+  bool isValid() =>
+      dosyaAdi.isNotEmpty && dosyaYolu.isNotEmpty && dosyaHash.isNotEmpty;
 
-  // Eşitlik kontrolü
+  /// Eşitlik kontrolü
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -222,7 +173,6 @@ class BelgeModeli {
   int get hashCode => dosyaHash.hashCode;
 
   @override
-  String toString() {
-    return 'BelgeModeli{id: $id, dosyaAdi: $dosyaAdi, dosyaTipi: $dosyaTipi, dosyaBoyutu: $dosyaBoyutu}';
-  }
+  String toString() =>
+      'BelgeModeli{id: $id, dosyaAdi: $dosyaAdi, dosyaTipi: $dosyaTipi}';
 }

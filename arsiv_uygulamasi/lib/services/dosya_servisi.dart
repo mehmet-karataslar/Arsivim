@@ -232,4 +232,38 @@ class DosyaServisi {
       throw Exception('Dosya bilgileri alınamadı: $e');
     }
   }
+
+  // Senkronizasyon dosyasını kaydet
+  Future<String> senkronDosyasiKaydet(
+    String dosyaAdi,
+    Uint8List dosyaBytes,
+  ) async {
+    try {
+      // Hedef klasörü oluştur
+      Directory belgelerKlasoru = await _belgelerKlasorunu();
+
+      // Dosya adını güvenli hale getir
+      String dosyaUzantisi = path.extension(dosyaAdi);
+      String temelAd = path.basenameWithoutExtension(dosyaAdi);
+      String guvenliTemelAd = YardimciFonksiyonlar.guvenliDosyaAdi(temelAd);
+
+      // Benzersiz dosya adı oluştur
+      String yeniDosyaAdi = YardimciFonksiyonlar.benzersizDosyaAdi(
+        guvenliTemelAd,
+        dosyaUzantisi.isNotEmpty ? dosyaUzantisi.substring(1) : '',
+      );
+
+      String hedefYol = path.join(belgelerKlasoru.path, yeniDosyaAdi);
+
+      // Dosyayı kaydet
+      File hedefDosya = File(hedefYol);
+      await hedefDosya.writeAsBytes(dosyaBytes);
+
+      print('✅ Senkronizasyon dosyası kaydedildi: $hedefYol');
+      return hedefYol;
+    } catch (e) {
+      print('❌ Senkronizasyon dosyası kaydetme hatası: $e');
+      throw Exception('Senkronizasyon dosyası kaydedilemedi: $e');
+    }
+  }
 }

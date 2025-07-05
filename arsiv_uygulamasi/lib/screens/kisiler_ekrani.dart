@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
+import '../utils/screen_utils.dart';
 import 'kisi_ekle_ekrani.dart';
 import 'kisi_belgeleri_ekrani.dart';
 
@@ -42,52 +43,19 @@ class _KisilerEkraniState extends State<KisilerEkrani> {
   }
 
   void _hataGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    ScreenUtils.showErrorSnackBar(context, mesaj);
   }
 
   void _basariMesajiGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.green.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    ScreenUtils.showSuccessSnackBar(context, mesaj);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text(
-          'Kişiler',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        shadowColor: Colors.black12,
+      appBar: ScreenUtils.buildAppBar(
+        title: 'Kişiler',
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 16),
@@ -135,40 +103,10 @@ class _KisilerEkraniState extends State<KisilerEkrani> {
   }
 
   Widget _buildBosList() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.people_outline,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Henüz kişi eklenmemiş',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: Colors.grey.shade700,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'İlk kişiyi eklemek için üstteki + simgesine dokunun',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade500),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+    return ScreenUtils.buildEmptyState(
+      icon: Icons.people_outline,
+      title: 'Henüz kişi eklenmemiş',
+      message: 'İlk kişiyi eklemek için üstteki + simgesine dokunun',
     );
   }
 

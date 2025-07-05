@@ -98,7 +98,9 @@ class RenkSeciciWidget extends StatelessWidget {
                       secili
                           ? [
                             BoxShadow(
-                              color: _hexToColor(renkKodu).withOpacity(0.4),
+                              color: _hexToColor(
+                                renkKodu,
+                              ).withValues(alpha: 0.4),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),

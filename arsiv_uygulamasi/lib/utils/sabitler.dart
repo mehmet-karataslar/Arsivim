@@ -2,7 +2,7 @@
 class Sabitler {
   // Veritabanı
   static const String VERITABANI_ADI = 'arsiv.db';
-  static const int VERITABANI_VERSIYONU = 4;
+  static const int VERITABANI_VERSIYONU = 5;
 
   // Dosya yolları
   static const String BELGELER_KLASORU = 'Belgeler';

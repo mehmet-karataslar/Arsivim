@@ -63,7 +63,7 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -137,7 +137,9 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: _hexToColor(_secilenRenk).withOpacity(0.2),
+                            color: _hexToColor(
+                              _secilenRenk,
+                            ).withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Center(

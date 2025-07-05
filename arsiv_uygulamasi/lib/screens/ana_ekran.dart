@@ -3,14 +3,14 @@ import 'dart:io';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
 import '../models/belge_modeli.dart';
-import '../utils/yardimci_fonksiyonlar.dart';
+import '../utils/screen_utils.dart';
 import 'belgeler_ekrani.dart';
 import 'kategoriler_ekrani.dart';
 import 'kisiler_ekrani.dart';
 import 'yeni_belge_ekle_ekrani.dart';
 
-import 'usb_senkron_ekrani.dart';
 import 'yedekleme_ekrani.dart';
+import 'senkronizasyon_ekrani.dart';
 
 // Ana dashboard ve navigasyon
 class AnaEkran extends StatefulWidget {
@@ -346,7 +346,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
       case 3:
         return _buildKisilerEkrani();
       case 4:
-        return _buildSenkronEkrani();
+        return _buildSenkronizasyonEkrani();
       default:
         return _buildAnaEkran();
     }
@@ -407,7 +407,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             Expanded(
               child: _buildModernIstatistikKarti(
                 'Toplam Boyut',
-                YardimciFonksiyonlar.dosyaBoyutuFormatla(_toplamDosyaBoyutu),
+                ScreenUtils.formatFileSize(_toplamDosyaBoyutu),
                 Icons.storage_rounded,
                 [Colors.green, Colors.lightGreen],
               ),
@@ -909,8 +909,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     return const KisilerEkrani();
   }
 
-  Widget _buildSenkronEkrani() {
-    return const UsbSenkronEkrani();
+  Widget _buildSenkronizasyonEkrani() {
+    return const SenkronizasyonEkrani();
   }
 
   Future<void> _yeniBelgeEkle() async {

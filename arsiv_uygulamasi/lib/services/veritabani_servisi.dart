@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
-import '../models/senkron_log_modeli.dart';
+
 import '../utils/sabitler.dart';
 
 // SQLite veritabanı operasyonları
@@ -58,7 +58,8 @@ class VeriTabaniServisi {
         simge_kodu TEXT DEFAULT 'folder',
         aciklama TEXT,
         olusturma_tarihi TEXT NOT NULL,
-        aktif INTEGER DEFAULT 1
+        aktif INTEGER DEFAULT 1,
+        belge_sayisi INTEGER DEFAULT 0
       )
     ''');
 
@@ -270,6 +271,23 @@ class VeriTabaniServisi {
         print('❌ V4 migration hatası: $e');
       }
     }
+
+    if (oldVersion < 5) {
+      // V5 Migration - kategoriler tablosuna belge_sayisi kolonu ekle
+      try {
+        print(
+          '🔄 V5 Migration başlatılıyor - kategoriler tablosuna belge_sayisi kolonu ekleniyor...',
+        );
+
+        await db.execute(
+          'ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0',
+        );
+
+        print('✅ kategoriler tablosu V5 ile güncellendi');
+      } catch (e) {
+        print('❌ V5 migration hatası: $e');
+      }
+    }
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -463,6 +481,11 @@ class VeriTabaniServisi {
     return null;
   }
 
+  // Hash'e göre belge bul (alias for consistency)
+  Future<BelgeModeli?> belgeBulHash(String hash) async {
+    return await belgeGetirByHash(hash);
+  }
+
   // Belge güncelleme
   Future<int> belgeGuncelle(BelgeModeli belge) async {
     final db = await database;
@@ -534,6 +557,28 @@ class VeriTabaniServisi {
   Future<int> kisiEkle(KisiModeli kisi) async {
     final db = await database;
     return await db.insert('kisiler', kisi.toMap());
+  }
+
+  // Kişi ID'si ile ekleme (senkronizasyon için)
+  Future<int> kisiEkleIdIle(KisiModeli kisi) async {
+    final db = await database;
+    final map = kisi.toMap();
+    return await db.insert('kisiler', map);
+  }
+
+  // Ad ve soyadla kişi bul
+  Future<KisiModeli?> kisiBulAdSoyad(String ad, String soyad) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'kisiler',
+      where: 'ad = ? AND soyad = ? AND aktif = ?',
+      whereArgs: [ad, soyad, 1],
+    );
+
+    if (maps.isNotEmpty) {
+      return KisiModeli.fromMap(maps.first);
+    }
+    return null;
   }
 
   // Tüm kişileri getir
@@ -611,6 +656,28 @@ class VeriTabaniServisi {
     final map = kategori.toMap();
     print('DEBUG: Veritabanına eklenecek map: $map');
     return await db.insert('kategoriler', map);
+  }
+
+  // Kategori ID'si ile ekleme (senkronizasyon için)
+  Future<int> kategoriEkleIdIle(KategoriModeli kategori) async {
+    final db = await database;
+    final map = kategori.toMap();
+    return await db.insert('kategoriler', map);
+  }
+
+  // Ada göre kategori bul
+  Future<KategoriModeli?> kategoriBulAd(String ad) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'kategoriler',
+      where: 'kategori_adi = ? AND aktif = ?',
+      whereArgs: [ad, 1],
+    );
+
+    if (maps.isNotEmpty) {
+      return KategoriModeli.fromMap(maps.first);
+    }
+    return null;
   }
 
   // Tüm kategorileri getir
@@ -872,23 +939,21 @@ class VeriTabaniServisi {
     _database = await _initDatabase();
   }
 
-  // Tüm logları getir
-  Future<List<SenkronLogModeli>> senkronLoglariniGetir({int? limit}) async {
+  // Senkron logları - Yeni sistem için hazırlanıyor
+  Future<List<Map<String, dynamic>>> senkronLoglariniGetir({int? limit}) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'senkron_logları',
       orderBy: 'islem_tarihi DESC',
       limit: limit,
     );
-    return List.generate(maps.length, (i) {
-      return SenkronLogModeli.fromMap(maps[i]);
-    });
+    return maps;
   }
 
   // Log ekle
-  Future<int> senkronLogEkle(SenkronLogModeli log) async {
+  Future<int> senkronLogEkle(Map<String, dynamic> log) async {
     final db = await database;
-    return await db.insert('senkron_logları', log.toMap());
+    return await db.insert('senkron_logları', log);
   }
 
   // Senkron durumuna göre belgeleri getir

@@ -6,6 +6,7 @@ import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/belge_islemleri_servisi.dart';
 import '../widgets/arama_sonuclari_widget.dart';
+import '../utils/screen_utils.dart';
 import 'yeni_belge_ekle_ekrani.dart';
 
 class BelgelerEkrani extends StatefulWidget {
@@ -242,15 +243,12 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _mevcutKategori != null
-              ? '${_mevcutKategori!.kategoriAdi} Belgeleri'
-              : 'Tüm Belgeler',
-        ),
-        elevation: 0,
+      appBar: ScreenUtils.buildAppBar(
+        title:
+            _mevcutKategori != null
+                ? '${_mevcutKategori!.kategoriAdi} Belgeleri'
+                : 'Tüm Belgeler',
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
         actions: [
           // Yenileme butonu - sadece desktop platformlarda göster
           if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
@@ -289,14 +287,8 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
       ),
       body: RefreshIndicator(
         onRefresh: _onRefresh,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.blue.shade50, Colors.white],
-            ),
-          ),
+        child: ScreenUtils.buildGradientContainer(
+          colors: [Colors.blue.shade50, Colors.white],
           child: Column(
             children: [
               // Ana arama kutusu
@@ -486,8 +478,6 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   }
 
   void _hataGoster(String mesaj) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(mesaj), backgroundColor: Colors.red));
+    ScreenUtils.showErrorSnackBar(context, mesaj);
   }
 }

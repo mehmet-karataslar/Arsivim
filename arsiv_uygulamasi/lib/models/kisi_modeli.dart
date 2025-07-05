@@ -1,7 +1,8 @@
+import 'base_model.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 
-// Kişi modeli
-class KisiModeli {
+/// Kişi modeli - optimize edilmiş ve basitleştirilmiş
+class KisiModeli extends BaseModel {
   int? id;
   String ad;
   String soyad;
@@ -18,43 +19,7 @@ class KisiModeli {
     this.aktif = true,
   });
 
-  // JSON'dan model oluşturma
-  factory KisiModeli.fromJson(Map<String, dynamic> json) {
-    return KisiModeli(
-      id: json['id'],
-      ad: json['ad'],
-      soyad: json['soyad'],
-      olusturmaTarihi: DateTime.parse(json['olusturma_tarihi']),
-      guncellemeTarihi: DateTime.parse(json['guncelleme_tarihi']),
-      aktif: json['aktif'] == 1,
-    );
-  }
-
-  // Model'den JSON'a dönüştürme
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'ad': ad,
-      'soyad': soyad,
-      'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
-      'guncelleme_tarihi': guncellemeTarihi.toIso8601String(),
-      'aktif': aktif ? 1 : 0,
-    };
-  }
-
-  // Veritabanı için Map
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'ad': ad,
-      'soyad': soyad,
-      'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
-      'guncelleme_tarihi': guncellemeTarihi.toIso8601String(),
-      'aktif': aktif ? 1 : 0,
-    };
-  }
-
-  // Map'ten model oluşturma
+  /// Map'ten model oluştur
   factory KisiModeli.fromMap(Map<String, dynamic> map) {
     return KisiModeli(
       id: map['id'],
@@ -66,7 +31,24 @@ class KisiModeli {
     );
   }
 
-  // Kopyalama metodu
+  /// JSON'dan model oluştur
+  factory KisiModeli.fromJson(Map<String, dynamic> json) =>
+      KisiModeli.fromMap(json);
+
+  /// Model'i Map'e dönüştür
+  @override
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'ad': ad,
+      'soyad': soyad,
+      'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
+      'guncelleme_tarihi': guncellemeTarihi.toIso8601String(),
+      'aktif': aktif ? 1 : 0,
+    };
+  }
+
+  /// Model'i kopyala
   KisiModeli copyWith({
     int? id,
     String? ad,
@@ -85,7 +67,7 @@ class KisiModeli {
     );
   }
 
-  // Yardımcı getter'lar
+  /// Yardımcı getter'lar
   String get tamAd => '$ad $soyad';
   String get formatliOlusturmaTarihi =>
       YardimciFonksiyonlar.tarihFormatla(olusturmaTarihi);
@@ -93,7 +75,11 @@ class KisiModeli {
       YardimciFonksiyonlar.tarihFormatla(guncellemeTarihi);
   String get zamanFarki => YardimciFonksiyonlar.zamanFarki(guncellemeTarihi);
 
-  // Eşitlik kontrolü
+  /// Model'in geçerli olup olmadığını kontrol et
+  @override
+  bool isValid() => ad.trim().isNotEmpty && soyad.trim().isNotEmpty;
+
+  /// Eşitlik kontrolü
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -104,7 +90,5 @@ class KisiModeli {
   int get hashCode => ad.hashCode ^ soyad.hashCode;
 
   @override
-  String toString() {
-    return 'KisiModeli{id: $id, tamAd: $tamAd}';
-  }
+  String toString() => 'KisiModeli{id: $id, tamAd: $tamAd}';
 }

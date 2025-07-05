@@ -5,6 +5,7 @@ import '../models/kategori_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/belge_islemleri_servisi.dart';
 import '../widgets/belge_detay_dialog.dart';
+import '../utils/screen_utils.dart';
 import 'yeni_belge_ekle_ekrani.dart';
 
 class KisiBelgeleriEkrani extends StatefulWidget {
@@ -112,11 +113,9 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.kisi.tamAd} - Belgeler'),
-        elevation: 0,
+      appBar: ScreenUtils.buildAppBar(
+        title: '${widget.kisi.tamAd} - Belgeler',
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -125,14 +124,8 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.blue.shade50, Colors.white],
-          ),
-        ),
+      body: ScreenUtils.buildGradientContainer(
+        colors: [Colors.blue.shade50, Colors.white],
         child: Column(
           children: [
             // İstatistik kartı
@@ -274,66 +267,20 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
   }
 
   Widget _buildBosList() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.folder_open, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Henüz belge eklenmemiş',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Bu kişi için ilk belgeyi eklemek için + simgesine dokunun',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _yeniBelgeEkle,
-            icon: const Icon(Icons.add),
-            label: const Text('Belge Ekle'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[600],
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return ScreenUtils.buildEmptyState(
+      icon: Icons.folder_open,
+      title: 'Henüz belge eklenmemiş',
+      message: 'Bu kişi için ilk belgeyi eklemek için + simgesine dokunun',
+      actionText: 'Belge Ekle',
+      onAction: _yeniBelgeEkle,
     );
   }
 
   Widget _buildAramaSonucuYok() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.search_off, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Arama sonucu bulunamadı',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '"$_aramaMetni" için sonuç bulunamadı',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
-          ),
-        ],
-      ),
+    return ScreenUtils.buildEmptyState(
+      icon: Icons.search_off,
+      title: 'Arama sonucu bulunamadı',
+      message: '"$_aramaMetni" için sonuç bulunamadı',
     );
   }
 
@@ -638,38 +585,10 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
   }
 
   void _hataGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    ScreenUtils.showErrorSnackBar(context, mesaj);
   }
 
   void _basariGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    ScreenUtils.showSuccessSnackBar(context, mesaj);
   }
 }

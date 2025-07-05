@@ -1,7 +1,8 @@
+import 'base_model.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 
-// Kategori yapısı ve yönetimi
-class KategoriModeli {
+/// Kategori modeli - optimize edilmiş ve basitleştirilmiş
+class KategoriModeli extends BaseModel {
   int? id;
   String kategoriAdi;
   String renkKodu;
@@ -9,7 +10,7 @@ class KategoriModeli {
   String? aciklama;
   DateTime olusturmaTarihi;
   bool aktif;
-  int? belgeSayisi; // Bu kategorideki belge sayısı
+  int? belgeSayisi;
 
   KategoriModeli({
     this.id,
@@ -22,48 +23,7 @@ class KategoriModeli {
     this.belgeSayisi = 0,
   });
 
-  // JSON'dan model oluşturma
-  factory KategoriModeli.fromJson(Map<String, dynamic> json) {
-    return KategoriModeli(
-      id: json['id'],
-      kategoriAdi: json['kategori_adi'],
-      renkKodu: json['renk_kodu'] ?? '#2196F3',
-      simgeKodu: json['simge_kodu'] ?? 'folder',
-      aciklama: json['aciklama'],
-      olusturmaTarihi: DateTime.parse(json['olusturma_tarihi']),
-      aktif: json['aktif'] == 1,
-      belgeSayisi: json['belge_sayisi'] ?? 0,
-    );
-  }
-
-  // Model'den JSON'a dönüştürme
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'kategori_adi': kategoriAdi,
-      'renk_kodu': renkKodu,
-      'simge_kodu': simgeKodu,
-      'aciklama': aciklama,
-      'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
-      'aktif': aktif ? 1 : 0,
-      'belge_sayisi': belgeSayisi,
-    };
-  }
-
-  // Veritabanı için Map
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'kategori_adi': kategoriAdi,
-      'renk_kodu': renkKodu,
-      'simge_kodu': simgeKodu,
-      'aciklama': aciklama,
-      'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
-      'aktif': aktif ? 1 : 0,
-    };
-  }
-
-  // Map'ten model oluşturma
+  /// Map'ten model oluştur
   factory KategoriModeli.fromMap(Map<String, dynamic> map) {
     return KategoriModeli(
       id: map['id'],
@@ -77,7 +37,26 @@ class KategoriModeli {
     );
   }
 
-  // Kopyalama metodu
+  /// JSON'dan model oluştur
+  factory KategoriModeli.fromJson(Map<String, dynamic> json) =>
+      KategoriModeli.fromMap(json);
+
+  /// Model'i Map'e dönüştür
+  @override
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'kategori_adi': kategoriAdi,
+      'renk_kodu': renkKodu,
+      'simge_kodu': simgeKodu,
+      'aciklama': aciklama,
+      'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
+      'aktif': aktif ? 1 : 0,
+      'belge_sayisi': belgeSayisi,
+    };
+  }
+
+  /// Model'i kopyala
   KategoriModeli copyWith({
     int? id,
     String? kategoriAdi,
@@ -100,20 +79,39 @@ class KategoriModeli {
     );
   }
 
-  // Yardımcı getter'lar
+  /// Yardımcı getter'lar
   String get formatliOlusturmaTarihi =>
       YardimciFonksiyonlar.tarihFormatla(olusturmaTarihi);
   String get zamanFarki => YardimciFonksiyonlar.zamanFarki(olusturmaTarihi);
+  String get ad => kategoriAdi; // Alias for kategoriAdi
 
-  /// Alias for kategoriAdi
-  String get ad => kategoriAdi;
+  /// Model'in geçerli olup olmadığını kontrol et
+  @override
+  bool isValid() =>
+      kategoriAdi.trim().isNotEmpty &&
+      renkKodu.isNotEmpty &&
+      simgeKodu.isNotEmpty;
 
-  // Öntanımlı kategoriler
+  /// Eşitlik kontrolü
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is KategoriModeli &&
+        other.id == id &&
+        other.kategoriAdi == kategoriAdi;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, kategoriAdi);
+
+  @override
+  String toString() =>
+      'KategoriModeli{id: $id, kategoriAdi: $kategoriAdi, belgeSayisi: $belgeSayisi}';
+
+  /// Varsayılan kategoriler
   static List<KategoriModeli> ontanimliKategoriler() {
-    DateTime simdi = DateTime.now();
-
+    final simdi = DateTime.now();
     return [
-      // Genel Kategoriler
       KategoriModeli(
         kategoriAdi: 'Belgeler',
         renkKodu: '#2196F3',
@@ -149,8 +147,6 @@ class KategoriModeli {
         aciklama: 'Sıkıştırılmış dosyalar',
         olusturmaTarihi: simdi,
       ),
-
-      // Yaşam Alanları
       KategoriModeli(
         kategoriAdi: 'Okul',
         renkKodu: '#3F51B5',
@@ -186,8 +182,6 @@ class KategoriModeli {
         aciklama: 'Resmi kurum belgeleri',
         olusturmaTarihi: simdi,
       ),
-
-      // Finansal ve Yasal
       KategoriModeli(
         kategoriAdi: 'Mali',
         renkKodu: '#4CAF50',
@@ -209,8 +203,6 @@ class KategoriModeli {
         aciklama: 'Sigorta belgeleri',
         olusturmaTarihi: simdi,
       ),
-
-      // Özel Kategoriler
       KategoriModeli(
         kategoriAdi: 'Kişisel',
         renkKodu: '#673AB7',
@@ -233,29 +225,5 @@ class KategoriModeli {
         olusturmaTarihi: simdi,
       ),
     ];
-  }
-
-  // Kategori doğrulama
-  bool gecerliMi() {
-    return kategoriAdi.trim().isNotEmpty &&
-        renkKodu.isNotEmpty &&
-        simgeKodu.isNotEmpty;
-  }
-
-  // Eşitlik kontrolü
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is KategoriModeli &&
-        other.id == id &&
-        other.kategoriAdi == kategoriAdi;
-  }
-
-  @override
-  int get hashCode => Object.hash(id, kategoriAdi);
-
-  @override
-  String toString() {
-    return 'KategoriModeli{id: $id, kategoriAdi: $kategoriAdi, belgeSayisi: $belgeSayisi}';
   }
 }

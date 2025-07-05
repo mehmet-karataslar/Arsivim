@@ -26,7 +26,7 @@ class YardimciFonksiyonlar {
       final digest = sha256.convert(bytes);
       return digest.toString();
     } catch (e) {
-      print('Hash hesaplama hatası: $e');
+      // Hash hesaplama hatası (sessiz)
       return '';
     }
   }
@@ -37,7 +37,7 @@ class YardimciFonksiyonlar {
       final digest = sha256.convert(bytes);
       return digest.toString();
     } catch (e) {
-      print('Hash hesaplama hatası: $e');
+      // Hash hesaplama hatası (sessiz)
       return '';
     }
   }
@@ -114,7 +114,7 @@ class YardimciFonksiyonlar {
       }
       return true;
     } catch (e) {
-      print('Klasör oluşturma hatası: $e');
+      // Klasör oluşturma hatası (sessiz)
       return false;
     }
   }
@@ -152,7 +152,7 @@ class YardimciFonksiyonlar {
       await kaynakDosya.copy(hedefYol);
       return true;
     } catch (e) {
-      print('Dosya kopyalama hatası: $e');
+      // Dosya kopyalama hatası (sessiz)
       return false;
     }
   }
@@ -172,7 +172,7 @@ class YardimciFonksiyonlar {
       await kaynakDosya.rename(hedefYol);
       return true;
     } catch (e) {
-      print('Dosya taşıma hatası: $e');
+      // Dosya taşıma hatası (sessiz)
       return false;
     }
   }
@@ -186,7 +186,7 @@ class YardimciFonksiyonlar {
       }
       return true;
     } catch (e) {
-      print('Dosya silme hatası: $e');
+      // Dosya silme hatası (sessiz)
       return false;
     }
   }
@@ -276,16 +276,14 @@ class YardimciFonksiyonlar {
         return await operation();
       } catch (e) {
         if (attempt == maxRetries) {
-          print('Maksimum deneme sayısına ulaşıldı: $e');
+          // Maksimum deneme sayısına ulaşıldı (sessiz)
           return null;
         }
 
         final delay = Duration(
           milliseconds: initialDelay.inMilliseconds * (attempt + 1),
         );
-        print(
-          'Deneme ${attempt + 1} başarısız, ${delay.inMilliseconds}ms sonra tekrar denenecek',
-        );
+        // Deneme ${attempt + 1} başarısız, ${delay.inMilliseconds}ms sonra tekrar denenecek (sessiz)
         await Future.delayed(delay);
       }
     }
