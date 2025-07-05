@@ -478,117 +478,81 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   }
 
   Widget _buildAramaKutusu() {
-    // PC için otomatik tamamlama ile arama kutusu
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      // Kişi isimlerini autocomplete için hazırla
-      final kisiIsimleri = _kisiler.map((kisi) => kisi.tamAd).toList();
-      final kategoriIsimleri =
-          _kategoriler.map((kategori) => kategori.kategoriAdi).toList();
-      final tumOneriler = [...kisiIsimleri, ...kategoriIsimleri];
+    // Kişi isimlerini autocomplete için hazırla
+    final kisiIsimleri = _kisiler.map((kisi) => kisi.tamAd).toList();
+    final kategoriIsimleri =
+        _kategoriler.map((kategori) => kategori.kategoriAdi).toList();
+    final tumOneriler = [...kisiIsimleri, ...kategoriIsimleri];
 
-      return Autocomplete<String>(
-        optionsBuilder: (TextEditingValue textEditingValue) {
-          if (textEditingValue.text.isEmpty) {
-            return const Iterable<String>.empty();
-          }
-          return tumOneriler.where((String option) {
-            return option.toLowerCase().contains(
-              textEditingValue.text.toLowerCase(),
-            );
-          });
-        },
-        onSelected: (String selection) {
-          _aramaController.text = selection;
-          setState(() => _aramaMetni = selection);
-          _belgeleriFiltrele();
-        },
-        fieldViewBuilder: (
-          BuildContext context,
-          TextEditingController fieldController,
-          FocusNode fieldFocusNode,
-          VoidCallback onFieldSubmitted,
-        ) {
-          // fieldController otomatik olarak Autocomplete tarafından yönetiliyor
-          return TextField(
-            controller: fieldController,
-            focusNode: fieldFocusNode,
-            decoration: InputDecoration(
-              hintText:
-                  'Belgeler arasında arama yapın (kişi, kategori, dosya adı...)...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon:
-                  _aramaMetni.isNotEmpty
-                      ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          fieldController.clear();
-                          setState(() => _aramaMetni = '');
-                          _belgeleriFiltrele();
-                        },
-                      )
-                      : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.blue[600]!),
-              ),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-            onChanged: (value) {
-              setState(() => _aramaMetni = value);
-              _belgeleriFiltrele();
-            },
-            onSubmitted: (value) {
-              setState(() => _aramaMetni = value);
-              _belgeleriFiltrele();
-            },
+    return Autocomplete<String>(
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return const Iterable<String>.empty();
+        }
+        return tumOneriler.where((String option) {
+          return option.toLowerCase().contains(
+            textEditingValue.text.toLowerCase(),
           );
-        },
-      );
-    } else {
-      // Mobil için normal arama kutusu
-      return TextField(
-        controller: _aramaController,
-        decoration: InputDecoration(
-          hintText:
-              'Belgeler arasında arama yapın (dosya adı, başlık, açıklama, etiket, kategori, kişi)...',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon:
-              _aramaMetni.isNotEmpty
-                  ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _aramaController.clear();
-                      setState(() => _aramaMetni = '');
-                      _belgeleriFiltrele();
-                    },
-                  )
-                  : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
+        });
+      },
+      onSelected: (String selection) {
+        _aramaController.text = selection;
+        setState(() => _aramaMetni = selection);
+        _belgeleriFiltrele();
+      },
+      fieldViewBuilder: (
+        BuildContext context,
+        TextEditingController fieldController,
+        FocusNode fieldFocusNode,
+        VoidCallback onFieldSubmitted,
+      ) {
+        // fieldController'ı _aramaController ile senkronize et
+        fieldController.text = _aramaController.text;
+        fieldController.addListener(() {
+          _aramaController.text = fieldController.text;
+        });
+
+        return TextField(
+          controller: fieldController,
+          focusNode: fieldFocusNode,
+          decoration: InputDecoration(
+            hintText:
+                'Belgeler arasında arama yapın (kişi, kategori, dosya adı...)...',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon:
+                _aramaMetni.isNotEmpty
+                    ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        fieldController.clear();
+                        _aramaController.clear();
+                        setState(() => _aramaMetni = '');
+                        _belgeleriFiltrele();
+                      },
+                    )
+                    : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.blue[600]!),
+            ),
+            filled: true,
+            fillColor: Colors.white,
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.blue[600]!),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-        onChanged: (value) {
-          setState(() => _aramaMetni = value);
-          _belgeleriFiltrele();
-        },
-        onSubmitted: (value) {
-          setState(() => _aramaMetni = value);
-          _belgeleriFiltrele();
-        },
-      );
-    }
+          onChanged: (value) {
+            setState(() => _aramaMetni = value);
+            _belgeleriFiltrele();
+          },
+          onSubmitted: (value) {
+            setState(() => _aramaMetni = value);
+            _belgeleriFiltrele();
+          },
+        );
+      },
+    );
   }
 
   void _hataGoster(String mesaj) {
