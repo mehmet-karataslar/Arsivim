@@ -405,10 +405,12 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 child:
                     _yukleniyor
                         ? const Center(child: CircularProgressIndicator())
-                        : RefreshIndicator(
+                        : _secilenTab == 0
+                        ? RefreshIndicator(
                           onRefresh: _onRefresh,
                           child: _buildTabContent(),
-                        ),
+                        )
+                        : _buildTabContent(),
               ),
             ],
           ),
