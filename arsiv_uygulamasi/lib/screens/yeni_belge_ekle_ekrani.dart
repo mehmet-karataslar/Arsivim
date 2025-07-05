@@ -1209,133 +1209,53 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
               },
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildModernDropdown<KisiModeli>(
-                    value: _secilenKisi,
-                    label: 'Kişi *',
-                    hint: 'Bir kişi seçin',
-                    icon: Icons.person_rounded,
-                    iconColor: Colors.purple.shade600,
-                    items:
-                        _kisiler.map((kisi) {
-                          return DropdownMenuItem(
-                            value: kisi,
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor: Colors.purple.shade100,
-                                  child: Text(
-                                    kisi.ad.isNotEmpty
-                                        ? kisi.ad[0].toUpperCase()
-                                        : '?',
-                                    style: TextStyle(
-                                      color: Colors.purple.shade600,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  kisi.tamAd,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
+            _buildModernDropdown<KisiModeli>(
+              value: _secilenKisi,
+              label: 'Kişi *',
+              hint: 'Bir kişi seçin',
+              icon: Icons.person_rounded,
+              iconColor: Colors.purple.shade600,
+              items:
+                  _kisiler.map((kisi) {
+                    return DropdownMenuItem(
+                      value: kisi,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.purple.shade100,
+                            child: Text(
+                              kisi.ad.isNotEmpty
+                                  ? kisi.ad[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(
+                                color: Colors.purple.shade600,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          );
-                        }).toList(),
-                    onChanged: (kisi) {
-                      setState(() {
-                        _secilenKisi = kisi;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.blue.shade400, Colors.blue.shade600],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blue.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: _kisileriYenile,
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        child: const Icon(
-                          Icons.refresh_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-            // Hızlı Kişi Ekle Butonu
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.green.shade400, Colors.green.shade600],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.green.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: _hizliKisiEkle,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.person_add_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Hızlı Kişi Ekle',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              kisi.tamAd,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+              onChanged: (kisi) {
+                setState(() {
+                  _secilenKisi = kisi;
+                });
+              },
             ),
           ],
         ),
@@ -1612,154 +1532,6 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
       await _belgeGuncelle();
     } else {
       await _yeniBelgelerEkle();
-    }
-  }
-
-  Future<void> _hizliKisiEkle() async {
-    final TextEditingController adController = TextEditingController();
-    final TextEditingController soyadController = TextEditingController();
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: LinearGradient(
-                  colors: [Colors.blue.shade50, Colors.purple.shade50],
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.green.shade400, Colors.green.shade600],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(
-                      Icons.person_add_rounded,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Hızlı Kişi Ekle',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Yeni kişi bilgilerini girin',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: adController,
-                    decoration: InputDecoration(
-                      labelText: 'Ad *',
-                      hintText: 'Kişinin adını girin',
-                      prefixIcon: const Icon(Icons.person_rounded),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: soyadController,
-                    decoration: InputDecoration(
-                      labelText: 'Soyad *',
-                      hintText: 'Kişinin soyadını girin',
-                      prefixIcon: const Icon(Icons.person_outline_rounded),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () async {
-                                if (adController.text.trim().isEmpty ||
-                                    soyadController.text.trim().isEmpty) {
-                                  _hataGoster(
-                                    'Ad ve soyad alanları gereklidir',
-                                  );
-                                  return;
-                                }
-
-                                try {
-                                  final yeniKisi = KisiModeli(
-                                    ad: adController.text.trim(),
-                                    soyad: soyadController.text.trim(),
-                                    olusturmaTarihi: DateTime.now(),
-                                    guncellemeTarihi: DateTime.now(),
-                                  );
-
-                                  await _veriTabani.kisiEkle(yeniKisi);
-                                  Navigator.of(context).pop(true);
-                                } catch (e) {
-                                  _hataGoster(
-                                    'Kişi eklenirken hata oluştu: $e',
-                                  );
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                child: const Text(
-                                  'Ekle',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-
-    if (result == true) {
-      await _kisileriYenile();
-      _basariMesajiGoster('Kişi başarıyla eklendi');
     }
   }
 
