@@ -517,12 +517,33 @@ class VeriTabaniServisi {
   Future<List<BelgeModeli>> belgeleriGetir({
     int? limit = 20,
     int? offset = 0,
+    DateTime? baslangicTarihi,
+    DateTime? bitisTarihi,
   }) async {
     final db = await database;
+
+    String whereClause = 'aktif = ?';
+    List<dynamic> whereArgs = [1];
+
+    // Tarih filtrelemesi ekle
+    if (baslangicTarihi != null && bitisTarihi != null) {
+      whereClause += ' AND olusturma_tarihi BETWEEN ? AND ?';
+      whereArgs.addAll([
+        baslangicTarihi.toIso8601String(),
+        bitisTarihi.toIso8601String(),
+      ]);
+    } else if (baslangicTarihi != null) {
+      whereClause += ' AND olusturma_tarihi >= ?';
+      whereArgs.add(baslangicTarihi.toIso8601String());
+    } else if (bitisTarihi != null) {
+      whereClause += ' AND olusturma_tarihi <= ?';
+      whereArgs.add(bitisTarihi.toIso8601String());
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
-      where: 'aktif = ?',
-      whereArgs: [1],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'guncelleme_tarihi DESC',
       limit: limit,
       offset: offset,
@@ -537,10 +558,30 @@ class VeriTabaniServisi {
   Future<List<Map<String, dynamic>>> belgeleriDetayliGetir({
     int? limit = 20,
     int? offset = 0,
+    DateTime? baslangicTarihi,
+    DateTime? bitisTarihi,
   }) async {
     final db = await database;
-    final List<Map<String, dynamic>> results = await db.rawQuery(
-      '''
+
+    String whereClause = 'b.aktif = 1';
+    List<dynamic> whereArgs = [];
+
+    // Tarih filtrelemesi ekle
+    if (baslangicTarihi != null && bitisTarihi != null) {
+      whereClause += ' AND b.olusturma_tarihi BETWEEN ? AND ?';
+      whereArgs.addAll([
+        baslangicTarihi.toIso8601String(),
+        bitisTarihi.toIso8601String(),
+      ]);
+    } else if (baslangicTarihi != null) {
+      whereClause += ' AND b.olusturma_tarihi >= ?';
+      whereArgs.add(baslangicTarihi.toIso8601String());
+    } else if (bitisTarihi != null) {
+      whereClause += ' AND b.olusturma_tarihi <= ?';
+      whereArgs.add(bitisTarihi.toIso8601String());
+    }
+
+    final String query = '''
       SELECT 
         b.*,
         k.kategori_adi,
@@ -551,13 +592,17 @@ class VeriTabaniServisi {
       FROM belgeler b
       LEFT JOIN kategoriler k ON b.kategori_id = k.id
       LEFT JOIN kisiler ki ON b.kisi_id = ki.id
-      WHERE b.aktif = 1
+      WHERE $whereClause
       ORDER BY b.guncelleme_tarihi DESC
       LIMIT ? OFFSET ?
-    ''',
-      [limit, offset],
-    );
+    ''';
 
+    whereArgs.addAll([limit, offset]);
+
+    final List<Map<String, dynamic>> results = await db.rawQuery(
+      query,
+      whereArgs,
+    );
     return results;
   }
 
@@ -602,8 +647,29 @@ class VeriTabaniServisi {
     int kategoriId, {
     int? limit,
     int? offset,
+    DateTime? baslangicTarihi,
+    DateTime? bitisTarihi,
   }) async {
     final db = await database;
+
+    // WHERE clause'u dinamik olarak oluştur
+    String whereClause = 'b.kategori_id = ? AND b.aktif = 1';
+    List<dynamic> parametreler = [kategoriId];
+
+    // Tarih filtrelemesi ekle
+    if (baslangicTarihi != null && bitisTarihi != null) {
+      whereClause += ' AND b.olusturma_tarihi BETWEEN ? AND ?';
+      parametreler.addAll([
+        baslangicTarihi.toIso8601String(),
+        bitisTarihi.toIso8601String(),
+      ]);
+    } else if (baslangicTarihi != null) {
+      whereClause += ' AND b.olusturma_tarihi >= ?';
+      parametreler.add(baslangicTarihi.toIso8601String());
+    } else if (bitisTarihi != null) {
+      whereClause += ' AND b.olusturma_tarihi <= ?';
+      parametreler.add(bitisTarihi.toIso8601String());
+    }
 
     // SQL sorgusunu dinamik olarak oluştur
     String sorgu = '''
@@ -617,11 +683,9 @@ class VeriTabaniServisi {
       FROM belgeler b
       LEFT JOIN kategoriler k ON b.kategori_id = k.id
       LEFT JOIN kisiler ki ON b.kisi_id = ki.id
-      WHERE b.kategori_id = ? AND b.aktif = 1
+      WHERE $whereClause
       ORDER BY b.guncelleme_tarihi DESC
     ''';
-
-    List<dynamic> parametreler = [kategoriId];
 
     if (limit != null) {
       sorgu += ' LIMIT ?';

@@ -40,6 +40,8 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   KategoriModeli? _mevcutKategori; // Kategori bilgisi için
 
   // Tarih filtresi
+  DateTime? _baslangicTarihi;
+  DateTime? _bitisTarihi;
   int? _secilenAy;
   int? _secilenYil;
 
@@ -105,11 +107,15 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
           _mevcutKategoriId!,
           limit: _sayfaBoyutu,
           offset: _mevcutSayfa * _sayfaBoyutu,
+          baslangicTarihi: _baslangicTarihi,
+          bitisTarihi: _bitisTarihi,
         );
       } else {
         yeniBelgeler = await _veriTabani.belgeleriDetayliGetir(
           limit: _sayfaBoyutu,
           offset: _mevcutSayfa * _sayfaBoyutu,
+          baslangicTarihi: _baslangicTarihi,
+          bitisTarihi: _bitisTarihi,
         );
       }
 
@@ -148,11 +154,16 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
         );
         detayliBelgeler = await _veriTabani.kategoriyeGoreBelgeleriDetayliGetir(
           _mevcutKategoriId!,
+          baslangicTarihi: _baslangicTarihi,
+          bitisTarihi: _bitisTarihi,
         );
         print('DEBUG: Kategoriye ait ${detayliBelgeler.length} belge bulundu');
       } else {
         print('DEBUG: Tüm belgeler getiriliyor');
-        detayliBelgeler = await _veriTabani.belgeleriDetayliGetir();
+        detayliBelgeler = await _veriTabani.belgeleriDetayliGetir(
+          baslangicTarihi: _baslangicTarihi,
+          bitisTarihi: _bitisTarihi,
+        );
         print('DEBUG: Toplam ${detayliBelgeler.length} belge bulundu');
       }
 
@@ -234,7 +245,7 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
     print('DEBUG: _belgeleriFiltrele() çağrıldı');
     print('DEBUG: Arama metni: "$_aramaMetni"');
     print('DEBUG: Kategori ID: $_mevcutKategoriId');
-    print('DEBUG: Seçilen ay: $_secilenAy, yıl: $_secilenYil');
+    print('DEBUG: Başlangıç: $_baslangicTarihi, Bitiş: $_bitisTarihi');
 
     // Veritabanı seviyesinde filtreleme yap
     try {
@@ -438,7 +449,13 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
               // Ana arama kutusu
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: _buildAramaKutusu(),
+                child: Column(
+                  children: [
+                    _buildAramaKutusu(),
+                    const SizedBox(height: 12),
+                    _buildTarihFiltresi(),
+                  ],
+                ),
               ),
 
               // Arama sonuçları
@@ -463,6 +480,22 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
                     setState(() {
                       _secilenAy = ay;
                       _secilenYil = yil;
+
+                      // Yeni tarih filtreleme sistemini de güncelle
+                      if (ay != null && yil != null) {
+                        _baslangicTarihi = DateTime(yil, ay, 1);
+                        _bitisTarihi = DateTime(
+                          yil,
+                          ay + 1,
+                          0,
+                        ); // Ayın son günü
+                      } else if (yil != null) {
+                        _baslangicTarihi = DateTime(yil, 1, 1);
+                        _bitisTarihi = DateTime(yil, 12, 31);
+                      } else {
+                        _baslangicTarihi = null;
+                        _bitisTarihi = null;
+                      }
                     });
                     _belgeleriFiltrele();
                   },
@@ -584,6 +617,242 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
         );
       },
     );
+  }
+
+  Widget _buildTarihFiltresi() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.date_range, color: Colors.blue[600], size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Tarih Aralığı Filtresi',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                    fontSize: 16,
+                  ),
+                ),
+                const Spacer(),
+                if (_baslangicTarihi != null || _bitisTarihi != null)
+                  TextButton.icon(
+                    onPressed: _tarihFiltresiTemizle,
+                    icon: const Icon(Icons.clear, size: 16),
+                    label: const Text('Temizle'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red[600],
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTarihSecici(
+                    'Başlangıç Tarihi',
+                    _baslangicTarihi,
+                    (tarih) => setState(() => _baslangicTarihi = tarih),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildTarihSecici(
+                    'Bitiş Tarihi',
+                    _bitisTarihi,
+                    (tarih) => setState(() => _bitisTarihi = tarih),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildHizliTarihSecenekleri(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTarihSecici(
+    String label,
+    DateTime? tarih,
+    Function(DateTime?) onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            color: Colors.grey[600],
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 4),
+        InkWell(
+          onTap: () => _tarihSec(onChanged),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[300]!),
+              borderRadius: BorderRadius.circular(8),
+              color: Colors.grey[50],
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tarih != null
+                        ? '${tarih.day}/${tarih.month}/${tarih.year}'
+                        : 'Tarih seçin',
+                    style: TextStyle(
+                      color: tarih != null ? Colors.black87 : Colors.grey[500],
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (tarih != null)
+                  GestureDetector(
+                    onTap: () => onChanged(null),
+                    child: Icon(Icons.clear, size: 16, color: Colors.grey[500]),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHizliTarihSecenekleri() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Hızlı Seçenekler:',
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            color: Colors.grey[600],
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            _buildHizliTarihChip('Son 7 gün', () => _setHizliTarih(7)),
+            _buildHizliTarihChip('Son 30 gün', () => _setHizliTarih(30)),
+            _buildHizliTarihChip('Bu ay', () => _setBuAy()),
+            _buildHizliTarihChip('Geçen ay', () => _setGecenAy()),
+            _buildHizliTarihChip('Bu yıl', () => _setBuYil()),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHizliTarihChip(String label, VoidCallback onTap) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: onTap,
+      backgroundColor: Colors.blue[50],
+      labelStyle: TextStyle(
+        color: Colors.blue[700],
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      side: BorderSide(color: Colors.blue[200]!),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+    );
+  }
+
+  Future<void> _tarihSec(Function(DateTime?) onChanged) async {
+    final tarih = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      locale: const Locale('tr', 'TR'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.blue[600]!,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (tarih != null) {
+      onChanged(tarih);
+      _belgeleriFiltrele();
+    }
+  }
+
+  void _tarihFiltresiTemizle() {
+    setState(() {
+      _baslangicTarihi = null;
+      _bitisTarihi = null;
+      _secilenAy = null;
+      _secilenYil = null;
+    });
+    _belgeleriFiltrele();
+  }
+
+  void _setHizliTarih(int gunSayisi) {
+    final now = DateTime.now();
+    setState(() {
+      _bitisTarihi = now;
+      _baslangicTarihi = now.subtract(Duration(days: gunSayisi));
+    });
+    _belgeleriFiltrele();
+  }
+
+  void _setBuAy() {
+    final now = DateTime.now();
+    setState(() {
+      _baslangicTarihi = DateTime(now.year, now.month, 1);
+      _bitisTarihi = DateTime(now.year, now.month + 1, 0);
+    });
+    _belgeleriFiltrele();
+  }
+
+  void _setGecenAy() {
+    final now = DateTime.now();
+    final gecenAy = DateTime(now.year, now.month - 1, 1);
+    setState(() {
+      _baslangicTarihi = gecenAy;
+      _bitisTarihi = DateTime(gecenAy.year, gecenAy.month + 1, 0);
+    });
+    _belgeleriFiltrele();
+  }
+
+  void _setBuYil() {
+    final now = DateTime.now();
+    setState(() {
+      _baslangicTarihi = DateTime(now.year, 1, 1);
+      _bitisTarihi = DateTime(now.year, 12, 31);
+    });
+    _belgeleriFiltrele();
   }
 
   void _hataGoster(String mesaj) {

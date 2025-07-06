@@ -199,7 +199,14 @@ public:
         
         std::wstring deviceId = availableDevices[scannerIndex];
         
-        // Create device
+        // Test network connection first (for network scanners)
+        if (IsNetworkScanner(deviceId)) {
+            if (!TestNetworkConnection(deviceId)) {
+                throw std::runtime_error("NETWORK_SCANNER_UNREACHABLE");
+            }
+        }
+        
+        // Create device with extended timeout for network scanners
         IWiaItem* rootItem = nullptr;
         BSTR deviceIdBstr = SysAllocString(deviceId.c_str());
         HRESULT hr = deviceManager->CreateDevice(deviceIdBstr, &rootItem);
@@ -207,6 +214,10 @@ public:
         
         if (hr == E_ACCESSDENIED) {
             throw std::runtime_error("SCANNER_BUSY");
+        } else if (hr == WIA_ERROR_OFFLINE) {
+            throw std::runtime_error("SCANNER_OFFLINE");
+        } else if (hr == HRESULT_FROM_WIN32(ERROR_TIMEOUT)) {
+            throw std::runtime_error("SCANNER_TIMEOUT");
         } else if (!SUCCEEDED(hr) || !rootItem) {
             throw std::runtime_error("SCANNER_CONNECTION_FAILED");
         }
@@ -224,20 +235,22 @@ public:
                 throw std::runtime_error("PAPER_JAM");
             } else if (hr == WIA_ERROR_COVER_OPEN) {
                 throw std::runtime_error("COVER_OPEN");
+            } else if (hr == WIA_ERROR_OFFLINE) {
+                throw std::runtime_error("SCANNER_OFFLINE");
             } else {
                 throw std::runtime_error("SCANNER_ITEM_NOT_FOUND");
             }
         }
         
-        // Set scan properties
-        hr = SetScanProperties(scannerItem);
+        // Set scan properties with network-friendly settings
+        hr = SetScanProperties(scannerItem, IsNetworkScanner(deviceId));
         if (!SUCCEEDED(hr)) {
             scannerItem->Release();
             rootItem->Release();
             throw std::runtime_error("SCANNER_PROPERTIES_FAILED");
         }
         
-        // Perform scan
+        // Perform scan with extended timeout for network scanners
         std::string result;
         try {
             result = PerformScan(scannerItem, outputPath);
@@ -258,6 +271,33 @@ public:
     }
     
 private:
+    // Check if scanner is a network scanner
+    bool IsNetworkScanner(const std::wstring& deviceId) {
+        // Check if device ID contains network indicators
+        return deviceId.find(L"\\\\") != std::wstring::npos ||  // UNC path
+               deviceId.find(L"http://") != std::wstring::npos ||  // HTTP
+               deviceId.find(L"https://") != std::wstring::npos || // HTTPS
+               deviceId.find(L"IP_") != std::wstring::npos ||      // IP prefix
+               deviceId.find(L"NET_") != std::wstring::npos;       // Network prefix
+    }
+    
+    // Test network connection to scanner
+    bool TestNetworkConnection(const std::wstring& deviceId) {
+        // For network scanners, try to create a temporary connection
+        IWiaItem* testItem = nullptr;
+        BSTR deviceIdBstr = SysAllocString(deviceId.c_str());
+        
+        HRESULT hr = deviceManager->CreateDevice(deviceIdBstr, &testItem);
+        SysFreeString(deviceIdBstr);
+        
+        if (testItem) {
+            testItem->Release();
+            return SUCCEEDED(hr);
+        }
+        
+        return false;
+    }
+
     HRESULT GetScannerItem(IWiaItem* rootItem, IWiaItem** scannerItem) {
         IEnumWiaItem* enumItems = nullptr;
         HRESULT hr = rootItem->EnumChildItems(&enumItems);
@@ -305,7 +345,7 @@ private:
         return E_FAIL;
     }
     
-    HRESULT SetScanProperties(IWiaItem* scannerItem) {
+    HRESULT SetScanProperties(IWiaItem* scannerItem, bool isNetworkScanner = false) {
         IWiaPropertyStorage* propStorage = nullptr;
         HRESULT hr = scannerItem->QueryInterface(IID_IWiaPropertyStorage, (void**)&propStorage);
         
@@ -313,19 +353,21 @@ private:
             return hr;
         }
         
-        PROPSPEC propSpec[4];
-        PROPVARIANT propVar[4];
+        PROPSPEC propSpec[6];
+        PROPVARIANT propVar[6];
         
-        // Set resolution (300 DPI)
+        // Set resolution (lower for network scanners to improve speed)
+        int resolution = isNetworkScanner ? 200 : 300;
+        
         propSpec[0].ulKind = PRSPEC_PROPID;
         propSpec[0].propid = WIA_IPS_XRES;
         propVar[0].vt = VT_I4;
-        propVar[0].lVal = 300;
+        propVar[0].lVal = resolution;
         
         propSpec[1].ulKind = PRSPEC_PROPID;
         propSpec[1].propid = WIA_IPS_YRES;
         propVar[1].vt = VT_I4;
-        propVar[1].lVal = 300;
+        propVar[1].lVal = resolution;
         
         // Set color mode (color)
         propSpec[2].ulKind = PRSPEC_PROPID;
@@ -339,7 +381,20 @@ private:
         propVar[3].vt = VT_CLSID;
         propVar[3].puuid = (CLSID*)&WiaImgFmt_BMP;
         
-        hr = propStorage->WriteMultiple(4, propSpec, propVar, WIA_IPA_FIRST);
+        int propCount = 4;
+        
+        // For network scanners, set additional properties for better performance
+        if (isNetworkScanner) {
+            // Set buffer size for network transfer
+            propSpec[4].ulKind = PRSPEC_PROPID;
+            propSpec[4].propid = WIA_IPA_BUFFER_SIZE;
+            propVar[4].vt = VT_I4;
+            propVar[4].lVal = 32768; // 32KB buffer
+            
+            propCount = 5;
+        }
+        
+        hr = propStorage->WriteMultiple(propCount, propSpec, propVar, WIA_IPA_FIRST);
         propStorage->Release();
         
         return hr;
@@ -438,14 +493,20 @@ extern "C" {
     
     __declspec(dllexport) int ScanDocument(const char* scannerName, const char* outputPath, char* resultBuffer, int bufferSize) {
         if (!g_scannerPlugin) {
-            return 0;
+            strcpy_s(resultBuffer, bufferSize, "PLUGIN_NOT_INITIALIZED");
+            return -1;
         }
         
         std::string result;
         try {
             result = g_scannerPlugin->ScanDocument(scannerName, outputPath);
+        } catch (const std::runtime_error& e) {
+            // Return specific error code
+            strcpy_s(resultBuffer, bufferSize, e.what());
+            return -1;
         } catch (...) {
-            return 0;
+            strcpy_s(resultBuffer, bufferSize, "UNKNOWN_SCANNER_ERROR");
+            return -1;
         }
         
         if (result.length() < bufferSize) {
@@ -453,6 +514,7 @@ extern "C" {
             return static_cast<int>(result.length());
         }
         
-        return 0;
+        strcpy_s(resultBuffer, bufferSize, "BUFFER_TOO_SMALL");
+        return -1;
     }
 } 

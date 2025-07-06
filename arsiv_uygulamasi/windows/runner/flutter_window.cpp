@@ -192,8 +192,45 @@ void FlutterWindow::HandleScanDocument(const flutter::MethodCall<flutter::Encoda
     if (length > 0) {
       std::string result_path(result_buffer, length);
       result->Success(flutter::EncodableValue(result_path));
+    } else if (length == -1) {
+      // Extract error code from buffer
+      std::string error_code(result_buffer);
+      
+      // Map specific error codes to Flutter errors
+      if (error_code == "SCANNER_NOT_FOUND") {
+        result->Error("SCANNER_NOT_FOUND", "Scanner not found or disconnected", flutter::EncodableValue());
+      } else if (error_code == "SCANNER_BUSY") {
+        result->Error("SCANNER_BUSY", "Scanner is busy with another operation", flutter::EncodableValue());
+      } else if (error_code == "NO_PAPER") {
+        result->Error("NO_PAPER", "No paper in scanner feeder", flutter::EncodableValue());
+      } else if (error_code == "PAPER_JAM") {
+        result->Error("PAPER_JAM", "Paper jam detected in scanner", flutter::EncodableValue());
+      } else if (error_code == "COVER_OPEN") {
+        result->Error("COVER_OPEN", "Scanner cover is open", flutter::EncodableValue());
+      } else if (error_code == "SCANNER_CONNECTION_FAILED") {
+        result->Error("SCANNER_CONNECTION_FAILED", "Failed to connect to scanner", flutter::EncodableValue());
+      } else if (error_code == "SCANNER_PROPERTIES_FAILED") {
+        result->Error("SCANNER_PROPERTIES_FAILED", "Failed to set scanner properties", flutter::EncodableValue());
+      } else if (error_code == "DATA_TRANSFER_FAILED") {
+        result->Error("DATA_TRANSFER_FAILED", "Data transfer from scanner failed", flutter::EncodableValue());
+      } else if (error_code == "SCAN_OPERATION_FAILED") {
+        result->Error("SCAN_OPERATION_FAILED", "Scan operation failed", flutter::EncodableValue());
+      } else if (error_code == "PLUGIN_NOT_INITIALIZED") {
+        result->Error("PLUGIN_NOT_INITIALIZED", "Scanner plugin not initialized", flutter::EncodableValue());
+      } else if (error_code == "UNKNOWN_SCANNER_ERROR") {
+        result->Error("UNKNOWN_SCANNER_ERROR", "Unknown scanner error occurred", flutter::EncodableValue());
+      } else if (error_code == "BUFFER_TOO_SMALL") {
+        result->Error("BUFFER_TOO_SMALL", "Buffer too small for result", flutter::EncodableValue());
+      } else if (error_code == "NETWORK_SCANNER_UNREACHABLE") {
+        result->Error("NETWORK_SCANNER_UNREACHABLE", "Network scanner unreachable", flutter::EncodableValue());
+      } else if (error_code == "SCANNER_OFFLINE") {
+        result->Error("SCANNER_OFFLINE", "Scanner is offline", flutter::EncodableValue());
+      } else if (error_code == "SCANNER_TIMEOUT") {
+        result->Error("SCANNER_TIMEOUT", "Scanner connection timeout", flutter::EncodableValue());
+      } else {
+        result->Error("SCAN_ERROR", "Scanning error: " + error_code, flutter::EncodableValue());
+      }
     } else {
-      // Try to determine the specific error
       result->Error("SCAN_FAILED", "Document scanning failed - check scanner status", flutter::EncodableValue());
     }
   } catch (const std::exception& e) {
@@ -356,6 +393,10 @@ void FlutterWindow::HandleAdvancedScan(const flutter::MethodCall<flutter::Encoda
     if (length > 0) {
       std::string result_path(result_buffer, length);
       result->Success(flutter::EncodableValue(result_path));
+    } else if (length == -1) {
+      // Extract error code from buffer
+      std::string error_code(result_buffer);
+      result->Error(error_code, "Advanced scanning failed: " + error_code, flutter::EncodableValue());
     } else {
       result->Error("ADVANCED_SCAN_FAILED", "Advanced document scanning failed", flutter::EncodableValue());
     }
@@ -416,6 +457,11 @@ void FlutterWindow::HandleMultiPageScan(const flutter::MethodCall<flutter::Encod
       if (length > 0) {
         std::string result_path(result_buffer, length);
         scanned_pages.push_back(flutter::EncodableValue(result_path));
+      } else if (length == -1) {
+        // Extract error code from buffer
+        std::string error_code(result_buffer);
+        result->Error(error_code, "Multi-page scanning failed at page " + std::to_string(i + 1) + ": " + error_code, flutter::EncodableValue());
+        return;
       } else {
         result->Error("MULTI_PAGE_SCAN_FAILED", "Multi-page scanning failed at page " + std::to_string(i + 1), flutter::EncodableValue());
         return;

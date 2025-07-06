@@ -252,6 +252,26 @@ class TarayiciServisi {
         return 'Tarayıcıda kağıt yok. Lütfen kağıt ekleyin.';
       case 'COVER_OPEN':
         return 'Tarayıcı kapağı açık. Lütfen kapatın.';
+      case 'SCANNER_CONNECTION_FAILED':
+        return 'Tarayıcı bağlantısı başarısız. Cihazınızı kontrol edin.';
+      case 'SCANNER_PROPERTIES_FAILED':
+        return 'Tarayıcı ayarları yapılandırılamadı. Sürücüleri kontrol edin.';
+      case 'DATA_TRANSFER_FAILED':
+        return 'Veri aktarımı başarısız oldu. Tarayıcı bağlantısını kontrol edin.';
+      case 'SCAN_OPERATION_FAILED':
+        return 'Tarama işlemi başarısız oldu. Lütfen tekrar deneyin.';
+      case 'PLUGIN_NOT_INITIALIZED':
+        return 'Tarayıcı eklentisi başlatılamadı. Uygulamayı yeniden başlatın.';
+      case 'UNKNOWN_SCANNER_ERROR':
+        return 'Bilinmeyen tarayıcı hatası. Cihazınızı kontrol edin.';
+      case 'BUFFER_TOO_SMALL':
+        return 'Veri buffer\'ı yetersiz. Lütfen tekrar deneyin.';
+      case 'NETWORK_SCANNER_UNREACHABLE':
+        return 'Ağ tarayıcısına ulaşılamıyor. Wi-Fi bağlantınızı kontrol edin.';
+      case 'SCANNER_OFFLINE':
+        return 'Tarayıcı çevrim dışı. Cihazınızın açık ve ağa bağlı olduğundan emin olun.';
+      case 'SCANNER_TIMEOUT':
+        return 'Tarayıcı bağlantısı zaman aşımına uğradı. Ağ bağlantınızı kontrol edin.';
       case 'SCAN_FAILED':
         return 'Tarama işlemi başarısız oldu. Lütfen tekrar deneyin.';
       case 'ADVANCED_SCAN_FAILED':
@@ -259,7 +279,7 @@ class TarayiciServisi {
       case 'MULTI_PAGE_SCAN_FAILED':
         return 'Çoklu sayfa tarama başarısız oldu.';
       default:
-        return 'Bilinmeyen bir hata oluştu. Lütfen tarayıcınızı kontrol edin.';
+        return 'Bilinmeyen bir hata oluştu: $errorCode. Lütfen tarayıcınızı kontrol edin.';
     }
   }
 

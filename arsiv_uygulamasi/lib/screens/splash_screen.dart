@@ -69,58 +69,53 @@ class _SplashScreenState extends State<SplashScreen>
     )..repeat();
 
     // Logo scale animasyonu
-    _logoScaleAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.0, 0.5, curve: Curves.elasticOut),
-    ));
+    _logoScaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.0, 0.5, curve: Curves.elasticOut),
+      ),
+    );
 
     // Logo rotation animasyonu
     _logoRotationAnimation = Tween<double>(
       begin: 0.0,
       end: 2 * 3.14159,
-    ).animate(CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.0, 0.5, curve: Curves.easeInOut),
-    ));
+    ).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeInOut),
+      ),
+    );
 
     // Text fade animasyonu
     _textFadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _textController,
-      curve: Curves.easeIn,
-    ));
+    ).animate(CurvedAnimation(parent: _textController, curve: Curves.easeIn));
 
     // Welcome slide animasyonu
     _welcomeSlideAnimation = Tween<Offset>(
       begin: const Offset(0.0, 0.5),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.3, 0.7, curve: Curves.easeOut),
-    ));
+    ).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.3, 0.7, curve: Curves.easeOut),
+      ),
+    );
 
     // Progress animasyonu
-    _progressAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.5, 1.0, curve: Curves.easeInOut),
-    ));
+    _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.5, 1.0, curve: Curves.easeInOut),
+      ),
+    );
 
     // Glow animasyonu
-    _glowAnimation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _particleController,
-      curve: Curves.easeInOut,
-    ));
+    _glowAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _particleController, curve: Curves.easeInOut),
+    );
   }
 
   void _startAnimationSequence() async {
@@ -141,7 +136,8 @@ class _SplashScreenState extends State<SplashScreen>
 
         _textController.reverse().then((_) {
           setState(() {
-            _currentMessageIndex = (_currentMessageIndex + 1) % _welcomeMessages.length;
+            _currentMessageIndex =
+                (_currentMessageIndex + 1) % _welcomeMessages.length;
           });
           _startMessageRotation();
         });
@@ -206,7 +202,8 @@ class _SplashScreenState extends State<SplashScreen>
   void _navigateToHome() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const AnaEkran(),
+        pageBuilder:
+            (context, animation, secondaryAnimation) => const AnaEkran(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,
@@ -224,7 +221,8 @@ class _SplashScreenState extends State<SplashScreen>
   void _navigateToLogin() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+        pageBuilder:
+            (context, animation, secondaryAnimation) => const LoginScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,
@@ -232,10 +230,9 @@ class _SplashScreenState extends State<SplashScreen>
               position: Tween<Offset>(
                 begin: const Offset(0.0, 0.3),
                 end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOut,
-              )),
+              ).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOut),
+              ),
               child: child,
             ),
           );
@@ -326,7 +323,9 @@ class _SplashScreenState extends State<SplashScreen>
                               borderRadius: BorderRadius.circular(30),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF4CAF50).withOpacity(0.5 * _glowAnimation.value),
+                                  color: const Color(
+                                    0xFF4CAF50,
+                                  ).withOpacity(0.5 * _glowAnimation.value),
                                   blurRadius: 30,
                                   spreadRadius: 10,
                                 ),
@@ -351,13 +350,14 @@ class _SplashScreenState extends State<SplashScreen>
                     child: Column(
                       children: [
                         ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [
-                              Color(0xFF4CAF50), // Yeşil
-                              Color(0xFF8BC34A), // Açık yeşil
-                              Color(0xFFFFFFFF), // Beyaz
-                            ],
-                          ).createShader(bounds),
+                          shaderCallback:
+                              (bounds) => const LinearGradient(
+                                colors: [
+                                  Color(0xFF4CAF50), // Yeşil
+                                  Color(0xFF8BC34A), // Açık yeşil
+                                  Color(0xFFFFFFFF), // Beyaz
+                                ],
+                              ).createShader(bounds),
                           child: const Text(
                             'Arşivim',
                             style: TextStyle(
@@ -431,7 +431,9 @@ class _SplashScreenState extends State<SplashScreen>
                                   borderRadius: BorderRadius.circular(2),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF4CAF50).withOpacity(0.5),
+                                      color: const Color(
+                                        0xFF4CAF50,
+                                      ).withOpacity(0.5),
                                       blurRadius: 8,
                                       spreadRadius: 2,
                                     ),
@@ -476,7 +478,7 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '256-bit Şifreleme ile Korunuyor',
+                            'Verileriniz güvende her zaman',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.white.withOpacity(0.5),
@@ -486,7 +488,7 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'v2.0.0 | © 2024 Arşivim Pro',
+                        'v2.1.0 | © 2024 Arşivim Uygulaması',
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.white.withOpacity(0.3),
@@ -519,8 +521,7 @@ class ParticleBackgroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.fill;
+    final paint = Paint()..style = PaintingStyle.fill;
 
     // Parçacıklar
     for (int i = 0; i < 50; i++) {

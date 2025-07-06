@@ -95,6 +95,11 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
           _secilenTarayici = tarayicilar.first;
         }
       });
+      
+      // Ağ tarayıcısı bağlantı durumunu kontrol et
+      if (tarayicilar.isNotEmpty) {
+        _agTarayiciDurumKontrol();
+      }
     } on PlatformException catch (e) {
       setState(() {
         _tarayiciAranyor = false;
@@ -107,6 +112,31 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
             'Tarayıcı arama sırasında beklenmeyen bir hata oluştu';
       });
     }
+  }
+
+  /// Ağ tarayıcısı durumunu kontrol et
+  Future<void> _agTarayiciDurumKontrol() async {
+    for (String tarayici in _bulunanTarayicilar) {
+      try {
+        final bool durum = await _tarayiciServisi.tarayiciBaglantiTest(tarayici);
+        if (!durum) {
+          // Ağ tarayıcısı çevrim dışı uyarısı
+          _showNetworkScannerWarning(tarayici);
+        }
+      } catch (e) {
+        // Sessizce devam et
+      }
+    }
+  }
+
+  /// Ağ tarayıcısı uyarısını göster
+  void _showNetworkScannerWarning(String tarayiciAdi) {
+    if (!mounted) return;
+    
+    ScreenUtils.showWarningSnackBar(
+      context,
+      'Ağ tarayıcısı "$tarayiciAdi" çevrim dışı. Wi-Fi bağlantınızı kontrol edin.',
+    );
   }
 
   Future<void> _belgeTara() async {
