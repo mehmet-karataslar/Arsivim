@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../services/tarayici_servisi.dart';
-import '../services/test_tarayici_servisi.dart';
 import '../services/belge_islemleri_servisi.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
@@ -11,6 +10,7 @@ import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
+import '../utils/screen_utils.dart';
 
 class TarayiciEkrani extends StatefulWidget {
   const TarayiciEkrani({Key? key}) : super(key: key);
@@ -21,18 +21,16 @@ class TarayiciEkrani extends StatefulWidget {
 
 class _TarayiciEkraniState extends State<TarayiciEkrani> {
   final TarayiciServisi _tarayiciServisi = TarayiciServisi();
-  final TestTarayiciServisi _testTarayiciServisi = TestTarayiciServisi();
   final BelgeIslemleriServisi _belgeIslemleri = BelgeIslemleriServisi();
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final DosyaServisi _dosyaServisi = DosyaServisi();
-
-  bool _testModu = false; // Test modu flag'i
 
   List<String> _bulunanTarayicilar = [];
   String? _secilenTarayici;
   bool _tarayiciAranyor = false;
   bool _taramaDurumu = false;
   String? _tarananBelgePath;
+  String? _tarayiciAranamaHatasi;
 
   // Belge kaydetme için form alanları
   final _baslikController = TextEditingController();
@@ -69,7 +67,12 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
         _kisiler = kisiler;
       });
     } catch (e) {
-      _hataGoster('Kategoriler ve kişiler yüklenirken hata: $e');
+      if (mounted) {
+        ScreenUtils.showErrorSnackBar(
+          context,
+          'Kategoriler ve kişiler yüklenirken hata: $e',
+        );
+      }
     }
   }
 
@@ -78,13 +81,11 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
       _tarayiciAranyor = true;
       _bulunanTarayicilar.clear();
       _secilenTarayici = null;
+      _tarayiciAranamaHatasi = null;
     });
 
     try {
-      final tarayicilar =
-          _testModu
-              ? await _testTarayiciServisi.tarayicilariAra()
-              : await _tarayiciServisi.tarayicilariAra();
+      final tarayicilar = await _tarayiciServisi.tarayicilariAra();
 
       setState(() {
         _bulunanTarayicilar = tarayicilar;
@@ -94,17 +95,23 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
           _secilenTarayici = tarayicilar.first;
         }
       });
+    } on PlatformException catch (e) {
+      setState(() {
+        _tarayiciAranyor = false;
+        _tarayiciAranamaHatasi = _tarayiciServisi.getErrorMessage(e.code);
+      });
     } catch (e) {
       setState(() {
         _tarayiciAranyor = false;
+        _tarayiciAranamaHatasi =
+            'Tarayıcı arama sırasında beklenmeyen bir hata oluştu';
       });
-      _hataGoster('Tarayıcı arama hatası: $e');
     }
   }
 
   Future<void> _belgeTara() async {
     if (_secilenTarayici == null) {
-      _hataGoster('Önce bir tarayıcı seçin');
+      ScreenUtils.showErrorSnackBar(context, 'Önce bir tarayıcı seçin');
       return;
     }
 
@@ -113,10 +120,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
     });
 
     try {
-      final scannedPath =
-          _testModu
-              ? await _testTarayiciServisi.belgeTara(_secilenTarayici!)
-              : await _tarayiciServisi.belgeTara(_secilenTarayici!);
+      final scannedPath = await _tarayiciServisi.belgeTara(_secilenTarayici!);
 
       if (scannedPath != null && scannedPath.isNotEmpty) {
         setState(() {
@@ -127,44 +131,58 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
         // Taranan belge için varsayılan başlık oluştur
         final now = DateTime.now();
         _baslikController.text =
-            _testModu
-                ? 'Test Taranan Belge ${now.day}/${now.month}/${now.year}'
-                : 'Taranan Belge ${now.day}/${now.month}/${now.year}';
+            'Taranan Belge ${now.day}/${now.month}/${now.year}';
 
-        _basariGoster(
-          _testModu
-              ? 'Test belgesi başarıyla oluşturuldu!'
-              : 'Belge başarıyla tarandı!',
-        );
+        ScreenUtils.showSuccessSnackBar(context, 'Belge başarıyla tarandı!');
       } else {
         setState(() {
           _taramaDurumu = false;
         });
-        _hataGoster('Belge tarama işlemi iptal edildi');
+        ScreenUtils.showWarningSnackBar(
+          context,
+          'Belge tarama işlemi iptal edildi',
+        );
       }
+    } on PlatformException catch (e) {
+      setState(() {
+        _taramaDurumu = false;
+      });
+      ScreenUtils.showErrorSnackBar(
+        context,
+        _tarayiciServisi.getErrorMessage(e.code),
+      );
     } catch (e) {
       setState(() {
         _taramaDurumu = false;
       });
-      _hataGoster('Belge tarama hatası: $e');
+      ScreenUtils.showErrorSnackBar(
+        context,
+        'Tarama sırasında beklenmeyen bir hata oluştu',
+      );
     }
   }
 
   Future<void> _belgeKaydet() async {
     if (_tarananBelgePath == null) {
-      _hataGoster('Önce bir belge tarayın');
+      ScreenUtils.showErrorSnackBar(context, 'Önce bir belge tarayın');
       return;
     }
 
     if (_baslikController.text.trim().isEmpty) {
-      _hataGoster('Belge başlığı boş olamaz');
+      ScreenUtils.showErrorSnackBar(context, 'Belge başlığı boş olamaz');
       return;
     }
+
+    ScreenUtils.showLoadingDialog(context, message: 'Belge kaydediliyor...');
 
     try {
       final tempFile = File(_tarananBelgePath!);
       if (!await tempFile.exists()) {
-        _hataGoster('Taranan belge dosyası bulunamadı');
+        Navigator.of(context).pop(); // Close loading dialog
+        ScreenUtils.showErrorSnackBar(
+          context,
+          'Taranan belge dosyası bulunamadı',
+        );
         return;
       }
 
@@ -212,15 +230,15 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
       // Belgeyi kaydet
       await _veriTabani.belgeEkle(belge);
 
-      _basariGoster(
-        'Belge başarıyla tarandı ve kalıcı olarak kaydedildi! Ana ekranda görüntülenecek.',
+      Navigator.of(context).pop(); // Close loading dialog
+      ScreenUtils.showSuccessSnackBar(
+        context,
+        'Belge başarıyla kaydedildi! Ana ekranda görüntülenecek.',
       );
       _formuTemizle();
-
-      // Ana ekranın belgeler listesini yenilemesi için bildirim gönder
-      // Kullanıcı ana ekrana gidince yeni taranan belgeyi görebilir
     } catch (e) {
-      _hataGoster('Belge kaydedilirken hata: $e');
+      Navigator.of(context).pop(); // Close loading dialog
+      ScreenUtils.showErrorSnackBar(context, 'Belge kaydedilirken hata: $e');
     }
   }
 
@@ -250,60 +268,21 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
     });
   }
 
-  void _hataGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mesaj),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _basariGoster(String mesaj) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mesaj),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _testModu ? 'Belge Tarayıcı (Test Modu)' : 'Belge Tarayıcı',
-        ),
-        backgroundColor: _testModu ? Colors.orange : Colors.blue,
-        foregroundColor: Colors.white,
+      appBar: ScreenUtils.buildAppBar(
+        title: 'Belge Tarayıcı',
         actions: [
-          // Test modu switch'i
-          Row(
-            children: [
-              const Text('Test', style: TextStyle(fontSize: 12)),
-              Switch(
-                value: _testModu,
-                onChanged: (value) {
-                  setState(() {
-                    _testModu = value;
-                    _bulunanTarayicilar.clear();
-                    _secilenTarayici = null;
-                    _tarananBelgePath = null;
-                  });
-                  _tarayicilariAra(); // Yeni modda tarayıcıları ara
-                },
-                activeColor: Colors.white,
-                activeTrackColor: Colors.white.withOpacity(0.3),
-              ),
-            ],
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _tarayicilariAra,
             tooltip: 'Tarayıcıları Yenile',
+          ),
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => _gosterTarayiciYardimi(),
+            tooltip: 'Yardım',
           ),
         ],
       ),
@@ -325,6 +304,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
 
   Widget _buildTarayiciSecimi() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -332,11 +312,20 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
           children: [
             Row(
               children: [
-                Icon(Icons.scanner, color: Colors.blue),
-                const SizedBox(width: 8),
-                const Text(
-                  'Tarayıcı Seçimi',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.scanner, color: Colors.blue),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Tarayıcı Seçimi',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -349,10 +338,88 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
                   Text('Tarayıcılar aranıyor...'),
                 ],
               )
+            else if (_tarayiciAranamaHatasi != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Tarayıcı Bulunamadı',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_tarayiciAranamaHatasi!),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _tarayicilariAra,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Tekrar Dene'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              )
             else if (_bulunanTarayicilar.isEmpty)
-              const Text(
-                'Hiç tarayıcı bulunamadı. Tarayıcınızın bağlı ve açık olduğundan emin olun.',
-                style: TextStyle(color: Colors.orange),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_outlined,
+                          color: Colors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Tarayıcı Bulunamadı',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tarayıcınızın bağlı ve açık olduğundan emin olun.',
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _tarayicilariAra,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Tekrar Ara'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               )
             else
               Column(
@@ -362,6 +429,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
                     decoration: const InputDecoration(
                       labelText: 'Tarayıcı',
                       border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.scanner),
                     ),
                     items:
                         _bulunanTarayicilar.map((tarayici) {
@@ -383,15 +451,23 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
                         onPressed: _tarayicilariAra,
                         icon: const Icon(Icons.refresh),
                         label: const Text('Yenile'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade600,
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                       const SizedBox(width: 16),
-                      ElevatedButton.icon(
-                        onPressed: _secilenTarayici != null ? _belgeTara : null,
-                        icon: const Icon(Icons.scanner),
-                        label: const Text('Belge Tara'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              _secilenTarayici != null ? _belgeTara : null,
+                          icon: const Icon(Icons.document_scanner),
+                          label: const Text('Belge Tara'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
                         ),
                       ),
                     ],
@@ -406,7 +482,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
 
   Widget _buildTaramaAktivitesi() {
     return Card(
-      color: _testModu ? Colors.orange.withOpacity(0.1) : null,
+      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -414,60 +490,64 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
           children: [
             Row(
               children: [
-                Icon(
-                  _testModu ? Icons.bug_report : Icons.document_scanner,
-                  color: _testModu ? Colors.orange : Colors.green,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.document_scanner,
+                    color: Colors.green,
+                  ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  _testModu ? 'Test Tarama Durumu' : 'Tarama Durumu',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Tarama Durumu',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
-            if (_testModu) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  '⚠️ Test Modu Aktif: Gerçek PDF dosyaları oluşturulacak',
-                  style: TextStyle(fontSize: 12, color: Colors.orange),
-                ),
-              ),
-            ],
             const SizedBox(height: 16),
             if (_taramaDurumu)
-              Row(
+              Column(
                 children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(width: 16),
-                  Text(
-                    _testModu
-                        ? 'Test belgesi oluşturuluyor...'
-                        : 'Belge taranıyor...',
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(width: 16),
+                      const Text('Belge taranıyor...'),
+                    ],
                   ),
                 ],
               )
             else if (_tarananBelgePath != null)
-              Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Belge başarıyla tarandı!',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Belge başarıyla tarandı!',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               )
             else
               const Text(
@@ -482,6 +562,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
 
   Widget _buildBelgeDetaylari() {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -489,11 +570,20 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
           children: [
             Row(
               children: [
-                Icon(Icons.description, color: Colors.orange),
-                const SizedBox(width: 8),
-                const Text(
-                  'Belge Detayları',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.description, color: Colors.orange),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Belge Detayları',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -505,7 +595,14 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
               decoration: const InputDecoration(
                 labelText: 'Belge Başlığı *',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.title),
               ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Belge başlığı boş olamaz';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 16),
 
@@ -515,6 +612,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
               decoration: const InputDecoration(
                 labelText: 'Açıklama',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.description),
               ),
               maxLines: 3,
             ),
@@ -526,6 +624,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
               decoration: const InputDecoration(
                 labelText: 'Kategori',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.category),
               ),
               items:
                   _kategoriler.map((kategori) {
@@ -548,6 +647,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
               decoration: const InputDecoration(
                 labelText: 'Kişi',
                 border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
               ),
               items:
                   _kisiler.map((kisi) {
@@ -567,7 +667,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
             // Etiketler
             const Text(
               'Etiketler:',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 8),
             Row(
@@ -578,30 +678,39 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
                     decoration: const InputDecoration(
                       labelText: 'Etiket ekle',
                       border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.label),
                     ),
                     onFieldSubmitted: (_) => _etiketEkle(),
                   ),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
+                ElevatedButton.icon(
                   onPressed: _etiketEkle,
-                  child: const Text('Ekle'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Ekle'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children:
-                  _etiketler.map((etiket) {
-                    return Chip(
-                      label: Text(etiket),
-                      deleteIcon: const Icon(Icons.close),
-                      onDeleted: () => _etiketSil(etiket),
-                    );
-                  }).toList(),
-            ),
-            const SizedBox(height: 20),
+            if (_etiketler.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children:
+                    _etiketler.map((etiket) {
+                      return Chip(
+                        label: Text(etiket),
+                        deleteIcon: const Icon(Icons.close),
+                        onDeleted: () => _etiketSil(etiket),
+                        backgroundColor: Colors.blue.withOpacity(0.1),
+                      );
+                    }).toList(),
+              ),
+            const SizedBox(height: 24),
 
             // Kaydet butonu
             SizedBox(
@@ -614,12 +723,39 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _gosterTarayiciYardimi() {
+    ScreenUtils.showConfirmationDialog(
+      context,
+      title: 'Tarayıcı Yardımı',
+      message: '''
+Tarayıcınızı kullanmak için:
+
+1. Tarayıcınızın bilgisayara bağlı olduğundan emin olun
+2. Tarayıcı sürücülerinin yüklü olduğundan emin olun
+3. Tarayıcınızı açın ve hazır duruma getirin
+4. "Tarayıcıları Yenile" butonuna basın
+5. Listeden tarayıcınızı seçin
+6. Belgeyi tarayıcıya yerleştirin
+7. "Belge Tara" butonuna basın
+
+Sorun yaşıyorsanız tarayıcınızı yeniden başlatın.
+      ''',
+      confirmText: 'Tamam',
+      cancelText: '',
+      icon: Icons.help_outline,
     );
   }
 }

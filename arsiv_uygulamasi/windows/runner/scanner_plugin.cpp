@@ -183,15 +183,18 @@ public:
         // Find scanner index by name
         auto scanners = FindScanners();
         size_t scannerIndex = 0;
+        bool scannerFound = false;
+        
         for (size_t i = 0; i < scanners.size(); ++i) {
             if (scanners[i] == scannerName) {
                 scannerIndex = i;
+                scannerFound = true;
                 break;
             }
         }
         
-        if (scannerIndex >= availableDevices.size()) {
-            return "";
+        if (!scannerFound || scannerIndex >= availableDevices.size()) {
+            throw std::runtime_error("SCANNER_NOT_FOUND");
         }
         
         std::wstring deviceId = availableDevices[scannerIndex];
@@ -202,8 +205,10 @@ public:
         HRESULT hr = deviceManager->CreateDevice(deviceIdBstr, &rootItem);
         SysFreeString(deviceIdBstr);
         
-        if (!SUCCEEDED(hr) || !rootItem) {
-            return "";
+        if (hr == E_ACCESSDENIED) {
+            throw std::runtime_error("SCANNER_BUSY");
+        } else if (!SUCCEEDED(hr) || !rootItem) {
+            throw std::runtime_error("SCANNER_CONNECTION_FAILED");
         }
         
         // Get scanner item
@@ -212,17 +217,42 @@ public:
         
         if (!SUCCEEDED(hr) || !scannerItem) {
             rootItem->Release();
-            return "";
+            
+            if (hr == WIA_ERROR_PAPER_EMPTY) {
+                throw std::runtime_error("NO_PAPER");
+            } else if (hr == WIA_ERROR_PAPER_JAM) {
+                throw std::runtime_error("PAPER_JAM");
+            } else if (hr == WIA_ERROR_COVER_OPEN) {
+                throw std::runtime_error("COVER_OPEN");
+            } else {
+                throw std::runtime_error("SCANNER_ITEM_NOT_FOUND");
+            }
         }
         
         // Set scan properties
-        SetScanProperties(scannerItem);
+        hr = SetScanProperties(scannerItem);
+        if (!SUCCEEDED(hr)) {
+            scannerItem->Release();
+            rootItem->Release();
+            throw std::runtime_error("SCANNER_PROPERTIES_FAILED");
+        }
         
         // Perform scan
-        std::string result = PerformScan(scannerItem, outputPath);
+        std::string result;
+        try {
+            result = PerformScan(scannerItem, outputPath);
+        } catch (...) {
+            scannerItem->Release();
+            rootItem->Release();
+            throw;
+        }
         
         scannerItem->Release();
         rootItem->Release();
+        
+        if (result.empty()) {
+            throw std::runtime_error("SCAN_FAILED");
+        }
         
         return result;
     }
@@ -275,40 +305,44 @@ private:
         return E_FAIL;
     }
     
-    void SetScanProperties(IWiaItem* scannerItem) {
+    HRESULT SetScanProperties(IWiaItem* scannerItem) {
         IWiaPropertyStorage* propStorage = nullptr;
         HRESULT hr = scannerItem->QueryInterface(IID_IWiaPropertyStorage, (void**)&propStorage);
         
-        if (SUCCEEDED(hr)) {
-            PROPSPEC propSpec[4];
-            PROPVARIANT propVar[4];
-            
-            // Set resolution (300 DPI)
-            propSpec[0].ulKind = PRSPEC_PROPID;
-            propSpec[0].propid = WIA_IPS_XRES;
-            propVar[0].vt = VT_I4;
-            propVar[0].lVal = 300;
-            
-            propSpec[1].ulKind = PRSPEC_PROPID;
-            propSpec[1].propid = WIA_IPS_YRES;
-            propVar[1].vt = VT_I4;
-            propVar[1].lVal = 300;
-            
-            // Set color mode (color)
-            propSpec[2].ulKind = PRSPEC_PROPID;
-            propSpec[2].propid = WIA_IPA_DATATYPE;
-            propVar[2].vt = VT_I4;
-            propVar[2].lVal = WIA_DATA_COLOR;
-            
-            // Set format (BMP)
-            propSpec[3].ulKind = PRSPEC_PROPID;
-            propSpec[3].propid = WIA_IPA_FORMAT;
-            propVar[3].vt = VT_CLSID;
-            propVar[3].puuid = (CLSID*)&WiaImgFmt_BMP;
-            
-            propStorage->WriteMultiple(4, propSpec, propVar, WIA_IPA_FIRST);
-            propStorage->Release();
+        if (!SUCCEEDED(hr)) {
+            return hr;
         }
+        
+        PROPSPEC propSpec[4];
+        PROPVARIANT propVar[4];
+        
+        // Set resolution (300 DPI)
+        propSpec[0].ulKind = PRSPEC_PROPID;
+        propSpec[0].propid = WIA_IPS_XRES;
+        propVar[0].vt = VT_I4;
+        propVar[0].lVal = 300;
+        
+        propSpec[1].ulKind = PRSPEC_PROPID;
+        propSpec[1].propid = WIA_IPS_YRES;
+        propVar[1].vt = VT_I4;
+        propVar[1].lVal = 300;
+        
+        // Set color mode (color)
+        propSpec[2].ulKind = PRSPEC_PROPID;
+        propSpec[2].propid = WIA_IPA_DATATYPE;
+        propVar[2].vt = VT_I4;
+        propVar[2].lVal = WIA_DATA_COLOR;
+        
+        // Set format (BMP)
+        propSpec[3].ulKind = PRSPEC_PROPID;
+        propSpec[3].propid = WIA_IPA_FORMAT;
+        propVar[3].vt = VT_CLSID;
+        propVar[3].puuid = (CLSID*)&WiaImgFmt_BMP;
+        
+        hr = propStorage->WriteMultiple(4, propSpec, propVar, WIA_IPA_FIRST);
+        propStorage->Release();
+        
+        return hr;
     }
     
     std::string PerformScan(IWiaItem* scannerItem, const std::string& outputPath) {
@@ -316,11 +350,11 @@ private:
         HRESULT hr = scannerItem->QueryInterface(IID_IWiaDataTransfer, (void**)&dataTransfer);
         
         if (!SUCCEEDED(hr)) {
-            return "";
+            throw std::runtime_error("DATA_TRANSFER_FAILED");
         }
         
         // Create callback
-        ScanCallback callback(outputPath);
+        ScanCallback* callback = new ScanCallback(outputPath);
         
         // Start transfer
         STGMEDIUM medium = {0};
@@ -329,19 +363,42 @@ private:
         std::wstring wOutputPath(outputPath.begin(), outputPath.end());
         medium.lpszFileName = _wcsdup(wOutputPath.c_str());
         
-        hr = dataTransfer->idtGetData(&medium, &callback);
+        hr = dataTransfer->idtGetData(&medium, callback);
         
         dataTransfer->Release();
+        callback->Release();
         
         if (medium.lpszFileName) {
             free(medium.lpszFileName);
         }
         
-        if (SUCCEEDED(hr)) {
-            return outputPath;
+        if (hr == WIA_ERROR_PAPER_EMPTY) {
+            throw std::runtime_error("NO_PAPER");
+        } else if (hr == WIA_ERROR_PAPER_JAM) {
+            throw std::runtime_error("PAPER_JAM");
+        } else if (hr == WIA_ERROR_COVER_OPEN) {
+            throw std::runtime_error("COVER_OPEN");
+        } else if (hr == WIA_ERROR_BUSY) {
+            throw std::runtime_error("SCANNER_BUSY");
+        } else if (!SUCCEEDED(hr)) {
+            throw std::runtime_error("SCAN_OPERATION_FAILED");
         }
         
-        return "";
+        return outputPath;
+    }
+    
+    bool CheckScannerStatus(const std::string& scannerName) {
+        try {
+            auto scanners = FindScanners();
+            for (const auto& scanner : scanners) {
+                if (scanner == scannerName) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (...) {
+            return false;
+        }
     }
 };
 
@@ -384,7 +441,12 @@ extern "C" {
             return 0;
         }
         
-        std::string result = g_scannerPlugin->ScanDocument(scannerName, outputPath);
+        std::string result;
+        try {
+            result = g_scannerPlugin->ScanDocument(scannerName, outputPath);
+        } catch (...) {
+            return 0;
+        }
         
         if (result.length() < bufferSize) {
             strcpy_s(resultBuffer, bufferSize, result.c_str());

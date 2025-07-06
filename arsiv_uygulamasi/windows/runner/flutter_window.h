@@ -49,6 +49,12 @@ class FlutterWindow : public Win32Window {
                                 std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void HandleGetScannerSettings(const flutter::MethodCall<flutter::EncodableValue>& call,
                                 std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleAdvancedScan(const flutter::MethodCall<flutter::EncodableValue>& call,
+                          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleMultiPageScan(const flutter::MethodCall<flutter::EncodableValue>& call,
+                           std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleTestScannerConnection(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                   std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

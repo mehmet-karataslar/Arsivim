@@ -20,7 +20,7 @@ class TarayiciServisi {
       }
     } catch (e) {
       _debugPrint('Tarayıcı arama hatası: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -32,7 +32,7 @@ class TarayiciServisi {
     } on PlatformException catch (e) {
       _debugPrint('Windows tarayıcı arama hatası: ${e.message}');
 
-      // WIA Scanner API kullanmayı dene
+      // WIA Scanner API'yi dene
       try {
         final String scanners = await _channel.invokeMethod('findWIAScanners');
         if (scanners.isNotEmpty) {
@@ -42,13 +42,12 @@ class TarayiciServisi {
         _debugPrint('WIA tarayıcı arama hatası: $e2');
       }
 
-      // Varsayılan tarayıcı listesi (test amaçlı)
-      return [
-        'Canon PIXMA Scanner',
-        'HP LaserJet Scanner',
-        'Epson Scanner',
-        'Windows Fax and Scan',
-      ];
+      throw PlatformException(
+        code: 'NO_SCANNERS_FOUND',
+        message:
+            'Hiç tarayıcı bulunamadı. Tarayıcınızın bağlı, açık ve doğru şekilde yüklendiğinden emin olun.',
+        details: e.message,
+      );
     }
   }
 
@@ -64,7 +63,7 @@ class TarayiciServisi {
       }
     } catch (e) {
       _debugPrint('Belge tarama hatası: $e');
-      return null;
+      rethrow;
     }
   }
 
@@ -78,52 +77,51 @@ class TarayiciServisi {
         'colorMode': 'color',
       });
 
+      if (result == null || result.isEmpty) {
+        throw PlatformException(
+          code: 'SCAN_FAILED',
+          message: 'Tarama işlemi tamamlanamadı',
+        );
+      }
+
       return result;
     } on PlatformException catch (e) {
       _debugPrint('Windows belge tarama hatası: ${e.message}');
 
-      // Test amaçlı simülasyon
-      return await _simulateScanning();
+      // Hata kodlarına göre daha anlamlı mesajlar
+      switch (e.code) {
+        case 'SCANNER_NOT_FOUND':
+          throw PlatformException(
+            code: e.code,
+            message: 'Seçilen tarayıcı bulunamadı veya bağlantı kesildi',
+          );
+        case 'SCANNER_BUSY':
+          throw PlatformException(
+            code: e.code,
+            message: 'Tarayıcı meşgul. Lütfen bekleyip tekrar deneyin',
+          );
+        case 'PAPER_JAM':
+          throw PlatformException(
+            code: e.code,
+            message: 'Kağıt sıkışması. Lütfen tarayıcıyı kontrol edin',
+          );
+        case 'NO_PAPER':
+          throw PlatformException(
+            code: e.code,
+            message: 'Tarayıcıda kağıt yok. Lütfen kağıt ekleyin',
+          );
+        case 'COVER_OPEN':
+          throw PlatformException(
+            code: e.code,
+            message: 'Tarayıcı kapağı açık. Lütfen kapatın',
+          );
+        default:
+          throw PlatformException(
+            code: 'SCAN_ERROR',
+            message: 'Tarama sırasında hata oluştu: ${e.message}',
+          );
+      }
     }
-  }
-
-  /// Test amaçlı tarama simülasyonu
-  Future<String?> _simulateScanning() async {
-    // Gerçek uygulamada bunu kaldırın
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Temp dizinde test dosyası oluştur
-    final tempDir = Directory.systemTemp;
-    final testFile = File(
-      '${tempDir.path}/scanned_document_${DateTime.now().millisecondsSinceEpoch}.pdf',
-    );
-
-    // Basit PDF içeriği oluştur (gerçek tarama yerine)
-    final content = '''%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>
-endobj
-xref
-0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-trailer
-<< /Size 4 /Root 1 0 R >>
-startxref
-190
-%%EOF''';
-
-    await testFile.writeAsString(content);
-
-    return testFile.path;
   }
 
   /// Tarayıcı ayarları
@@ -138,7 +136,7 @@ startxref
     } on PlatformException catch (e) {
       _debugPrint('Tarayıcı ayarları alma hatası: ${e.message}');
 
-      // Varsayılan ayarlar
+      // Varsayılan ayarları döndür
       return {
         'resolution': [100, 200, 300, 600, 1200],
         'colorModes': ['color', 'grayscale', 'blackwhite'],
@@ -174,7 +172,7 @@ startxref
       return result;
     } on PlatformException catch (e) {
       _debugPrint('Tarayıcı bağlantı testi hatası: ${e.message}');
-      return true; // Test amaçlı true döndür
+      return false;
     }
   }
 
@@ -199,10 +197,17 @@ startxref
         'quality': quality,
       });
 
+      if (result == null || result.isEmpty) {
+        throw PlatformException(
+          code: 'ADVANCED_SCAN_FAILED',
+          message: 'Gelişmiş tarama işlemi tamamlanamadı',
+        );
+      }
+
       return result;
     } on PlatformException catch (e) {
       _debugPrint('Gelişmiş tarama hatası: ${e.message}');
-      return await _simulateScanning();
+      rethrow;
     }
   }
 
@@ -225,16 +230,36 @@ startxref
       return result.cast<String>();
     } on PlatformException catch (e) {
       _debugPrint('Çoklu sayfa tarama hatası: ${e.message}');
+      throw PlatformException(
+        code: 'MULTI_PAGE_SCAN_FAILED',
+        message: 'Çoklu sayfa tarama sırasında hata oluştu: ${e.message}',
+      );
+    }
+  }
 
-      // Test amaçlı simülasyon
-      final List<String> simulatedPages = [];
-      for (int i = 0; i < sayfaSayisi; i++) {
-        final page = await _simulateScanning();
-        if (page != null) {
-          simulatedPages.add(page);
-        }
-      }
-      return simulatedPages;
+  /// Hata kodundan kullanıcı dostu mesaj üret
+  String getErrorMessage(String errorCode) {
+    switch (errorCode) {
+      case 'NO_SCANNERS_FOUND':
+        return 'Tarayıcı bulunamadı. Cihazınızın bağlı ve açık olduğundan emin olun.';
+      case 'SCANNER_NOT_FOUND':
+        return 'Seçilen tarayıcı bulunamadı veya bağlantı kesildi.';
+      case 'SCANNER_BUSY':
+        return 'Tarayıcı başka bir işlem yapıyor. Lütfen bekleyip tekrar deneyin.';
+      case 'PAPER_JAM':
+        return 'Kağıt sıkışması tespit edildi. Lütfen tarayıcıyı kontrol edin.';
+      case 'NO_PAPER':
+        return 'Tarayıcıda kağıt yok. Lütfen kağıt ekleyin.';
+      case 'COVER_OPEN':
+        return 'Tarayıcı kapağı açık. Lütfen kapatın.';
+      case 'SCAN_FAILED':
+        return 'Tarama işlemi başarısız oldu. Lütfen tekrar deneyin.';
+      case 'ADVANCED_SCAN_FAILED':
+        return 'Gelişmiş tarama ayarlarıyla tarama başarısız oldu.';
+      case 'MULTI_PAGE_SCAN_FAILED':
+        return 'Çoklu sayfa tarama başarısız oldu.';
+      default:
+        return 'Bilinmeyen bir hata oluştu. Lütfen tarayıcınızı kontrol edin.';
     }
   }
 

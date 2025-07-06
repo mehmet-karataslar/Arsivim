@@ -381,4 +381,445 @@ class ScreenUtils {
       child: child,
     );
   }
+
+  /// Tarayıcı durum widget'ı
+  static Widget buildScannerStatusWidget({
+    required String status,
+    required Color color,
+    required IconData icon,
+    String? message,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  status,
+                  style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                ),
+                if (message != null) ...[
+                  const SizedBox(height: 4),
+                  Text(message, style: const TextStyle(fontSize: 12)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Tarayıcı hata mesajı widget'ı
+  static Widget buildScannerErrorWidget({
+    required String title,
+    required String message,
+    String? actionText,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(message, style: const TextStyle(fontSize: 14)),
+          if (actionText != null && onAction != null) ...[
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.refresh),
+              label: Text(actionText),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Tarayıcı başarı mesajı widget'ı
+  static Widget buildScannerSuccessWidget({
+    required String title,
+    required String message,
+    String? actionText,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(message, style: const TextStyle(fontSize: 14)),
+          if (actionText != null && onAction != null) ...[
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.arrow_forward),
+              label: Text(actionText),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Tarayıcı progress widget'ı
+  static Widget buildScannerProgressWidget({
+    required String message,
+    double? progress,
+    bool showCancel = false,
+    VoidCallback? onCancel,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (progress != null) ...[
+            LinearProgressIndicator(value: progress),
+            const SizedBox(height: 8),
+            Text(
+              '${(progress * 100).toInt()}%',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ] else
+            const LinearProgressIndicator(),
+          if (showCancel && onCancel != null) ...[
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: onCancel,
+              icon: const Icon(Icons.cancel),
+              label: const Text('İptal'),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Tarayıcı ayarları dialog'u
+  static Future<Map<String, dynamic>?> showScannerSettingsDialog(
+    BuildContext context, {
+    required Map<String, dynamic> currentSettings,
+  }) async {
+    return await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder:
+          (context) => _ScannerSettingsDialog(currentSettings: currentSettings),
+    );
+  }
+
+  /// Tarayıcı bilgi dialog'u
+  static void showScannerInfoDialog(
+    BuildContext context, {
+    required String scannerName,
+    required Map<String, dynamic> scannerInfo,
+  }) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.info_outline, color: Colors.blue),
+                const SizedBox(width: 8),
+                Expanded(child: Text('$scannerName Bilgileri')),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...scannerInfo.entries.map((entry) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 80,
+                            child: Text(
+                              '${entry.key}:',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Expanded(child: Text(entry.value.toString())),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Kapat'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  /// Tarayıcı yardım dialog'u
+  static void showScannerHelpDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.help_outline, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Tarayıcı Yardımı'),
+              ],
+            ),
+            content: const SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Tarayıcı Kurulumu:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text('1. Tarayıcınızı USB ile bilgisayara bağlayın'),
+                  Text('2. Tarayıcı sürücülerini yükleyin'),
+                  Text('3. Tarayıcınızı açın ve hazır duruma getirin'),
+                  SizedBox(height: 16),
+                  Text(
+                    'Tarama İşlemi:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text('1. "Tarayıcıları Yenile" butonuna basın'),
+                  Text('2. Listeden tarayıcınızı seçin'),
+                  Text('3. Belgeyi tarayıcıya yerleştirin'),
+                  Text('4. "Belge Tara" butonuna basın'),
+                  SizedBox(height: 16),
+                  Text(
+                    'Sorun Giderme:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text('• Tarayıcınızı yeniden başlatın'),
+                  Text('• USB kablosunu kontrol edin'),
+                  Text('• Sürücü güncellemelerini kontrol edin'),
+                  Text('• Tarayıcı kapağının kapalı olduğundan emin olun'),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Tamam'),
+              ),
+            ],
+          ),
+    );
+  }
+}
+
+/// Tarayıcı ayarları dialog widget'ı
+class _ScannerSettingsDialog extends StatefulWidget {
+  final Map<String, dynamic> currentSettings;
+
+  const _ScannerSettingsDialog({required this.currentSettings});
+
+  @override
+  State<_ScannerSettingsDialog> createState() => _ScannerSettingsDialogState();
+}
+
+class _ScannerSettingsDialogState extends State<_ScannerSettingsDialog> {
+  late Map<String, dynamic> _settings;
+
+  @override
+  void initState() {
+    super.initState();
+    _settings = Map.from(widget.currentSettings);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.settings, color: Colors.blue),
+          SizedBox(width: 8),
+          Text('Tarayıcı Ayarları'),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Çözünürlük
+            if (_settings.containsKey('resolution')) ...[
+              const Text('Çözünürlük (DPI):'),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: _settings['selectedResolution'] ?? 300,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items:
+                    (_settings['resolution'] as List)
+                        .map<DropdownMenuItem<int>>((res) {
+                          return DropdownMenuItem(
+                            value: res,
+                            child: Text('$res DPI'),
+                          );
+                        })
+                        .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _settings['selectedResolution'] = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Renk modu
+            if (_settings.containsKey('colorModes')) ...[
+              const Text('Renk Modu:'),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _settings['selectedColorMode'] ?? 'color',
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items:
+                    (_settings['colorModes'] as List)
+                        .map<DropdownMenuItem<String>>((mode) {
+                          return DropdownMenuItem(
+                            value: mode,
+                            child: Text(
+                              mode == 'color'
+                                  ? 'Renkli'
+                                  : mode == 'grayscale'
+                                  ? 'Gri Tonlama'
+                                  : 'Siyah-Beyaz',
+                            ),
+                          );
+                        })
+                        .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _settings['selectedColorMode'] = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Çift taraflı
+            if (_settings.containsKey('duplex')) ...[
+              CheckboxListTile(
+                title: const Text('Çift Taraflı Tarama'),
+                value: _settings['selectedDuplex'] ?? false,
+                onChanged: (value) {
+                  setState(() {
+                    _settings['selectedDuplex'] = value;
+                  });
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(_settings),
+          child: const Text('Kaydet'),
+        ),
+      ],
+    );
+  }
 }

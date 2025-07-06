@@ -61,7 +61,7 @@ FlutterWindow::MessageHandler(HWND hwnd,
   if (flutter_controller_) {
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
-                                                       lparam);
+                                                      lparam);
     if (result) {
       return *result;
     }
@@ -94,6 +94,12 @@ void FlutterWindow::RegisterScannerMethodChannel() {
       HandleCheckScannerStatus(call, std::move(result));
     } else if (call.method_name().compare("getScannerSettings") == 0) {
       HandleGetScannerSettings(call, std::move(result));
+    } else if (call.method_name().compare("advancedScan") == 0) {
+      HandleAdvancedScan(call, std::move(result));
+    } else if (call.method_name().compare("multiPageScan") == 0) {
+      HandleMultiPageScan(call, std::move(result));
+    } else if (call.method_name().compare("testScannerConnection") == 0) {
+      HandleTestScannerConnection(call, std::move(result));
     } else {
       result->NotImplemented();
     }
@@ -187,10 +193,34 @@ void FlutterWindow::HandleScanDocument(const flutter::MethodCall<flutter::Encoda
       std::string result_path(result_buffer, length);
       result->Success(flutter::EncodableValue(result_path));
     } else {
-      result->Error("SCAN_FAILED", "Document scanning failed", flutter::EncodableValue());
+      // Try to determine the specific error
+      result->Error("SCAN_FAILED", "Document scanning failed - check scanner status", flutter::EncodableValue());
     }
   } catch (const std::exception& e) {
-    result->Error("SCAN_ERROR", "Scanning error occurred", flutter::EncodableValue(e.what()));
+    std::string error_message = e.what();
+    
+    // Map C++ exceptions to Flutter error codes
+    if (error_message == "SCANNER_NOT_FOUND") {
+      result->Error("SCANNER_NOT_FOUND", "Scanner not found or disconnected", flutter::EncodableValue());
+    } else if (error_message == "SCANNER_BUSY") {
+      result->Error("SCANNER_BUSY", "Scanner is busy with another operation", flutter::EncodableValue());
+    } else if (error_message == "NO_PAPER") {
+      result->Error("NO_PAPER", "No paper in scanner feeder", flutter::EncodableValue());
+    } else if (error_message == "PAPER_JAM") {
+      result->Error("PAPER_JAM", "Paper jam detected in scanner", flutter::EncodableValue());
+    } else if (error_message == "COVER_OPEN") {
+      result->Error("COVER_OPEN", "Scanner cover is open", flutter::EncodableValue());
+    } else if (error_message == "SCANNER_CONNECTION_FAILED") {
+      result->Error("SCANNER_CONNECTION_FAILED", "Failed to connect to scanner", flutter::EncodableValue());
+    } else if (error_message == "SCANNER_PROPERTIES_FAILED") {
+      result->Error("SCANNER_PROPERTIES_FAILED", "Failed to set scanner properties", flutter::EncodableValue());
+    } else if (error_message == "DATA_TRANSFER_FAILED") {
+      result->Error("DATA_TRANSFER_FAILED", "Data transfer from scanner failed", flutter::EncodableValue());
+    } else if (error_message == "SCAN_OPERATION_FAILED") {
+      result->Error("SCAN_OPERATION_FAILED", "Scan operation failed", flutter::EncodableValue());
+    } else {
+      result->Error("SCAN_ERROR", "Scanning error occurred", flutter::EncodableValue(error_message));
+    }
   }
 }
 
@@ -252,5 +282,186 @@ void FlutterWindow::HandleGetScannerSettings(const flutter::MethodCall<flutter::
     result->Success(flutter::EncodableValue(settings));
   } catch (const std::exception& e) {
     result->Error("SETTINGS_ERROR", "Failed to get scanner settings", flutter::EncodableValue(e.what()));
+  }
+}
+
+void FlutterWindow::HandleAdvancedScan(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  try {
+    const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+    if (!arguments) {
+      result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+      return;
+    }
+    
+    auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+    if (scanner_name_it == arguments->end()) {
+      result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+      return;
+    }
+    
+    std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+    
+    // Extract optional parameters
+    int resolution = 300;
+    std::string color_mode = "color";
+    std::string paper_size = "A4";
+    std::string output_format = "pdf";
+    bool duplex = false;
+    int quality = 80;
+    
+    auto resolution_it = arguments->find(flutter::EncodableValue("resolution"));
+    if (resolution_it != arguments->end()) {
+      resolution = std::get<int>(resolution_it->second);
+    }
+    
+    auto color_mode_it = arguments->find(flutter::EncodableValue("colorMode"));
+    if (color_mode_it != arguments->end()) {
+      color_mode = std::get<std::string>(color_mode_it->second);
+    }
+    
+    auto paper_size_it = arguments->find(flutter::EncodableValue("paperSize"));
+    if (paper_size_it != arguments->end()) {
+      paper_size = std::get<std::string>(paper_size_it->second);
+    }
+    
+    auto output_format_it = arguments->find(flutter::EncodableValue("outputFormat"));
+    if (output_format_it != arguments->end()) {
+      output_format = std::get<std::string>(output_format_it->second);
+    }
+    
+    auto duplex_it = arguments->find(flutter::EncodableValue("duplex"));
+    if (duplex_it != arguments->end()) {
+      duplex = std::get<bool>(duplex_it->second);
+    }
+    
+    auto quality_it = arguments->find(flutter::EncodableValue("quality"));
+    if (quality_it != arguments->end()) {
+      quality = std::get<int>(quality_it->second);
+    }
+    
+    // Generate output path
+    char temp_path[MAX_PATH];
+    GetTempPathA(MAX_PATH, temp_path);
+    
+    std::time_t now = std::time(nullptr);
+    std::string output_path = std::string(temp_path) + "advanced_scan_" + 
+                             std::to_string(now) + "." + output_format;
+    
+    // Use the existing ScanDocument function but with advanced parameters
+    // In a real implementation, you would modify the scanner plugin to accept these parameters
+    char result_buffer[1024];
+    int length = ScanDocument(scanner_name.c_str(), output_path.c_str(), result_buffer, sizeof(result_buffer));
+    
+    if (length > 0) {
+      std::string result_path(result_buffer, length);
+      result->Success(flutter::EncodableValue(result_path));
+    } else {
+      result->Error("ADVANCED_SCAN_FAILED", "Advanced document scanning failed", flutter::EncodableValue());
+    }
+  } catch (const std::exception& e) {
+    result->Error("ADVANCED_SCAN_ERROR", "Advanced scanning error occurred", flutter::EncodableValue(e.what()));
+  }
+}
+
+void FlutterWindow::HandleMultiPageScan(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                        std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  try {
+    const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+    if (!arguments) {
+      result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+      return;
+    }
+    
+    auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+    auto page_count_it = arguments->find(flutter::EncodableValue("pageCount"));
+    
+    if (scanner_name_it == arguments->end() || page_count_it == arguments->end()) {
+      result->Error("MISSING_ARGUMENT", "scannerName and pageCount are required", flutter::EncodableValue());
+      return;
+    }
+    
+    std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+    int page_count = std::get<int>(page_count_it->second);
+    
+    // Extract optional parameters
+    int resolution = 300;
+    std::string output_format = "pdf";
+    
+    auto resolution_it = arguments->find(flutter::EncodableValue("resolution"));
+    if (resolution_it != arguments->end()) {
+      resolution = std::get<int>(resolution_it->second);
+    }
+    
+    auto output_format_it = arguments->find(flutter::EncodableValue("outputFormat"));
+    if (output_format_it != arguments->end()) {
+      output_format = std::get<std::string>(output_format_it->second);
+    }
+    
+    // Scan multiple pages
+    std::vector<flutter::EncodableValue> scanned_pages;
+    
+    for (int i = 0; i < page_count; ++i) {
+      // Generate output path for each page
+      char temp_path[MAX_PATH];
+      GetTempPathA(MAX_PATH, temp_path);
+      
+      std::time_t now = std::time(nullptr);
+      std::string output_path = std::string(temp_path) + "multi_page_scan_" + 
+                               std::to_string(now) + "_page_" + std::to_string(i + 1) + "." + output_format;
+      
+      char result_buffer[1024];
+      int length = ScanDocument(scanner_name.c_str(), output_path.c_str(), result_buffer, sizeof(result_buffer));
+      
+      if (length > 0) {
+        std::string result_path(result_buffer, length);
+        scanned_pages.push_back(flutter::EncodableValue(result_path));
+      } else {
+        result->Error("MULTI_PAGE_SCAN_FAILED", "Multi-page scanning failed at page " + std::to_string(i + 1), flutter::EncodableValue());
+        return;
+      }
+    }
+    
+    result->Success(flutter::EncodableValue(scanned_pages));
+  } catch (const std::exception& e) {
+    result->Error("MULTI_PAGE_SCAN_ERROR", "Multi-page scanning error occurred", flutter::EncodableValue(e.what()));
+  }
+}
+
+void FlutterWindow::HandleTestScannerConnection(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                                std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  try {
+    const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+    if (!arguments) {
+      result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+      return;
+    }
+    
+    auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+    if (scanner_name_it == arguments->end()) {
+      result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+      return;
+    }
+    
+    std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+    
+    // Test connection by trying to find the scanner
+    char buffer[4096];
+    int length = FindScanners(buffer, sizeof(buffer));
+    
+    if (length > 0) {
+      std::string scanners_str(buffer, length);
+      
+      // Check if the requested scanner is in the list
+      if (scanners_str.find(scanner_name) != std::string::npos) {
+        result->Success(flutter::EncodableValue(true));
+      } else {
+        result->Success(flutter::EncodableValue(false));
+      }
+    } else {
+      result->Success(flutter::EncodableValue(false));
+    }
+  } catch (const std::exception& e) {
+    result->Error("CONNECTION_TEST_ERROR", "Scanner connection test failed", flutter::EncodableValue(e.what()));
   }
 }
