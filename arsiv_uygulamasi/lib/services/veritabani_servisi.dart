@@ -982,7 +982,7 @@ class VeriTabaniServisi {
   }
 
   // Kişinin belgelerini getir
-  Future<List<BelgeModeli>> kisiBelyeleriniGetir(int kisiId) async {
+  Future<List<BelgeModeli>> kisiBelgeleriniGetir(int kisiId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',

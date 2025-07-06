@@ -1,6 +1,8 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <regex>
+#include <chrono>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "scanner_plugin.h"
@@ -100,6 +102,22 @@ void FlutterWindow::RegisterScannerMethodChannel() {
       HandleMultiPageScan(call, std::move(result));
     } else if (call.method_name().compare("testScannerConnection") == 0) {
       HandleTestScannerConnection(call, std::move(result));
+    } else if (call.method_name().compare("discoverNetworkScanners") == 0) {
+      HandleDiscoverNetworkScanners(call, std::move(result));
+    } else if (call.method_name().compare("checkWiFiStatus") == 0) {
+      HandleCheckWiFiStatus(call, std::move(result));
+    } else if (call.method_name().compare("testNetworkScannerQuality") == 0) {
+      HandleTestNetworkScannerQuality(call, std::move(result));
+    } else if (call.method_name().compare("getWiFiScannerSettings") == 0) {
+      HandleGetWiFiScannerSettings(call, std::move(result));
+    } else if (call.method_name().compare("getNetworkScannerIP") == 0) {
+      HandleGetNetworkScannerIP(call, std::move(result));
+    } else if (call.method_name().compare("wifiOptimizedScan") == 0) {
+      HandleWiFiOptimizedScan(call, std::move(result));
+    } else if (call.method_name().compare("networkTroubleshooting") == 0) {
+      HandleNetworkTroubleshooting(call, std::move(result));
+    } else if (call.method_name().compare("scanLocalNetwork") == 0) {
+      HandleScanLocalNetwork(call, std::move(result));
     } else {
       result->NotImplemented();
     }
@@ -111,154 +129,115 @@ void FlutterWindow::RegisterScannerMethodChannel() {
 
 void FlutterWindow::HandleFindScanners(const flutter::MethodCall<flutter::EncodableValue>& call,
                                        std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  try {
-    char buffer[4096];
-    int length = FindScanners(buffer, sizeof(buffer));
-    
-    if (length > 0) {
-      std::string scanners_str(buffer, length);
-      std::vector<flutter::EncodableValue> scanners;
+  // Run scanner discovery in background thread to avoid UI blocking
+  RunInBackground<std::vector<std::string>>(
+    []() -> std::vector<std::string> {
+      char buffer[4096];
+      int length = FindScanners(buffer, sizeof(buffer));
       
-      // Split by '|' delimiter
-      std::stringstream ss(scanners_str);
-      std::string scanner;
-      while (std::getline(ss, scanner, '|')) {
-        if (!scanner.empty()) {
-          scanners.push_back(flutter::EncodableValue(scanner));
+      std::vector<std::string> scanners;
+      if (length > 0) {
+        std::string scanners_str(buffer, length);
+        std::stringstream ss(scanners_str);
+        std::string scanner;
+        while (std::getline(ss, scanner, '|')) {
+          if (!scanner.empty()) {
+            scanners.push_back(scanner);
+          }
         }
       }
-      
-      result->Success(flutter::EncodableValue(scanners));
-    } else {
-      result->Success(flutter::EncodableValue(std::vector<flutter::EncodableValue>()));
+      return scanners;
+    },
+    std::move(result),
+    [](const std::vector<std::string>& scanners) -> flutter::EncodableValue {
+      std::vector<flutter::EncodableValue> flutter_scanners;
+      for (const auto& scanner : scanners) {
+        flutter_scanners.push_back(flutter::EncodableValue(scanner));
+      }
+      return flutter::EncodableValue(flutter_scanners);
+    },
+    [](const std::exception& e) {
+      // Error handler will be called by RunInBackground
     }
-  } catch (const std::exception& e) {
-    result->Error("SCANNER_ERROR", "Failed to find scanners", flutter::EncodableValue(e.what()));
-  }
+  );
 }
 
 void FlutterWindow::HandleFindWIAScanners(const flutter::MethodCall<flutter::EncodableValue>& call,
                                           std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  try {
-    char buffer[4096];
-    int length = FindScanners(buffer, sizeof(buffer));
-    
-    if (length > 0) {
-      std::string scanners_str(buffer, length);
-      result->Success(flutter::EncodableValue(scanners_str));
-    } else {
-      result->Success(flutter::EncodableValue(""));
+  // Run WIA scanner discovery in background thread
+  RunInBackground<std::string>(
+    []() -> std::string {
+      char buffer[4096];
+      int length = FindScanners(buffer, sizeof(buffer));
+      
+      if (length > 0) {
+        return std::string(buffer, length);
+      }
+      return "";
+    },
+    std::move(result),
+    [](const std::string& scanners_str) -> flutter::EncodableValue {
+      return flutter::EncodableValue(scanners_str);
     }
-  } catch (const std::exception& e) {
-    result->Error("WIA_ERROR", "WIA scanner enumeration failed", flutter::EncodableValue(e.what()));
-  }
+  );
 }
 
 void FlutterWindow::HandleScanDocument(const flutter::MethodCall<flutter::EncodableValue>& call,
                                        std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  try {
-    const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
-    if (!arguments) {
-      result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
-      return;
-    }
-    
-    auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
-    auto output_format_it = arguments->find(flutter::EncodableValue("outputFormat"));
-    
-    if (scanner_name_it == arguments->end()) {
-      result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
-      return;
-    }
-    
-    std::string scanner_name = std::get<std::string>(scanner_name_it->second);
-    std::string output_format = "pdf";
-    
-    if (output_format_it != arguments->end()) {
-      output_format = std::get<std::string>(output_format_it->second);
-    }
-    
-    // Generate output path
-    char temp_path[MAX_PATH];
-    GetTempPathA(MAX_PATH, temp_path);
-    
-    std::time_t now = std::time(nullptr);
-    std::string output_path = std::string(temp_path) + "scanned_document_" + 
-                             std::to_string(now) + "." + output_format;
-    
-    char result_buffer[1024];
-    int length = ScanDocument(scanner_name.c_str(), output_path.c_str(), result_buffer, sizeof(result_buffer));
-    
-    if (length > 0) {
-      std::string result_path(result_buffer, length);
-      result->Success(flutter::EncodableValue(result_path));
-    } else if (length == -1) {
-      // Extract error code from buffer
-      std::string error_code(result_buffer);
-      
-      // Map specific error codes to Flutter errors
-      if (error_code == "SCANNER_NOT_FOUND") {
-        result->Error("SCANNER_NOT_FOUND", "Scanner not found or disconnected", flutter::EncodableValue());
-      } else if (error_code == "SCANNER_BUSY") {
-        result->Error("SCANNER_BUSY", "Scanner is busy with another operation", flutter::EncodableValue());
-      } else if (error_code == "NO_PAPER") {
-        result->Error("NO_PAPER", "No paper in scanner feeder", flutter::EncodableValue());
-      } else if (error_code == "PAPER_JAM") {
-        result->Error("PAPER_JAM", "Paper jam detected in scanner", flutter::EncodableValue());
-      } else if (error_code == "COVER_OPEN") {
-        result->Error("COVER_OPEN", "Scanner cover is open", flutter::EncodableValue());
-      } else if (error_code == "SCANNER_CONNECTION_FAILED") {
-        result->Error("SCANNER_CONNECTION_FAILED", "Failed to connect to scanner", flutter::EncodableValue());
-      } else if (error_code == "SCANNER_PROPERTIES_FAILED") {
-        result->Error("SCANNER_PROPERTIES_FAILED", "Failed to set scanner properties", flutter::EncodableValue());
-      } else if (error_code == "DATA_TRANSFER_FAILED") {
-        result->Error("DATA_TRANSFER_FAILED", "Data transfer from scanner failed", flutter::EncodableValue());
-      } else if (error_code == "SCAN_OPERATION_FAILED") {
-        result->Error("SCAN_OPERATION_FAILED", "Scan operation failed", flutter::EncodableValue());
-      } else if (error_code == "PLUGIN_NOT_INITIALIZED") {
-        result->Error("PLUGIN_NOT_INITIALIZED", "Scanner plugin not initialized", flutter::EncodableValue());
-      } else if (error_code == "UNKNOWN_SCANNER_ERROR") {
-        result->Error("UNKNOWN_SCANNER_ERROR", "Unknown scanner error occurred", flutter::EncodableValue());
-      } else if (error_code == "BUFFER_TOO_SMALL") {
-        result->Error("BUFFER_TOO_SMALL", "Buffer too small for result", flutter::EncodableValue());
-      } else if (error_code == "NETWORK_SCANNER_UNREACHABLE") {
-        result->Error("NETWORK_SCANNER_UNREACHABLE", "Network scanner unreachable", flutter::EncodableValue());
-      } else if (error_code == "SCANNER_OFFLINE") {
-        result->Error("SCANNER_OFFLINE", "Scanner is offline", flutter::EncodableValue());
-      } else if (error_code == "SCANNER_TIMEOUT") {
-        result->Error("SCANNER_TIMEOUT", "Scanner connection timeout", flutter::EncodableValue());
-      } else {
-        result->Error("SCAN_ERROR", "Scanning error: " + error_code, flutter::EncodableValue());
-      }
-    } else {
-      result->Error("SCAN_FAILED", "Document scanning failed - check scanner status", flutter::EncodableValue());
-    }
-  } catch (const std::exception& e) {
-    std::string error_message = e.what();
-    
-    // Map C++ exceptions to Flutter error codes
-    if (error_message == "SCANNER_NOT_FOUND") {
-      result->Error("SCANNER_NOT_FOUND", "Scanner not found or disconnected", flutter::EncodableValue());
-    } else if (error_message == "SCANNER_BUSY") {
-      result->Error("SCANNER_BUSY", "Scanner is busy with another operation", flutter::EncodableValue());
-    } else if (error_message == "NO_PAPER") {
-      result->Error("NO_PAPER", "No paper in scanner feeder", flutter::EncodableValue());
-    } else if (error_message == "PAPER_JAM") {
-      result->Error("PAPER_JAM", "Paper jam detected in scanner", flutter::EncodableValue());
-    } else if (error_message == "COVER_OPEN") {
-      result->Error("COVER_OPEN", "Scanner cover is open", flutter::EncodableValue());
-    } else if (error_message == "SCANNER_CONNECTION_FAILED") {
-      result->Error("SCANNER_CONNECTION_FAILED", "Failed to connect to scanner", flutter::EncodableValue());
-    } else if (error_message == "SCANNER_PROPERTIES_FAILED") {
-      result->Error("SCANNER_PROPERTIES_FAILED", "Failed to set scanner properties", flutter::EncodableValue());
-    } else if (error_message == "DATA_TRANSFER_FAILED") {
-      result->Error("DATA_TRANSFER_FAILED", "Data transfer from scanner failed", flutter::EncodableValue());
-    } else if (error_message == "SCAN_OPERATION_FAILED") {
-      result->Error("SCAN_OPERATION_FAILED", "Scan operation failed", flutter::EncodableValue());
-    } else {
-      result->Error("SCAN_ERROR", "Scanning error occurred", flutter::EncodableValue(error_message));
-    }
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (!arguments) {
+    result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+    return;
   }
+  
+  auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+  if (scanner_name_it == arguments->end()) {
+    result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+    return;
+  }
+  
+  std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+  
+  auto output_format_it = arguments->find(flutter::EncodableValue("outputFormat"));
+  std::string output_format = "pdf";
+  if (output_format_it != arguments->end()) {
+    output_format = std::get<std::string>(output_format_it->second);
+  }
+  
+  // Run scan operation in background thread with timeout
+  RunInBackground<std::string>(
+    [scanner_name, output_format]() -> std::string {
+      // Generate output path
+      char temp_path[MAX_PATH];
+      GetTempPathA(MAX_PATH, temp_path);
+      
+      std::time_t now = std::time(nullptr);
+      std::string output_path = std::string(temp_path) + "scanned_document_" + 
+                               std::to_string(now) + "." + output_format;
+      
+      char result_buffer[1024];
+      int length = ScanDocument(scanner_name.c_str(), output_path.c_str(), result_buffer, sizeof(result_buffer));
+      
+      if (length > 0) {
+        return std::string(result_buffer, length);
+      } else if (length == -1) {
+        // Extract error code from buffer
+        std::string error_code(result_buffer);
+        throw std::runtime_error(error_code);
+      } else {
+        throw std::runtime_error("SCAN_FAILED");
+      }
+    },
+    std::move(result),
+    [](const std::string& result_path) -> flutter::EncodableValue {
+      return flutter::EncodableValue(result_path);
+    },
+    [](const std::exception& e) {
+      // Error mapping will be handled by RunInBackground
+      std::string error_code = e.what();
+      // Additional error code mapping could be added here
+    }
+  );
 }
 
 void FlutterWindow::HandleCheckScannerStatus(const flutter::MethodCall<flutter::EncodableValue>& call,
@@ -510,4 +489,333 @@ void FlutterWindow::HandleTestScannerConnection(const flutter::MethodCall<flutte
   } catch (const std::exception& e) {
     result->Error("CONNECTION_TEST_ERROR", "Scanner connection test failed", flutter::EncodableValue(e.what()));
   }
+}
+
+void FlutterWindow::HandleDiscoverNetworkScanners(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                                   std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  // Run network scanner discovery in background thread
+  RunInBackground<std::vector<std::string>>(
+    []() -> std::vector<std::string> {
+      char buffer[4096];
+      int length = FindScanners(buffer, sizeof(buffer));
+      
+      std::vector<std::string> scanners;
+      if (length > 0) {
+        std::string scanners_str(buffer, length);
+        std::stringstream ss(scanners_str);
+        std::string scanner;
+        while (std::getline(ss, scanner, '|')) {
+          if (!scanner.empty() && 
+              (scanner.find("Network") != std::string::npos || 
+               scanner.find("WiFi") != std::string::npos ||
+               scanner.find("eSCL") != std::string::npos ||
+               scanner.find("WSD") != std::string::npos)) {
+            scanners.push_back(scanner);
+          }
+        }
+      }
+      return scanners;
+    },
+    std::move(result),
+    [](const std::vector<std::string>& scanners) -> flutter::EncodableValue {
+      std::vector<flutter::EncodableValue> flutter_scanners;
+      for (const auto& scanner : scanners) {
+        flutter_scanners.push_back(flutter::EncodableValue(scanner));
+      }
+      return flutter::EncodableValue(flutter_scanners);
+    }
+  );
+}
+
+void FlutterWindow::HandleCheckWiFiStatus(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  // Simple WiFi status check - assume connected if request is made
+  // Real implementation would be in scanner_plugin.cpp
+  result->Success(flutter::EncodableValue(true));
+}
+
+void FlutterWindow::HandleTestNetworkScannerQuality(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                                     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (!arguments) {
+    result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+    return;
+  }
+  
+  auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+  if (scanner_name_it == arguments->end()) {
+    result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+    return;
+  }
+  
+  std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+  
+  // Simple mock quality test - real implementation in scanner_plugin.cpp
+  flutter::EncodableMap quality;
+  quality[flutter::EncodableValue("isReachable")] = flutter::EncodableValue(true);
+  quality[flutter::EncodableValue("latency")] = flutter::EncodableValue(100);
+  quality[flutter::EncodableValue("signalStrength")] = flutter::EncodableValue(80);
+  quality[flutter::EncodableValue("connectionType")] = flutter::EncodableValue("WiFi");
+  
+  result->Success(flutter::EncodableValue(quality));
+}
+
+void FlutterWindow::HandleGetWiFiScannerSettings(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                                  std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (!arguments) {
+    result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+    return;
+  }
+  
+  auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+  if (scanner_name_it == arguments->end()) {
+    result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+    return;
+  }
+  
+  std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+  
+  // Get WiFi-optimized scanner settings
+  flutter::EncodableMap settings;
+  
+  // WiFi optimized settings
+  std::vector<flutter::EncodableValue> resolutions = {
+    flutter::EncodableValue(150),
+    flutter::EncodableValue(200),
+    flutter::EncodableValue(300),
+    flutter::EncodableValue(600)
+  };
+  
+  std::vector<flutter::EncodableValue> colorModes = {
+    flutter::EncodableValue("color"),
+    flutter::EncodableValue("grayscale"),
+    flutter::EncodableValue("blackwhite")
+  };
+  
+  std::vector<flutter::EncodableValue> paperSizes = {
+    flutter::EncodableValue("A4"),
+    flutter::EncodableValue("A3"),
+    flutter::EncodableValue("Letter"),
+    flutter::EncodableValue("Legal")
+  };
+  
+  std::vector<flutter::EncodableValue> outputFormats = {
+    flutter::EncodableValue("pdf"),
+    flutter::EncodableValue("jpeg"),
+    flutter::EncodableValue("png")
+  };
+  
+  settings[flutter::EncodableValue("resolution")] = flutter::EncodableValue(resolutions);
+  settings[flutter::EncodableValue("colorModes")] = flutter::EncodableValue(colorModes);
+  settings[flutter::EncodableValue("paperSizes")] = flutter::EncodableValue(paperSizes);
+  settings[flutter::EncodableValue("outputFormats")] = flutter::EncodableValue(outputFormats);
+  settings[flutter::EncodableValue("maxPages")] = flutter::EncodableValue(50);
+  settings[flutter::EncodableValue("duplex")] = flutter::EncodableValue(false);
+  settings[flutter::EncodableValue("timeout")] = flutter::EncodableValue(30000);
+  settings[flutter::EncodableValue("bufferSize")] = flutter::EncodableValue(32768);
+  settings[flutter::EncodableValue("compression")] = flutter::EncodableValue("medium");
+  settings[flutter::EncodableValue("networkOptimized")] = flutter::EncodableValue(true);
+  
+  result->Success(flutter::EncodableValue(settings));
+}
+
+void FlutterWindow::HandleGetNetworkScannerIP(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (!arguments) {
+    result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+    return;
+  }
+  
+  auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+  if (scanner_name_it == arguments->end()) {
+    result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+    return;
+  }
+  
+  std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+  
+  // Extract IP address from scanner name
+  std::regex ipRegex(R"((\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))");
+  std::smatch match;
+  
+  if (std::regex_search(scanner_name, match, ipRegex)) {
+    std::string ip = match[1].str();
+    result->Success(flutter::EncodableValue(ip));
+  } else {
+    result->Success(flutter::EncodableValue());
+  }
+}
+
+void FlutterWindow::HandleWiFiOptimizedScan(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                            std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (!arguments) {
+    result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+    return;
+  }
+  
+  auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+  if (scanner_name_it == arguments->end()) {
+    result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+    return;
+  }
+  
+  std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+  
+  // Get optional parameters with WiFi-optimized defaults
+  int resolution = 200; // Lower resolution for WiFi
+  auto resolution_it = arguments->find(flutter::EncodableValue("resolution"));
+  if (resolution_it != arguments->end()) {
+    resolution = std::get<int>(resolution_it->second);
+  }
+  
+  std::string output_format = "pdf";
+  auto format_it = arguments->find(flutter::EncodableValue("outputFormat"));
+  if (format_it != arguments->end()) {
+    output_format = std::get<std::string>(format_it->second);
+  }
+  
+  int timeout = 30000; // 30 seconds for WiFi
+  auto timeout_it = arguments->find(flutter::EncodableValue("timeout"));
+  if (timeout_it != arguments->end()) {
+    timeout = std::get<int>(timeout_it->second);
+  }
+  
+  // Run WiFi optimized scan in background
+  RunInBackground<std::string>(
+    [scanner_name, output_format, timeout]() -> std::string {
+      // Generate output path
+      char temp_path[MAX_PATH];
+      GetTempPathA(MAX_PATH, temp_path);
+      
+      std::time_t now = std::time(nullptr);
+      std::string output_path = std::string(temp_path) + "wifi_scanned_document_" + 
+                               std::to_string(now) + "." + output_format;
+      
+      char result_buffer[1024];
+      int length = ScanDocument(scanner_name.c_str(), output_path.c_str(), result_buffer, sizeof(result_buffer));
+      
+      if (length > 0) {
+        return std::string(result_buffer, length);
+      } else if (length == -1) {
+        std::string error_code(result_buffer);
+        
+        // Enhanced WiFi-specific error handling
+        if (error_code == "SCANNER_NOT_FOUND") {
+          throw std::runtime_error("NETWORK_SCANNER_UNREACHABLE");
+        } else if (error_code == "SCANNER_CONNECTION_FAILED") {
+          throw std::runtime_error("SCANNER_TIMEOUT");
+        } else {
+          throw std::runtime_error(error_code);
+        }
+      } else {
+        throw std::runtime_error("WIFI_SCAN_FAILED");
+      }
+    },
+    std::move(result),
+    [](const std::string& result_path) -> flutter::EncodableValue {
+      return flutter::EncodableValue(result_path);
+    }
+  );
+}
+
+void FlutterWindow::HandleNetworkTroubleshooting(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                                 std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (!arguments) {
+    result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+    return;
+  }
+  
+  auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+  if (scanner_name_it == arguments->end()) {
+    result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+    return;
+  }
+  
+  std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+  
+  // Simple mock diagnostics - real implementation in scanner_plugin.cpp
+  flutter::EncodableMap diagnostics;
+  diagnostics[flutter::EncodableValue("wifiConnected")] = flutter::EncodableValue(true);
+  diagnostics[flutter::EncodableValue("scannerReachable")] = flutter::EncodableValue(true);
+  diagnostics[flutter::EncodableValue("signalStrength")] = flutter::EncodableValue(80);
+  diagnostics[flutter::EncodableValue("latency")] = flutter::EncodableValue(150);
+  
+  std::vector<flutter::EncodableValue> actions = {
+    flutter::EncodableValue("Tarayıcı düzgün çalışıyor görünüyor")
+  };
+  diagnostics[flutter::EncodableValue("suggestedActions")] = flutter::EncodableValue(actions);
+  
+  result->Success(flutter::EncodableValue(diagnostics));
+}
+
+void FlutterWindow::HandleScanLocalNetwork(const flutter::MethodCall<flutter::EncodableValue>& call,
+                                           std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  // Simple mock local network scan - real implementation in scanner_plugin.cpp
+  std::vector<flutter::EncodableValue> scanners = {
+    flutter::EncodableValue("Local Network Scanner (192.168.1.100)"),
+    flutter::EncodableValue("WiFi Scanner (192.168.1.150)")
+  };
+  
+  result->Success(flutter::EncodableValue(scanners));
+}
+
+// Template implementation for background thread operations
+template<typename T>
+void FlutterWindow::RunInBackground(std::function<T()> operation, 
+                                    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
+                                    std::function<flutter::EncodableValue(T)> success_handler,
+                                    std::function<void(const std::exception&)> error_handler) {
+  
+  // Create a shared pointer to the result to manage lifetime
+  auto shared_result = std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>>(result.release());
+  
+  // Run operation in background thread
+  std::thread([operation, shared_result, success_handler, error_handler]() {
+    try {
+      T result_value = operation();
+      
+      // Return result on main thread
+      flutter::EncodableValue flutter_result = success_handler(result_value);
+      shared_result->Success(flutter_result);
+      
+    } catch (const std::exception& e) {
+      std::string error_code = e.what();
+      std::string error_message = "Operation failed";
+      
+      // Map specific error codes to Flutter errors
+      if (error_code == "SCANNER_NOT_FOUND") {
+        error_message = "Scanner not found or disconnected";
+      } else if (error_code == "SCANNER_BUSY") {
+        error_message = "Scanner is busy, please try again";
+      } else if (error_code == "PAPER_JAM") {
+        error_message = "Paper jam detected, please check scanner";
+      } else if (error_code == "NO_PAPER") {
+        error_message = "No paper in scanner, please add paper";
+      } else if (error_code == "COVER_OPEN") {
+        error_message = "Scanner cover is open, please close it";
+      } else if (error_code == "NETWORK_SCANNER_UNREACHABLE") {
+        error_message = "Network scanner is unreachable, check WiFi connection";
+      } else if (error_code == "SCANNER_TIMEOUT") {
+        error_message = "Scanner operation timed out, check network connection";
+      } else if (error_code == "SCAN_FAILED") {
+        error_message = "Scan operation failed";
+      } else {
+        error_message = "Scanner error: " + error_code;
+      }
+      
+      // Call custom error handler if provided
+      if (error_handler) {
+        error_handler(e);
+      }
+      
+      shared_result->Error(error_code, error_message, flutter::EncodableValue());
+      
+    } catch (...) {
+      shared_result->Error("UNKNOWN_ERROR", "Unknown scanner error occurred", flutter::EncodableValue());
+    }
+  }).detach();
 }

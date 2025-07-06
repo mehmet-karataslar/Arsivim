@@ -110,7 +110,7 @@ class _YedeklemeEkraniState extends State<YedeklemeEkrani> {
 
   Future<void> _kisiKategorileriniYukle(int kisiId) async {
     try {
-      final belgeler = await _veriTabani.kisiBelyeleriniGetir(kisiId);
+      final belgeler = await _veriTabani.kisiBelgeleriniGetir(kisiId);
       final kategoriIds =
           belgeler
               .map((b) => b.kategoriId)

@@ -55,7 +55,7 @@ class YedeklemeServisi {
         await Directory(kisiKlasoruYolu).create(recursive: true);
 
         // Kişinin belgelerini getir
-        final kisiBelgeleri = await _veriTabani.kisiBelyeleriniGetir(kisi.id!);
+        final kisiBelgeleri = await _veriTabani.kisiBelgeleriniGetir(kisi.id!);
 
         // Belgeleri kategorilere göre grupla - sadece seçilen kategoriler
         final kategorilereGoreGruplar = <int, List<BelgeModeli>>{};

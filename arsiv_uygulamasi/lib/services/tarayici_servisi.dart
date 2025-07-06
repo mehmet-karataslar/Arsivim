@@ -176,6 +176,215 @@ class TarayiciServisi {
     }
   }
 
+  /// Network tarayıcıları keşfet (WiFi tarayıcıları)
+  Future<List<String>> networkTarayicilariKesfet() async {
+    try {
+      if (Platform.isWindows) {
+        final List<dynamic> result = await _channel.invokeMethod(
+          'discoverNetworkScanners',
+        );
+        return result.cast<String>();
+      } else {
+        throw UnsupportedError(
+          'Network tarayıcı keşfi sadece Windows platformunda desteklenmektedir',
+        );
+      }
+    } on PlatformException catch (e) {
+      _debugPrint('Network tarayıcı keşfi hatası: ${e.message}');
+
+      // Varsayılan olarak boş liste döndür
+      return [];
+    }
+  }
+
+  /// WiFi ağ durumunu kontrol et
+  Future<bool> wifiDurumuKontrol() async {
+    try {
+      final bool result = await _channel.invokeMethod('checkWiFiStatus');
+      return result;
+    } on PlatformException catch (e) {
+      _debugPrint('WiFi durum kontrolü hatası: ${e.message}');
+      return false;
+    }
+  }
+
+  /// Network tarayıcı bağlantı kalitesini test et
+  Future<Map<String, dynamic>> networkBaglantiKalitesiTest(
+    String tarayiciAdi,
+  ) async {
+    try {
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+        'testNetworkScannerQuality',
+        {'scannerName': tarayiciAdi},
+      );
+
+      return result.cast<String, dynamic>();
+    } on PlatformException catch (e) {
+      _debugPrint('Network bağlantı kalitesi testi hatası: ${e.message}');
+
+      // Varsayılan kalite bilgisi
+      return {
+        'signalStrength': 0,
+        'latency': -1,
+        'isReachable': false,
+        'connectionType': 'unknown',
+        'errorMessage': e.message,
+      };
+    }
+  }
+
+  /// WiFi tarayıcı için özel ayarlar
+  Future<Map<String, dynamic>> wifiTarayiciAyarlari(String tarayiciAdi) async {
+    try {
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+        'getWiFiScannerSettings',
+        {'scannerName': tarayiciAdi},
+      );
+
+      return result.cast<String, dynamic>();
+    } on PlatformException catch (e) {
+      _debugPrint('WiFi tarayıcı ayarları alma hatası: ${e.message}');
+
+      // WiFi tarayıcılar için optimize edilmiş varsayılan ayarlar
+      return {
+        'resolution': [150, 200, 300, 600], // Düşük başlangıç çözünürlüğü
+        'colorModes': ['color', 'grayscale', 'blackwhite'],
+        'paperSizes': ['A4', 'A3', 'Letter', 'Legal'],
+        'outputFormats': ['pdf', 'jpeg', 'png'],
+        'maxPages': 50, // WiFi için düşük sayfa limiti
+        'duplex': false, // WiFi tarayıcılar genellikle duplex yapmaz
+        'timeout': 30000, // 30 saniye timeout
+        'bufferSize': 32768, // 32KB buffer
+        'compression': 'medium', // Orta sıkıştırma
+        'networkOptimized': true,
+      };
+    }
+  }
+
+  /// Network tarayıcı IP adresini al
+  Future<String?> networkTarayiciIPAdres(String tarayiciAdi) async {
+    try {
+      final String? result = await _channel.invokeMethod(
+        'getNetworkScannerIP',
+        {'scannerName': tarayiciAdi},
+      );
+
+      return result;
+    } on PlatformException catch (e) {
+      _debugPrint('Network tarayıcı IP adresi alma hatası: ${e.message}');
+      return null;
+    }
+  }
+
+  /// WiFi tarayıcı için optimize edilmiş tarama
+  Future<String?> wifiOptimizeTarama({
+    required String tarayiciAdi,
+    int resolution = 200, // WiFi için düşük çözünürlük
+    String colorMode = 'color',
+    String paperSize = 'A4',
+    String outputFormat = 'pdf',
+    int timeout = 30000, // 30 saniye timeout
+    bool networkOptimized = true,
+  }) async {
+    try {
+      final String? result = await _channel.invokeMethod('wifiOptimizedScan', {
+        'scannerName': tarayiciAdi,
+        'resolution': resolution,
+        'colorMode': colorMode,
+        'paperSize': paperSize,
+        'outputFormat': outputFormat,
+        'timeout': timeout,
+        'networkOptimized': networkOptimized,
+        'compression': 'medium',
+        'bufferSize': 32768,
+      });
+
+      if (result == null || result.isEmpty) {
+        throw PlatformException(
+          code: 'WIFI_SCAN_FAILED',
+          message: 'WiFi tarama işlemi tamamlanamadı',
+        );
+      }
+
+      return result;
+    } on PlatformException catch (e) {
+      _debugPrint('WiFi optimize tarama hatası: ${e.message}');
+
+      // WiFi specific error handling
+      switch (e.code) {
+        case 'NETWORK_SCANNER_UNREACHABLE':
+          throw PlatformException(
+            code: e.code,
+            message:
+                'WiFi tarayıcı erişilemez durumda. Ağ bağlantınızı kontrol edin.',
+          );
+        case 'SCANNER_TIMEOUT':
+          throw PlatformException(
+            code: e.code,
+            message: 'WiFi tarayıcı zaman aşımı. Ağ bağlantınızı kontrol edin.',
+          );
+        case 'WEAK_SIGNAL':
+          throw PlatformException(
+            code: e.code,
+            message: 'WiFi sinyal gücü zayıf. Tarayıcıya daha yakın olun.',
+          );
+        case 'NETWORK_CONGESTION':
+          throw PlatformException(
+            code: e.code,
+            message: 'Ağ trafiği yoğun. Daha sonra tekrar deneyin.',
+          );
+        default:
+          throw PlatformException(
+            code: 'WIFI_SCAN_ERROR',
+            message: 'WiFi tarama hatası: ${e.message}',
+          );
+      }
+    }
+  }
+
+  /// Network tarayıcı sorun giderme bilgileri
+  Future<Map<String, dynamic>> networkSorunGiderme(String tarayiciAdi) async {
+    try {
+      final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+        'networkTroubleshooting',
+        {'scannerName': tarayiciAdi},
+      );
+
+      return result.cast<String, dynamic>();
+    } on PlatformException catch (e) {
+      _debugPrint('Network sorun giderme hatası: ${e.message}');
+
+      // Temel sorun giderme bilgileri
+      return {
+        'wifiConnected': false,
+        'scannerReachable': false,
+        'signalStrength': 0,
+        'latency': -1,
+        'suggestedActions': [
+          'WiFi bağlantınızı kontrol edin',
+          'Tarayıcının WiFi ağına bağlı olduğundan emin olun',
+          'Tarayıcıyı yeniden başlatın',
+          'Router\'ı yeniden başlatın',
+          'Tarayıcı IP adresini kontrol edin',
+        ],
+        'errorDetails': e.message,
+      };
+    }
+  }
+
+  /// Local network'te tarayıcı ara (IP range scanning)
+  Future<List<String>> localNetworkTarayiciAra() async {
+    try {
+      final List<dynamic> result = await _channel.invokeMethod(
+        'scanLocalNetwork',
+      );
+      return result.cast<String>();
+    } on PlatformException catch (e) {
+      _debugPrint('Local network tarayıcı arama hatası: ${e.message}');
+      return [];
+    }
+  }
+
   /// Özel tarama ayarları ile belge tara
   Future<String?> gelismisImageTara({
     required String tarayiciAdi,

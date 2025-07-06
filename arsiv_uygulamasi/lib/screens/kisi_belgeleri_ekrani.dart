@@ -46,7 +46,7 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
     });
 
     try {
-      final belgeler = await _veriTabani.kisiBelyeleriniGetir(widget.kisi.id!);
+      final belgeler = await _veriTabani.kisiBelgeleriniGetir(widget.kisi.id!);
       final kategoriler = await _veriTabani.kategorileriGetir();
 
       setState(() {

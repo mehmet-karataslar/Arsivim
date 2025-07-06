@@ -35,6 +35,21 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
+
+# Network and WIA libraries for scanner functionality
+target_link_libraries(${BINARY_NAME} PRIVATE 
+  "ws2_32.lib"      # Windows Socket API
+  "iphlpapi.lib"    # Network interface detection
+  "netapi32.lib"    # Network management
+  "rpcrt4.lib"      # UUID generation
+  "ole32.lib"       # COM libraries
+  "oleaut32.lib"    # COM automation
+  "wiaservc.lib"    # WIA service
+  "wiaguid.lib"     # WIA GUIDs
+  "shlwapi.lib"     # Shell and common controls
+  "dnsapi.lib"      # DNS API
+)
+
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
