@@ -304,6 +304,8 @@ class _SplashScreenState extends State<SplashScreen>
                   AnimatedBuilder(
                     animation: _mainController,
                     builder: (context, child) {
+                      return LayoutBuilder(
+                        builder: (context, constraints) {
                       return Transform.scale(
                         scale: _logoScaleAnimation.value,
                         child: Transform.rotate(
@@ -338,6 +340,8 @@ class _SplashScreenState extends State<SplashScreen>
                             ),
                           ),
                         ),
+                          );
+                        },
                       );
                     },
                   ),

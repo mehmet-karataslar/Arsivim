@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/kategori_modeli.dart';
 import '../widgets/renk_secici_widget.dart';
 import '../widgets/simge_secici_widget.dart';
+import '../services/log_servisi.dart';
 
 class KategoriFormDialog extends StatefulWidget {
   final KategoriModeli? kategori; // null ise yeni kategori, değilse düzenleme
@@ -16,6 +17,7 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   late TabController _tabController;
+  final LogServisi _logServisi = LogServisi.instance;
 
   // Form kontrolleri
   final _kategoriAdiController = TextEditingController();
@@ -298,8 +300,8 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
       return;
     }
 
-    print('DEBUG: Kategori adı: "$kategoriAdi"');
-    print('DEBUG: Kategori adı boş mu: ${kategoriAdi.isEmpty}');
+    _logServisi.debug('Kategori adı: "$kategoriAdi"');
+    _logServisi.debug('Kategori adı boş mu: ${kategoriAdi.isEmpty}');
 
     final kategori = KategoriModeli(
       id: widget.kategori?.id,
@@ -313,7 +315,7 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
       olusturmaTarihi: widget.kategori?.olusturmaTarihi ?? DateTime.now(),
     );
 
-    print('DEBUG: Kategori toMap: ${kategori.toMap()}');
+    _logServisi.debug('Kategori toMap: ${kategori.toMap()}');
     Navigator.of(context).pop(kategori);
   }
 

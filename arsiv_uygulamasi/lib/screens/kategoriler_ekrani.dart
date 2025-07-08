@@ -77,7 +77,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
       }
 
       final kategoriBelgeSayilari =
-      await _veriTabaniServisi.kategoriBelgeSayilari();
+          await _veriTabaniServisi.kategoriBelgeSayilari();
 
       for (var kategori in kategoriler) {
         kategori.belgeSayisi = kategoriBelgeSayilari[kategori.id] ?? 0;
@@ -107,21 +107,24 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
   }
 
   List<KategoriModeli> get _filtrelenmisKategoriler {
-    var liste = _kategoriler.where((kategori) {
-      return kategori.kategoriAdi
-          .toLowerCase()
-          .contains(_aramaMetni.toLowerCase());
-    }).toList();
+    var liste =
+        _kategoriler.where((kategori) {
+          return kategori.kategoriAdi.toLowerCase().contains(
+            _aramaMetni.toLowerCase(),
+          );
+        }).toList();
 
     switch (_seciliSiralama) {
       case 'ad':
         liste.sort((a, b) => a.kategoriAdi.compareTo(b.kategoriAdi));
         break;
       case 'belge_sayisi':
-        liste.sort((a, b) => (b.belgeSayisi ?? 0).compareTo(a.belgeSayisi ?? 0));
+        liste.sort(
+          (a, b) => (b.belgeSayisi ?? 0).compareTo(a.belgeSayisi ?? 0),
+        );
         break;
       case 'tarih':
-      // En yeni eklenen önce (ID'ye göre)
+        // En yeni eklenen önce (ID'ye göre)
         liste.sort((a, b) => (b.id ?? 0).compareTo(a.id ?? 0));
         break;
     }
@@ -137,11 +140,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.indigo[50]!,
-              Colors.purple[50]!,
-              Colors.pink[50]!,
-            ],
+            colors: [Colors.indigo[50]!, Colors.purple[50]!, Colors.pink[50]!],
           ),
         ),
         child: CustomScrollView(
@@ -196,10 +195,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
           ),
         ),
       ),
-      actions: [
-        _buildGorunumDegistirButonu(),
-        _buildMenuButonu(),
-      ],
+      actions: [_buildGorunumDegistirButonu(), _buildMenuButonu()],
     );
   }
 
@@ -236,35 +232,42 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: PopupMenuButton<String>(
-        onSelected: _menuSecimYap,
-        icon: const Icon(Icons.more_vert, color: Colors.white),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        itemBuilder: (context) => [
-          _buildMenuOgesi(
-            'toplu_sil',
-            'Toplu Silme İşlemleri',
-            Icons.delete_sweep_rounded,
-            Colors.orange[600]!,
-          ),
-          const PopupMenuDivider(),
-          _buildMenuOgesi(
-            'reset_db',
-            'Veritabanını Sıfırla',
-            Icons.refresh_rounded,
-            Colors.red[600]!,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return PopupMenuButton<String>(
+            onSelected: _menuSecimYap,
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            itemBuilder:
+                (context) => [
+                  _buildMenuOgesi(
+                    'toplu_sil',
+                    'Toplu Silme İşlemleri',
+                    Icons.delete_sweep_rounded,
+                    Colors.orange[600]!,
+                  ),
+                  const PopupMenuDivider(),
+                  _buildMenuOgesi(
+                    'reset_db',
+                    'Veritabanını Sıfırla',
+                    Icons.refresh_rounded,
+                    Colors.red[600]!,
+                  ),
+                ],
+          );
+        },
       ),
     );
   }
 
   PopupMenuItem<String> _buildMenuOgesi(
-      String value,
-      String text,
-      IconData icon,
-      Color color,
-      ) {
+    String value,
+    String text,
+    IconData icon,
+    Color color,
+  ) {
     return PopupMenuItem(
       value: value,
       child: Container(
@@ -280,10 +283,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
               child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(width: 12),
-            Text(
-              text,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+            Text(text, style: const TextStyle(fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -322,13 +322,20 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                 decoration: InputDecoration(
                   hintText: 'Kategori ara...',
                   hintStyle: TextStyle(color: Colors.grey[500]),
-                  prefixIcon: Icon(Icons.search_rounded, color: Colors.grey[500]),
-                  suffixIcon: _aramaMetni.isNotEmpty
-                      ? IconButton(
-                    onPressed: () => setState(() => _aramaMetni = ''),
-                    icon: Icon(Icons.clear_rounded, color: Colors.grey[500]),
-                  )
-                      : null,
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: Colors.grey[500],
+                  ),
+                  suffixIcon:
+                      _aramaMetni.isNotEmpty
+                          ? IconButton(
+                            onPressed: () => setState(() => _aramaMetni = ''),
+                            icon: Icon(
+                              Icons.clear_rounded,
+                              color: Colors.grey[500],
+                            ),
+                          )
+                          : null,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 20,
@@ -357,11 +364,23 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _buildSiralamaChip('ad', 'A-Z', Icons.sort_by_alpha_rounded),
+                        _buildSiralamaChip(
+                          'ad',
+                          'A-Z',
+                          Icons.sort_by_alpha_rounded,
+                        ),
                         const SizedBox(width: 8),
-                        _buildSiralamaChip('belge_sayisi', 'Belge Sayısı', Icons.description_rounded),
+                        _buildSiralamaChip(
+                          'belge_sayisi',
+                          'Belge Sayısı',
+                          Icons.description_rounded,
+                        ),
                         const SizedBox(width: 8),
-                        _buildSiralamaChip('tarih', 'En Yeni', Icons.access_time_rounded),
+                        _buildSiralamaChip(
+                          'tarih',
+                          'En Yeni',
+                          Icons.access_time_rounded,
+                        ),
                       ],
                     ),
                   ),
@@ -382,9 +401,12 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          gradient: secili
-              ? LinearGradient(colors: [Colors.indigo[400]!, Colors.purple[400]!])
-              : null,
+          gradient:
+              secili
+                  ? LinearGradient(
+                    colors: [Colors.indigo[400]!, Colors.purple[400]!],
+                  )
+                  : null,
           color: secili ? null : Colors.grey[100],
           borderRadius: BorderRadius.circular(12),
           border: secili ? null : Border.all(color: Colors.grey[300]!),
@@ -436,9 +458,10 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
             ),
             const SizedBox(height: 24),
             ShaderMask(
-              shaderCallback: (bounds) => LinearGradient(
-                colors: [Colors.indigo[600]!, Colors.purple[600]!],
-              ).createShader(bounds),
+              shaderCallback:
+                  (bounds) => LinearGradient(
+                    colors: [Colors.indigo[600]!, Colors.purple[600]!],
+                  ).createShader(bounds),
               child: const Text(
                 'Kategoriler yükleniyor...',
                 style: TextStyle(
@@ -456,7 +479,10 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
 
   Widget _buildIstatistiklerSliver() {
     final toplamKategori = _kategoriler.length;
-    final toplamBelge = _kategoriler.fold(0, (sum, k) => sum + (k.belgeSayisi ?? 0));
+    final toplamBelge = _kategoriler.fold(
+      0,
+      (sum, k) => sum + (k.belgeSayisi ?? 0),
+    );
     final filtrelenmisKategoriler = _filtrelenmisKategoriler;
 
     return SliverToBoxAdapter(
@@ -489,7 +515,9 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                 Expanded(
                   child: _buildIstatistikKarti(
                     'Ortalama',
-                    toplamKategori > 0 ? '${(toplamBelge / toplamKategori).toStringAsFixed(1)}' : '0',
+                    toplamKategori > 0
+                        ? '${(toplamBelge / toplamKategori).toStringAsFixed(1)}'
+                        : '0',
                     Icons.analytics_rounded,
                     [Colors.orange[400]!, Colors.orange[600]!],
                   ),
@@ -503,11 +531,11 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
   }
 
   Widget _buildIstatistikKarti(
-      String baslik,
-      String deger,
-      IconData icon,
-      List<Color> gradientColors,
-      ) {
+    String baslik,
+    String deger,
+    IconData icon,
+    List<Color> gradientColors,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -583,10 +611,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
               const SizedBox(height: 12),
               Text(
                 'İlk kategorinizi eklemek için + butonuna tıklayın',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -609,26 +634,20 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
-          delegate: SliverChildBuilderDelegate(
-                (context, index) {
-              final kategori = filtrelenmisKategoriler[index];
-              return _buildGridKarti(kategori, index);
-            },
-            childCount: filtrelenmisKategoriler.length,
-          ),
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final kategori = filtrelenmisKategoriler[index];
+            return _buildGridKarti(kategori, index);
+          }, childCount: filtrelenmisKategoriler.length),
         ),
       );
     } else {
       return SliverPadding(
         padding: const EdgeInsets.all(16),
         sliver: SliverList(
-          delegate: SliverChildBuilderDelegate(
-                (context, index) {
-              final kategori = filtrelenmisKategoriler[index];
-              return _buildListeKarti(kategori, index);
-            },
-            childCount: filtrelenmisKategoriler.length,
-          ),
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final kategori = filtrelenmisKategoriler[index];
+            return _buildListeKarti(kategori, index);
+          }, childCount: filtrelenmisKategoriler.length),
         ),
       );
     }
@@ -641,14 +660,12 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
         position: Tween<Offset>(
           begin: const Offset(0, 0.5),
           end: Offset.zero,
-        ).animate(CurvedAnimation(
-          parent: _animationController,
-          curve: Interval(
-            index * 0.1,
-            1.0,
-            curve: Curves.easeOut,
+        ).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Interval(index * 0.1, 1.0, curve: Curves.easeOut),
           ),
-        )),
+        ),
         child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -740,14 +757,12 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
         position: Tween<Offset>(
           begin: const Offset(-0.5, 0),
           end: Offset.zero,
-        ).animate(CurvedAnimation(
-          parent: _animationController,
-          curve: Interval(
-            index * 0.1,
-            1.0,
-            curve: Curves.easeOut,
+        ).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Interval(index * 0.1, 1.0, curve: Curves.easeOut),
           ),
-        )),
+        ),
         child: Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -771,7 +786,8 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
             onLongPress: () => _kategoriDuzenle(kategori),
             onDuzenle: () => _kategoriDuzenle(kategori),
             onSil: () => _kategoriSil(kategori),
-            onSilmeSecimi: (secimTipi) => _hizliSilmeSecimi(secimTipi, kategori),
+            onSilmeSecimi:
+                (secimTipi) => _hizliSilmeSecimi(secimTipi, kategori),
           ),
         ),
       ),
@@ -802,10 +818,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
           icon: const Icon(Icons.add_rounded, color: Colors.white),
           label: const Text(
             'Kategori Ekle',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -960,10 +973,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
           const SizedBox(height: 20),
           const Text(
             'Hangi verileri silmek istiyorsunuz?',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           _buildSilmeSecenegi(
@@ -1001,12 +1011,12 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
   }
 
   Widget _buildSilmeSecenegi(
-      String value,
-      String baslik,
-      String aciklama,
-      IconData icon,
-      List<Color> gradient,
-      ) {
+    String value,
+    String baslik,
+    String aciklama,
+    IconData icon,
+    List<Color> gradient,
+  ) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: gradient),
@@ -1075,19 +1085,22 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
     switch (secim) {
       case 'kisiler':
         baslik = 'Kişileri Sil';
-        mesaj = '${kategori.kategoriAdi} kategorisindeki kişiler silinecek. Emin misiniz?';
+        mesaj =
+            '${kategori.kategoriAdi} kategorisindeki kişiler silinecek. Emin misiniz?';
         gradient = [Colors.orange[400]!, Colors.orange[600]!];
         icon = Icons.person_remove;
         break;
       case 'belgeler':
         baslik = 'Belgeleri Sil';
-        mesaj = '${kategori.kategoriAdi} kategorisindeki belgeler silinecek. Emin misiniz?';
+        mesaj =
+            '${kategori.kategoriAdi} kategorisindeki belgeler silinecek. Emin misiniz?';
         gradient = [Colors.blue[400]!, Colors.blue[600]!];
         icon = Icons.delete_sweep;
         break;
       case 'hepsi':
         baslik = 'Hepsini Sil';
-        mesaj = '${kategori.kategoriAdi} kategorisindeki hem kişiler hem belgeler silinecek. Emin misiniz?';
+        mesaj =
+            '${kategori.kategoriAdi} kategorisindeki hem kişiler hem belgeler silinecek. Emin misiniz?';
         gradient = [Colors.red[400]!, Colors.red[600]!];
         icon = Icons.delete_forever;
         break;
@@ -1095,86 +1108,89 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
 
     return await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: gradient),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(
-                baslik,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              mesaj,
-              style: const TextStyle(fontSize: 16),
+      builder:
+          (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-            const SizedBox(height: 20),
-            Container(
+            title: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [gradient[0].withOpacity(0.1), gradient[1].withOpacity(0.1)],
-                ),
+                gradient: LinearGradient(colors: gradient),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: gradient[1].withOpacity(0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: gradient[1], size: 24),
+                  Icon(icon, color: Colors.white),
                   const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Bu işlem geri alınamaz!',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                  Text(
+                    baslik,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('İptal'),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              borderRadius: BorderRadius.circular(8),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(mesaj, style: const TextStyle(fontSize: 16)),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        gradient[0].withOpacity(0.1),
+                        gradient[1].withOpacity(0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: gradient[1].withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: gradient[1], size: 24),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Bu işlem geri alınamaz!',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            child: TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Sil',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('İptal'),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: gradient),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text(
+                    'Sil',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -1190,14 +1206,20 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
     }
   }
 
-  Future<void> _silmeIsleminiGerceklestir(String secim, KategoriModeli kategori) async {
+  Future<void> _silmeIsleminiGerceklestir(
+    String secim,
+    KategoriModeli kategori,
+  ) async {
     switch (secim) {
       case 'kisiler':
-        final silinenKisiSayisi = await _veriTabaniServisi.kategoriKisileriSil(kategori.id!);
+        final silinenKisiSayisi = await _veriTabaniServisi.kategoriKisileriSil(
+          kategori.id!,
+        );
         _basariGoster('$silinenKisiSayisi kişi başarıyla silindi');
         break;
       case 'belgeler':
-        final silinenBelgeSayisi = await _veriTabaniServisi.kategoriBelgeleriSil(kategori.id!);
+        final silinenBelgeSayisi = await _veriTabaniServisi
+            .kategoriBelgeleriSil(kategori.id!);
         _basariGoster('$silinenBelgeSayisi belge başarıyla silindi');
         break;
       case 'hepsi':
@@ -1270,15 +1292,16 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
             ),
             child: Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.red[600], size: 24),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.red[600],
+                  size: 24,
+                ),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
                     'Bu işlem geri alınamaz ve tüm verileri kalıcı olarak siler!',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ),
               ],
@@ -1355,10 +1378,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
         children: [
           const Text(
             'Tüm kategorilerdeki verileri silmek istediğiniz alanları seçin:',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 20),
           _buildTopluSilmeSecenegi(
@@ -1401,10 +1421,7 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                 const Expanded(
                   child: Text(
                     'Bu işlemler geri alınamaz ve tüm kategorileri etkiler!',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                 ),
               ],
@@ -1422,12 +1439,12 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
   }
 
   Widget _buildTopluSilmeSecenegi(
-      String value,
-      String baslik,
-      String aciklama,
-      IconData icon,
-      List<Color> gradient,
-      ) {
+    String value,
+    String baslik,
+    String aciklama,
+    IconData icon,
+    List<Color> gradient,
+  ) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: gradient),
@@ -1496,19 +1513,22 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
     switch (secim) {
       case 'tum_kisiler':
         baslik = 'Tüm Kişileri Sil';
-        mesaj = 'Tüm kategorilerdeki kişiler silinecek. Bu işlem geri alınamaz!';
+        mesaj =
+            'Tüm kategorilerdeki kişiler silinecek. Bu işlem geri alınamaz!';
         gradient = [Colors.orange[400]!, Colors.orange[600]!];
         icon = Icons.person_remove;
         break;
       case 'tum_belgeler':
         baslik = 'Tüm Belgeleri Sil';
-        mesaj = 'Tüm kategorilerdeki belgeler silinecek. Bu işlem geri alınamaz!';
+        mesaj =
+            'Tüm kategorilerdeki belgeler silinecek. Bu işlem geri alınamaz!';
         gradient = [Colors.blue[400]!, Colors.blue[600]!];
         icon = Icons.delete_sweep;
         break;
       case 'tum_veriler':
         baslik = 'Tüm Verileri Sil';
-        mesaj = 'Tüm kategorilerdeki kişiler ve belgeler silinecek. Bu işlem geri alınamaz!';
+        mesaj =
+            'Tüm kategorilerdeki kişiler ve belgeler silinecek. Bu işlem geri alınamaz!';
         gradient = [Colors.red[400]!, Colors.red[600]!];
         icon = Icons.delete_forever;
         break;
@@ -1516,86 +1536,89 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
 
     final onay = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: gradient),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(
-                baslik,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              mesaj,
-              style: const TextStyle(fontSize: 16),
+      builder:
+          (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-            const SizedBox(height: 20),
-            Container(
+            title: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [gradient[0].withOpacity(0.1), gradient[1].withOpacity(0.1)],
-                ),
+                gradient: LinearGradient(colors: gradient),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: gradient[1].withOpacity(0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: gradient[1], size: 24),
+                  Icon(icon, color: Colors.white),
                   const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Bu işlem TÜM kategorileri etkiler ve geri alınamaz!',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                  Text(
+                    baslik,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('İptal'),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              borderRadius: BorderRadius.circular(8),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(mesaj, style: const TextStyle(fontSize: 16)),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        gradient[0].withOpacity(0.1),
+                        gradient[1].withOpacity(0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: gradient[1].withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: gradient[1], size: 24),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Bu işlem TÜM kategorileri etkiler ve geri alınamaz!',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            child: TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Sil',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('İptal'),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: gradient),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text(
+                    'Sil',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (onay == true) {
@@ -1613,7 +1636,8 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
       switch (secim) {
         case 'tum_kisiler':
           for (final kategori in _kategoriler) {
-            final silinenKisiSayisi = await _veriTabaniServisi.kategoriKisileriSil(kategori.id!);
+            final silinenKisiSayisi = await _veriTabaniServisi
+                .kategoriKisileriSil(kategori.id!);
             toplamKisiSayisi += silinenKisiSayisi;
           }
           _basariGoster('Toplam $toplamKisiSayisi kişi başarıyla silindi');
@@ -1621,7 +1645,8 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
 
         case 'tum_belgeler':
           for (final kategori in _kategoriler) {
-            final silinenBelgeSayisi = await _veriTabaniServisi.kategoriBelgeleriSil(kategori.id!);
+            final silinenBelgeSayisi = await _veriTabaniServisi
+                .kategoriBelgeleriSil(kategori.id!);
             toplamBelgeSayisi += silinenBelgeSayisi;
           }
           _basariGoster('Toplam $toplamBelgeSayisi belge başarıyla silindi');
@@ -1629,7 +1654,9 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
 
         case 'tum_veriler':
           for (final kategori in _kategoriler) {
-            final sonuc = await _veriTabaniServisi.kategoriHepsiniSil(kategori.id!);
+            final sonuc = await _veriTabaniServisi.kategoriHepsiniSil(
+              kategori.id!,
+            );
             toplamKisiSayisi += sonuc['kisiSayisi'] ?? 0;
             toplamBelgeSayisi += sonuc['belgeSayisi'] ?? 0;
           }

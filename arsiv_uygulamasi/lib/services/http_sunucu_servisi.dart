@@ -105,7 +105,7 @@ class HttpSunucuServisi {
       _sunucu = await HttpServer.bind(InternetAddress.anyIPv4, SUNUCU_PORTU);
       print('Arsivim HTTP Sunucusu baslatildi: http://localhost:$SUNUCU_PORTU');
 
-      // IP adresini debug
+      // IP adresi alındı
       final realIP = await getRealIPAddress();
       print('🌐 Gerçek IP adresi: $realIP');
 
@@ -274,8 +274,9 @@ class HttpSunucuServisi {
   }
 
   Future<void> sunucuyuDurdur() async {
-    if (_sunucu != null) {
-      await _sunucu!.close();
+    final sunucu = _sunucu;
+    if (sunucu != null) {
+      await sunucu.close();
       _sunucu = null;
       _calisiyorMu = false;
       _bagliCihazlar.clear();
@@ -318,7 +319,8 @@ class HttpSunucuServisi {
       }
 
       // Cihaz ID'sini hash'le (guvenlik icin)
-      final bytes = utf8.encode(_cihazId!);
+      final cihazId = _cihazId ?? 'unknown-device';
+      final bytes = utf8.encode(cihazId);
       final digest = sha256.convert(bytes);
       _cihazId = digest.toString().substring(0, 16);
     } catch (e) {

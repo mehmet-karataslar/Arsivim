@@ -5,6 +5,7 @@ import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/belge_islemleri_servisi.dart';
+import '../services/log_servisi.dart';
 import '../widgets/arama_sonuclari_widget.dart';
 import '../utils/screen_utils.dart';
 import 'yeni_belge_ekle_ekrani.dart';
@@ -20,6 +21,7 @@ class BelgelerEkrani extends StatefulWidget {
 class _BelgelerEkraniState extends State<BelgelerEkrani> {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final BelgeIslemleriServisi _belgeIslemleri = BelgeIslemleriServisi();
+  final LogServisi _logServisi = LogServisi.instance;
 
   List<BelgeModeli> _tumBelgeler = [];
   List<BelgeModeli> _filtrelenmsBelgeler = [];
@@ -142,7 +144,9 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   }
 
   Future<void> _verileriYukle() async {
-    print('DEBUG: _verileriYukle() çağrıldı, kategori ID: $_mevcutKategoriId');
+    _logServisi.debug(
+      'Belgeler ekranı verileri yükleniyor, kategori ID: $_mevcutKategoriId',
+    );
     setState(() {
       _yukleniyor = true;
     });
@@ -150,22 +154,24 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
     try {
       List<Map<String, dynamic>> detayliBelgeler;
       if (_mevcutKategoriId != null) {
-        print(
-          'DEBUG: Kategori ID: $_mevcutKategoriId ile belgeler getiriliyor',
+        _logServisi.debug(
+          'Kategori ID: $_mevcutKategoriId ile belgeler getiriliyor',
         );
         detayliBelgeler = await _veriTabani.kategoriyeGoreBelgeleriDetayliGetir(
           _mevcutKategoriId!,
           baslangicTarihi: _baslangicTarihi,
           bitisTarihi: _bitisTarihi,
         );
-        print('DEBUG: Kategoriye ait ${detayliBelgeler.length} belge bulundu');
+        _logServisi.debug(
+          'Kategoriye ait ${detayliBelgeler.length} belge bulundu',
+        );
       } else {
-        print('DEBUG: Tüm belgeler getiriliyor');
+        _logServisi.debug('Tüm belgeler getiriliyor');
         detayliBelgeler = await _veriTabani.belgeleriDetayliGetir(
           baslangicTarihi: _baslangicTarihi,
           bitisTarihi: _bitisTarihi,
         );
-        print('DEBUG: Toplam ${detayliBelgeler.length} belge bulundu');
+        _logServisi.debug('Toplam ${detayliBelgeler.length} belge bulundu');
       }
 
       final kategoriler = await _veriTabani.kategorileriGetir();
@@ -243,17 +249,17 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
   }
 
   void _belgeleriFiltrele() async {
-    print('DEBUG: _belgeleriFiltrele() çağrıldı');
-    print('DEBUG: Arama metni: "$_aramaMetni"');
-    print('DEBUG: Kategori ID: $_mevcutKategoriId');
-    print('DEBUG: Başlangıç: $_baslangicTarihi, Bitiş: $_bitisTarihi');
+    _logServisi.debug('Belgeler filtreleniyor');
+    _logServisi.debug('Arama metni: "$_aramaMetni"');
+    _logServisi.debug('Kategori ID: $_mevcutKategoriId');
+    _logServisi.debug('Başlangıç: $_baslangicTarihi, Bitiş: $_bitisTarihi');
 
     // Veritabanı seviyesinde filtreleme yap
     try {
       List<BelgeModeli> filtrelenmsBelgeler;
 
       if (_aramaMetni.isNotEmpty || _secilenAy != null || _secilenYil != null) {
-        print('DEBUG: Gelişmiş arama kullanılıyor');
+        _logServisi.debug('Gelişmiş arama kullanılıyor');
         // Gelişmiş arama kullan
         filtrelenmsBelgeler = await _veriTabani.belgeAramaDetayli(
           aramaMetni: _aramaMetni.isNotEmpty ? _aramaMetni : null,
@@ -262,25 +268,27 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
           kategoriId: _mevcutKategoriId,
         );
       } else {
-        print('DEBUG: Basit filtreleme kullanılıyor');
+        _logServisi.debug('Basit filtreleme kullanılıyor');
         // Filtresiz tüm belgeler
         filtrelenmsBelgeler = List.from(_tumBelgeler);
-        print('DEBUG: Toplam belge sayısı: ${filtrelenmsBelgeler.length}');
+        _logServisi.debug('Toplam belge sayısı: ${filtrelenmsBelgeler.length}');
 
         // Eğer kategori filtresi varsa uygula
         if (_mevcutKategoriId != null) {
-          print('DEBUG: Kategori filtresi uygulanıyor');
+          _logServisi.debug('Kategori filtresi uygulanıyor');
           filtrelenmsBelgeler =
               filtrelenmsBelgeler
                   .where((belge) => belge.kategoriId == _mevcutKategoriId)
                   .toList();
-          print(
-            'DEBUG: Kategori filtresi sonrası: ${filtrelenmsBelgeler.length}',
+          _logServisi.debug(
+            'Kategori filtresi sonrası: ${filtrelenmsBelgeler.length}',
           );
         }
       }
 
-      print('DEBUG: Filtreleme sonucu: ${filtrelenmsBelgeler.length} belge');
+      _logServisi.debug(
+        'Filtreleme sonucu: ${filtrelenmsBelgeler.length} belge',
+      );
       setState(() {
         _filtrelenmsBelgeler = filtrelenmsBelgeler;
       });

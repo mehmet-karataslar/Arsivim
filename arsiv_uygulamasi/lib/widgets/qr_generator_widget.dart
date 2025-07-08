@@ -178,7 +178,9 @@ class _QRGeneratorWidgetState extends State<QRGeneratorWidget>
               decoration: BoxDecoration(
                 color: Colors.green[50],
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.green[200]!),
+                border: Border.all(
+                  color: Colors.green[200] ?? Colors.green.withOpacity(0.3),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

@@ -175,10 +175,10 @@ class VeriTabaniServisi {
   }
 
   Future<void> _performMigration(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
+      Database db,
+      int oldVersion,
+      int newVersion,
+      ) async {
     if (oldVersion < 2) {
       // Kişiler tablosunu ekle
       await db.execute('''
@@ -418,7 +418,7 @@ class VeriTabaniServisi {
 
   Future<void> _insertDefaultCategories(Database db) async {
     List<KategoriModeli> defaultCategories =
-        KategoriModeli.ontanimliKategoriler();
+    KategoriModeli.ontanimliKategoriler();
 
     for (KategoriModeli kategori in defaultCategories) {
       await db.insert('kategoriler', kategori.toMap());
@@ -427,7 +427,7 @@ class VeriTabaniServisi {
 
   Future<void> _ensureDefaultCategories(Database db) async {
     List<KategoriModeli> defaultCategories =
-        KategoriModeli.ontanimliKategoriler();
+    KategoriModeli.ontanimliKategoriler();
 
     // Mevcut kategori adlarını al
     final existingMaps = await db.query(
@@ -438,7 +438,7 @@ class VeriTabaniServisi {
     );
 
     Set<String> existingNames =
-        existingMaps.map((map) => map['kategori_adi'] as String).toSet();
+    existingMaps.map((map) => map['kategori_adi'] as String).toSet();
 
     print('Mevcut kategori adları: $existingNames');
 
@@ -623,10 +623,10 @@ class VeriTabaniServisi {
 
   // Kategori ID'ye göre belgeleri getir
   Future<List<BelgeModeli>> kategoriyeGoreBelgeleriGetir(
-    int kategoriId, {
-    int? limit,
-    int? offset,
-  }) async {
+      int kategoriId, {
+        int? limit,
+        int? offset,
+      }) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
@@ -644,12 +644,12 @@ class VeriTabaniServisi {
 
   // Belgeleri kategori ve kişi bilgileri ile birlikte getir - JOIN kullanımı
   Future<List<Map<String, dynamic>>> kategoriyeGoreBelgeleriDetayliGetir(
-    int kategoriId, {
-    int? limit,
-    int? offset,
-    DateTime? baslangicTarihi,
-    DateTime? bitisTarihi,
-  }) async {
+      int kategoriId, {
+        int? limit,
+        int? offset,
+        DateTime? baslangicTarihi,
+        DateTime? bitisTarihi,
+      }) async {
     final db = await database;
 
     // WHERE clause'u dinamik olarak oluştur
@@ -1125,10 +1125,10 @@ class VeriTabaniServisi {
 
     // Başka belgelerde kullanılmayan kişileri sil
     final kisiIdleri =
-        belgelerResult
-            .map((e) => e['kisi_id'] as int?)
-            .where((id) => id != null)
-            .toSet();
+    belgelerResult
+        .map((e) => e['kisi_id'] as int?)
+        .where((id) => id != null)
+        .toSet();
 
     int silinenKisiSayisi = 0;
     for (int? kisiId in kisiIdleri) {
@@ -1393,8 +1393,8 @@ class VeriTabaniServisi {
 
   // Senkron durumuna göre belgeleri getir
   Future<List<BelgeModeli>> senkronDurumunaGoreBelgeleriGetir(
-    int senkronDurumu,
-  ) async {
+      int senkronDurumu,
+      ) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
@@ -1445,13 +1445,13 @@ class VeriTabaniServisi {
   }
 
   Future<int> belgeVersiyonKaydet(
-    int belgeId,
-    int versiyonNumarasi,
-    String dosyaHash,
-    String? metadataHash,
-    String? degisiklikAciklamasi,
-    String? olusturanCihaz,
-  ) async {
+      int belgeId,
+      int versiyonNumarasi,
+      String dosyaHash,
+      String? metadataHash,
+      String? degisiklikAciklamasi,
+      String? olusturanCihaz,
+      ) async {
     final db = await database;
     return await db.insert('belge_versiyonlari', {
       'belge_id': belgeId,
@@ -1466,8 +1466,8 @@ class VeriTabaniServisi {
 
   // Son değişiklikleri getir (raporda belirtilen)
   Future<List<Map<String, dynamic>>> sonDegisiklikleriGetir(
-    DateTime since,
-  ) async {
+      DateTime since,
+      ) async {
     final db = await database;
     return await db.query(
       'belgeler',
@@ -1479,12 +1479,12 @@ class VeriTabaniServisi {
 
   // Metadata güncelleme (raporda belirtilen)
   Future<int> metadataGuncelle(
-    int belgeId,
-    String? baslik,
-    String? aciklama,
-    String? etiketler,
-    String? metadataHash,
-  ) async {
+      int belgeId,
+      String? baslik,
+      String? aciklama,
+      String? etiketler,
+      String? metadataHash,
+      ) async {
     final db = await database;
     final guncellemeTarihi = DateTime.now().toIso8601String();
 
@@ -1507,11 +1507,11 @@ class VeriTabaniServisi {
 
   // Sync state kaydet/güncelle
   Future<void> syncStateGuncelle(
-    String dosyaHash,
-    String syncDurumu,
-    String? cihazId,
-    String? metadataHash,
-  ) async {
+      String dosyaHash,
+      String syncDurumu,
+      String? cihazId,
+      String? metadataHash,
+      ) async {
     final db = await database;
     final tarih = DateTime.now().toIso8601String();
 
@@ -1572,13 +1572,13 @@ class VeriTabaniServisi {
 
   // Metadata değişikliği kaydet
   Future<int> metadataDegisikligiKaydet(
-    String entityType,
-    int entityId,
-    String degisiklikTipi,
-    String? eskiDeger,
-    String? yeniDeger,
-    String? cihazId,
-  ) async {
+      String entityType,
+      int entityId,
+      String degisiklikTipi,
+      String? eskiDeger,
+      String? yeniDeger,
+      String? cihazId,
+      ) async {
     final db = await database;
     return await db.insert('metadata_degisiklikleri', {
       'entity_type': entityType,
@@ -1631,8 +1631,8 @@ class VeriTabaniServisi {
 
   // Belgenin tüm versiyonlarını getir
   Future<List<Map<String, dynamic>>> belgeVersiyonlariniGetir(
-    int belgeId,
-  ) async {
+      int belgeId,
+      ) async {
     final db = await database;
     return await db.query(
       'belge_versiyonlari',
@@ -1659,9 +1659,9 @@ class VeriTabaniServisi {
 
   // Belgenin versiyon numarasını güncelle
   Future<void> belgeVersiyonNumarasiniGuncelle(
-    int belgeId,
-    int yeniVersiyon,
-  ) async {
+      int belgeId,
+      int yeniVersiyon,
+      ) async {
     final db = await database;
     await db.update(
       'belgeler',

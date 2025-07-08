@@ -63,7 +63,7 @@ class LogServisi {
       _logFile = File(path.join(logDir.path, Sabitler.LOG_DOSYASI));
 
       // Check file size and rotate if necessary
-      if (await _logFile!.exists()) {
+      if (_logFile != null && await _logFile!.exists()) {
         final fileSize = await _logFile!.length();
         if (fileSize > Sabitler.MAKSIMUM_LOG_BOYUTU) {
           await _rotateLogFile();
@@ -76,16 +76,17 @@ class LogServisi {
 
   /// Log dosyasını döndür
   Future<void> _rotateLogFile() async {
-    if (_logFile == null) return;
+    final logFile = _logFile;
+    if (logFile == null) return;
 
     try {
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final backupPath = _logFile!.path.replaceAll('.txt', '_$timestamp.txt');
+      final backupPath = logFile.path.replaceAll('.txt', '_$timestamp.txt');
 
-      await _logFile!.rename(backupPath);
+      await logFile.rename(backupPath);
 
       // Create new log file
-      _logFile = File(_logFile!.path);
+      _logFile = File(logFile.path);
 
       info('📁 Log dosyası döndürüldü: $backupPath');
     } catch (e) {
@@ -156,7 +157,8 @@ class LogServisi {
 
   /// Dosyaya yaz
   Future<void> _writeToFile(String message) async {
-    if (_logFile == null) return;
+    final logFile = _logFile;
+    if (logFile == null) return;
 
     try {
       // Mobilde dosya yazma işlemini sınırla (performans için)
@@ -166,7 +168,7 @@ class LogServisi {
             message.contains('SEVERE') ||
             message.contains('SYNC:') ||
             message.contains('bağlandı')) {
-          await _logFile!.writeAsString(
+          await logFile.writeAsString(
             '$message\n',
             mode: FileMode.append,
             flush: false, // Mobilde flush'ı kapatarak performance artır
@@ -174,7 +176,7 @@ class LogServisi {
         }
       } else {
         // PC'de tüm log'ları yaz
-        await _logFile!.writeAsString(
+        await logFile.writeAsString(
           '$message\n',
           mode: FileMode.append,
           flush: true,

@@ -7,6 +7,7 @@ import 'veritabani_servisi.dart';
 import 'http_sunucu_servisi.dart';
 import 'dosya_servisi.dart';
 import '../utils/timestamp_manager.dart';
+import '../utils/network_optimizer.dart';
 import '../models/belge_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../models/kategori_modeli.dart';
@@ -23,6 +24,7 @@ class SenkronizasyonYoneticiServisi {
   final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
   final DosyaServisi _dosyaServisi = DosyaServisi();
   final LogServisi _logServisi = LogServisi.instance;
+  final NetworkOptimizer _networkOptimizer = NetworkOptimizer.instance;
 
   // Durumlar
   bool _sunucuCalisiyorMu = false;
@@ -331,25 +333,45 @@ class SenkronizasyonYoneticiServisi {
 
   Future<bool> _testConnection(String ip, int port) async {
     try {
-      print('🔍 Bağlantı testi başlatılıyor: http://$ip:$port/ping');
-      final response = await http
-          .get(
-            Uri.parse('http://$ip:$port/ping'),
-            headers: {'Connection': 'keep-alive'},
-          )
-          .timeout(const Duration(seconds: 5));
+      _logServisi.info('🔍 Bağlantı testi başlatılıyor: http://$ip:$port/ping');
 
-      print('✅ Bağlantı testi sonucu: ${response.statusCode}');
-      return response.statusCode == 200;
+      // Network optimizer ile connection test
+      final networkTestResult = await _networkOptimizer.testConnection(
+        ip,
+        port: port,
+      );
+
+      if (networkTestResult) {
+        _logServisi.info('✅ Bağlantı testi başarılı: $ip:$port');
+        return true;
+      }
+
+      // Fallback: Manual resilient request
+      final response = await _networkOptimizer.resilientRequest(
+        method: 'GET',
+        url: 'http://$ip:$port/ping',
+            headers: {'Connection': 'keep-alive'},
+        maxRetries: 2,
+        timeout: const Duration(seconds: 10),
+      );
+
+      final success = response.statusCode == 200;
+      _logServisi.info(
+        success
+            ? '✅ Bağlantı testi sonucu: ${response.statusCode}'
+            : '❌ Bağlantı testi başarısız: ${response.statusCode}',
+      );
+
+      return success;
     } catch (e) {
-      print('❌ Bağlantı testi başarısız: $e');
+      _logServisi.error('❌ Bağlantı testi başarısız: $e');
       return false;
     }
   }
 
   Future<void> _notifyConnection(String ip, int port, String deviceName) async {
     try {
-      print('📡 $deviceName\'e bağlantı bildirimi gönderiliyor...');
+      _logServisi.info('📡 $deviceName\'e bağlantı bildirimi gönderiliyor...');
 
       final myInfo = {
         'type': 'connection_notification',
@@ -363,25 +385,65 @@ class SenkronizasyonYoneticiServisi {
         'message': 'Yeni cihaz bağlandı',
       };
 
-      print('📋 Gönderilen bilgi: ${json.encode(myInfo)}');
+      _logServisi.info('📋 Gönderilen bilgi: ${json.encode(myInfo)}');
 
-      final response = await http
-          .post(
-            Uri.parse('http://$ip:$port/device-connected'),
+      // Network kalitesini kontrol et
+      final networkQuality = await _networkOptimizer.testNetworkQuality(
+        'http://$ip:$port',
+      );
+
+      if (networkQuality.quality == ConnectionQuality.poor) {
+        _logServisi.warning(
+          '⚠️ Kötü network kalitesi, isteği kuyruğa alınıyor...',
+        );
+
+        // Queue request for poor network conditions
+        final response = await _networkOptimizer.queueRequest(
+          method: 'POST',
+          url: 'http://$ip:$port/device-connected',
             headers: {'Content-Type': 'application/json'},
-            body: json.encode(myInfo),
-          )
-          .timeout(const Duration(seconds: 5));
+          body: myInfo,
+          priority: 1, // High priority
+        );
 
       if (response.statusCode == 200) {
-        print('✅ Bağlantı bildirimi $deviceName\'e gönderildi');
+          _logServisi.info(
+            '✅ Bağlantı bildirimi $deviceName\'e gönderildi (kuyruğa alındı)',
+          );
         final responseData = json.decode(response.body);
-        print('📋 Hedef cihazın cevabı: ${responseData['message']}');
+          _logServisi.info(
+            '📋 Hedef cihazın cevabı: ${responseData['message']}',
+          );
       } else {
-        print('❌ Bağlantı bildirimi hatası: ${response.statusCode}');
+          _logServisi.error(
+            '❌ Bağlantı bildirimi hatası: ${response.statusCode}',
+          );
+        }
+      } else {
+        // Normal resilient request
+        final response = await _networkOptimizer.resilientRequest(
+          method: 'POST',
+          url: 'http://$ip:$port/device-connected',
+          headers: {'Content-Type': 'application/json'},
+          body: myInfo,
+          maxRetries: 3,
+          timeout: const Duration(seconds: 15),
+        );
+
+        if (response.statusCode == 200) {
+          _logServisi.info('✅ Bağlantı bildirimi $deviceName\'e gönderildi');
+          final responseData = json.decode(response.body);
+          _logServisi.info(
+            '📋 Hedef cihazın cevabı: ${responseData['message']}',
+          );
+        } else {
+          _logServisi.error(
+            '❌ Bağlantı bildirimi hatası: ${response.statusCode}',
+          );
+        }
       }
     } catch (e) {
-      print('❌ Bağlantı bildirimi gönderilemedi: $e');
+      _logServisi.error('❌ Bağlantı bildirimi gönderilemedi: $e');
     }
   }
 
@@ -431,6 +493,10 @@ class SenkronizasyonYoneticiServisi {
   Future<void> _notifyDisconnection(Map<String, dynamic> device) async {
     try {
       if (device['ip'] != null && device['ip'] != 'incoming') {
+        _logServisi.info(
+          '📡 Bağlantı kesimi bildirimi gönderiliyor: ${device['name']}',
+        );
+
         final disconnectInfo = {
           'type': 'disconnection_notification',
           'device_id': _httpSunucu.cihazId,
@@ -438,16 +504,22 @@ class SenkronizasyonYoneticiServisi {
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         };
 
-        await http
-            .post(
-              Uri.parse('http://${device['ip']}:8080/device-disconnected'),
+        // Short timeout for disconnection, don't retry too much
+        await _networkOptimizer.resilientRequest(
+          method: 'POST',
+          url: 'http://${device['ip']}:8080/device-disconnected',
               headers: {'Content-Type': 'application/json'},
-              body: json.encode(disconnectInfo),
-            )
-            .timeout(const Duration(seconds: 3));
+          body: disconnectInfo,
+          maxRetries: 1,
+          timeout: const Duration(seconds: 5),
+        );
+
+        _logServisi.info(
+          '✅ Bağlantı kesimi bildirimi gönderildi: ${device['name']}',
+        );
       }
     } catch (e) {
-      print('Bağlantı kesimi bildirimi gönderilemedi: $e');
+      _logServisi.warning('⚠️ Bağlantı kesimi bildirimi gönderilemedi: $e');
     }
   }
 
@@ -622,14 +694,15 @@ class SenkronizasyonYoneticiServisi {
         dependencyPaketi,
       );
 
-      // Hedef cihaza gönder
-      final response = await http
-          .post(
-            Uri.parse('http://$hedefIP:8080/sync/belgeler-kapsamli'),
+      // Hedef cihaza gönder - Network optimizer ile resilient request
+      final response = await _networkOptimizer.resilientRequest(
+        method: 'POST',
+        url: 'http://$hedefIP:8080/sync/belgeler-kapsamli',
             headers: {'Content-Type': 'application/json'},
-            body: json.encode(senkronPaketi),
-          )
-          .timeout(const Duration(seconds: 60));
+        body: senkronPaketi,
+        maxRetries: 3,
+        timeout: const Duration(seconds: 90),
+      );
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
@@ -735,14 +808,15 @@ class SenkronizasyonYoneticiServisi {
         dependencyPaketi,
       );
 
-      // 3. Hedef cihaza gönder
-      final response = await http
-          .post(
-            Uri.parse('http://$hedefIP:8080/sync/belgeler-kapsamli'),
+      // 3. Hedef cihaza gönder - Network optimizer ile resilient request
+      final response = await _networkOptimizer.resilientRequest(
+        method: 'POST',
+        url: 'http://$hedefIP:8080/sync/belgeler-kapsamli',
             headers: {'Content-Type': 'application/json'},
-            body: json.encode(senkronPaketi),
-          )
-          .timeout(const Duration(seconds: 60));
+        body: senkronPaketi,
+        maxRetries: 3,
+        timeout: const Duration(seconds: 90),
+      );
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
@@ -933,16 +1007,17 @@ class SenkronizasyonYoneticiServisi {
 
       final kisilerJson = kisiler.map((kisi) => kisi.toMap()).toList();
 
-      final response = await http
-          .post(
-            Uri.parse('http://$hedefIP:8080/sync/kisiler'),
+      final response = await _networkOptimizer.resilientRequest(
+        method: 'POST',
+        url: 'http://$hedefIP:8080/sync/kisiler',
             headers: {'Content-Type': 'application/json'},
-            body: json.encode({
+        body: {
               'kisiler': kisilerJson,
               'timestamp': DateTime.now().toIso8601String(),
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
+        },
+        maxRetries: 2,
+        timeout: const Duration(seconds: 30),
+      );
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
@@ -991,16 +1066,17 @@ class SenkronizasyonYoneticiServisi {
       final kategorilerJson =
           kategoriler.map((kategori) => kategori.toMap()).toList();
 
-      final response = await http
-          .post(
-            Uri.parse('http://$hedefIP:8080/sync/kategoriler'),
+      final response = await _networkOptimizer.resilientRequest(
+        method: 'POST',
+        url: 'http://$hedefIP:8080/sync/kategoriler',
             headers: {'Content-Type': 'application/json'},
-            body: json.encode({
+        body: {
               'kategoriler': kategorilerJson,
               'timestamp': DateTime.now().toIso8601String(),
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
+        },
+        maxRetries: 2,
+        timeout: const Duration(seconds: 30),
+      );
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);

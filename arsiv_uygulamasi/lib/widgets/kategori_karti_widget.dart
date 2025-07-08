@@ -100,8 +100,7 @@ class KategoriKartiWidget extends StatelessWidget {
                         ),
 
                         // Açıklama (varsa)
-                        if (kategori.aciklama != null &&
-                            kategori.aciklama!.isNotEmpty) ...[
+                        if (kategori.aciklama?.isNotEmpty == true) ...[
                           const SizedBox(height: 4),
                           Text(
                             kategori.aciklama!,
@@ -118,7 +117,9 @@ class KategoriKartiWidget extends StatelessWidget {
                   ),
 
                   // Menü butonu
-                  PopupMenuButton<String>(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      return PopupMenuButton<String>(
                     icon: Icon(Icons.more_vert, color: Colors.grey[600]),
                     onSelected: (value) {
                       switch (value) {
@@ -225,6 +226,8 @@ class KategoriKartiWidget extends StatelessWidget {
                             ),
                           ],
                         ],
+                      );
+                    },
                   ),
                 ],
               ),

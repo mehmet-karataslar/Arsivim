@@ -5,6 +5,7 @@ import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
 import '../services/auth_servisi.dart';
 import '../services/cache_servisi.dart';
+import '../services/log_servisi.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
@@ -35,6 +36,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final DosyaServisi _dosyaServisi = DosyaServisi();
   final CacheServisi _cacheServisi = CacheServisi();
+  final LogServisi _logServisi = LogServisi.instance;
 
   int _toplamBelgeSayisi = 0;
   int _toplamDosyaBoyutu = 0;
@@ -85,7 +87,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
 
     try {
       // Cache'i bypassla ve her zaman gerçek verileri al
-      _debugPrint('Gerçek veriler veritabanından yükleniyor...');
+      _logServisi.info('Ana ekran verileri yükleniyor...');
 
       final futures = await Future.wait([
         _veriTabani.belgeIstatistikleriGetir(),
@@ -109,8 +111,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         _yukleniyor = false;
       });
 
-      _debugPrint(
-        'Gerçek veriler yüklendi: $_toplamBelgeSayisi belge, ${(_toplamDosyaBoyutu / (1024 * 1024)).toStringAsFixed(2)} MB',
+      _logServisi.info(
+        'Ana ekran verileri yüklendi: $_toplamBelgeSayisi belge, ${(_toplamDosyaBoyutu / (1024 * 1024)).toStringAsFixed(2)} MB',
       );
 
       _animationController.forward();
@@ -120,13 +122,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         _yukleniyor = false;
       });
       _hataGoster('Veriler yüklenirken hata oluştu: $e');
-      _debugPrint('Veri yükleme hatası: $e');
-    }
-  }
-
-  void _debugPrint(String message) {
-    if (kDebugMode) {
-      print(message);
+      _logServisi.error('Ana ekran veri yükleme hatası', e);
     }
   }
 

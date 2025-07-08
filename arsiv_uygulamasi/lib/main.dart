@@ -22,12 +22,14 @@ import 'services/senkronizasyon_yonetici_servisi.dart';
 import 'services/log_servisi.dart';
 import 'services/error_handler_servisi.dart';
 import 'services/auth_servisi.dart';
+import 'services/cache_servisi.dart';
 
 // Providers
 import 'providers/app_state_manager.dart';
 
 // Utils
 import 'utils/sabitler.dart';
+import 'utils/network_optimizer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -158,20 +160,32 @@ Future<void> _initializeServices() async {
     await errorHandler.init();
     print('✅ Error handler initialized');
 
-    // 3. Database Service
+    // 3. Cache Service
+    print('💾 Initializing cache service...');
+    final cacheServisi = CacheServisi();
+    await cacheServisi.initialize();
+    print('✅ Cache service initialized');
+
+    // 4. Network Optimizer
+    print('🌐 Initializing network optimizer...');
+    final networkOptimizer = NetworkOptimizer.instance;
+    await networkOptimizer.initialize();
+    print('✅ Network optimizer initialized');
+
+    // 5. Database Service
     print('📁 Initializing database service...');
     final veriTabani = VeriTabaniServisi();
 
     await veriTabani.database; // This triggers initialization
     print('✅ Database service initialized');
 
-    // 4. File Service
+    // 6. File Service
     print('📂 Initializing file service...');
     final dosyaServisi = DosyaServisi();
     // File service is ready to use (singleton pattern)
     print('✅ File service initialized');
 
-    // 5. HTTP Server Service
+    // 7. HTTP Server Service
     print('🌐 Initializing HTTP server...');
     final httpSunucu = HttpSunucuServisi.instance;
 
@@ -185,13 +199,21 @@ Future<void> _initializeServices() async {
     await httpSunucu.sunucuyuBaslat();
     print('✅ HTTP server started successfully');
 
-    // 6. Authentication Service
+    // 8. Authentication Service
     print('🔐 Initializing authentication service...');
     final authServisi = AuthServisi.instance;
     // Auth service is ready to use (singleton pattern)
     print('✅ Authentication service initialized');
 
-    // 7. Synchronization Manager Service
+    // 9. Start Network Monitoring
+    print('📡 Starting network monitoring...');
+    await networkOptimizer.startNetworkMonitoring(
+      interval: const Duration(minutes: 3),
+      testServers: ['http://8.8.8.8', 'http://1.1.1.1'],
+    );
+    print('✅ Network monitoring started');
+
+    // 10. Synchronization Manager Service
     print('🔄 Initializing synchronization manager...');
     final senkronYonetici = SenkronizasyonYoneticiServisi.instance;
     // Synchronization manager is ready to use (singleton pattern)
@@ -234,9 +256,13 @@ class ArsivimApp extends StatelessWidget {
 
       // Error handling
       builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
-          child: child!,
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+              child: child!,
+            );
+          },
         );
       },
     );

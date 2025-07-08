@@ -132,19 +132,19 @@ void FlutterWindow::HandleFindScanners(const flutter::MethodCall<flutter::Encoda
   // Run scanner discovery in background thread to avoid UI blocking
   RunInBackground<std::vector<std::string>>(
     []() -> std::vector<std::string> {
-      char buffer[4096];
-      int length = FindScanners(buffer, sizeof(buffer));
-      
+    char buffer[4096];
+    int length = FindScanners(buffer, sizeof(buffer));
+    
       std::vector<std::string> scanners;
-      if (length > 0) {
-        std::string scanners_str(buffer, length);
-        std::stringstream ss(scanners_str);
-        std::string scanner;
-        while (std::getline(ss, scanner, '|')) {
-          if (!scanner.empty()) {
+    if (length > 0) {
+      std::string scanners_str(buffer, length);
+      std::stringstream ss(scanners_str);
+      std::string scanner;
+      while (std::getline(ss, scanner, '|')) {
+        if (!scanner.empty()) {
             scanners.push_back(scanner);
-          }
         }
+      }
       }
       return scanners;
     },
@@ -158,7 +158,7 @@ void FlutterWindow::HandleFindScanners(const flutter::MethodCall<flutter::Encoda
     },
     [](const std::exception& e) {
       // Error handler will be called by RunInBackground
-    }
+  }
   );
 }
 
@@ -167,10 +167,10 @@ void FlutterWindow::HandleFindWIAScanners(const flutter::MethodCall<flutter::Enc
   // Run WIA scanner discovery in background thread
   RunInBackground<std::string>(
     []() -> std::string {
-      char buffer[4096];
-      int length = FindScanners(buffer, sizeof(buffer));
-      
-      if (length > 0) {
+    char buffer[4096];
+    int length = FindScanners(buffer, sizeof(buffer));
+    
+    if (length > 0) {
         return std::string(buffer, length);
       }
       return "";
@@ -184,49 +184,49 @@ void FlutterWindow::HandleFindWIAScanners(const flutter::MethodCall<flutter::Enc
 
 void FlutterWindow::HandleScanDocument(const flutter::MethodCall<flutter::EncodableValue>& call,
                                        std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
-  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
-  if (!arguments) {
-    result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
-    return;
-  }
-  
-  auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
-  if (scanner_name_it == arguments->end()) {
-    result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
-    return;
-  }
-  
-  std::string scanner_name = std::get<std::string>(scanner_name_it->second);
+    const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+    if (!arguments) {
+      result->Error("INVALID_ARGUMENTS", "Arguments must be a map", flutter::EncodableValue());
+      return;
+    }
+    
+    auto scanner_name_it = arguments->find(flutter::EncodableValue("scannerName"));
+    if (scanner_name_it == arguments->end()) {
+      result->Error("MISSING_ARGUMENT", "scannerName is required", flutter::EncodableValue());
+      return;
+    }
+    
+    std::string scanner_name = std::get<std::string>(scanner_name_it->second);
   
   auto output_format_it = arguments->find(flutter::EncodableValue("outputFormat"));
-  std::string output_format = "pdf";
-  if (output_format_it != arguments->end()) {
-    output_format = std::get<std::string>(output_format_it->second);
-  }
-  
+    std::string output_format = "pdf";
+    if (output_format_it != arguments->end()) {
+      output_format = std::get<std::string>(output_format_it->second);
+    }
+    
   // Run scan operation in background thread with timeout
   RunInBackground<std::string>(
     [scanner_name, output_format]() -> std::string {
-      // Generate output path
-      char temp_path[MAX_PATH];
-      GetTempPathA(MAX_PATH, temp_path);
-      
-      std::time_t now = std::time(nullptr);
-      std::string output_path = std::string(temp_path) + "scanned_document_" + 
-                               std::to_string(now) + "." + output_format;
-      
-      char result_buffer[1024];
-      int length = ScanDocument(scanner_name.c_str(), output_path.c_str(), result_buffer, sizeof(result_buffer));
-      
-      if (length > 0) {
+    // Generate output path
+    char temp_path[MAX_PATH];
+    GetTempPathA(MAX_PATH, temp_path);
+    
+    std::time_t now = std::time(nullptr);
+    std::string output_path = std::string(temp_path) + "scanned_document_" + 
+                             std::to_string(now) + "." + output_format;
+    
+    char result_buffer[1024];
+    int length = ScanDocument(scanner_name.c_str(), output_path.c_str(), result_buffer, sizeof(result_buffer));
+    
+    if (length > 0) {
         return std::string(result_buffer, length);
-      } else if (length == -1) {
-        // Extract error code from buffer
-        std::string error_code(result_buffer);
+    } else if (length == -1) {
+      // Extract error code from buffer
+      std::string error_code(result_buffer);
         throw std::runtime_error(error_code);
       } else {
         throw std::runtime_error("SCAN_FAILED");
-      }
+    }
     },
     std::move(result),
     [](const std::string& result_path) -> flutter::EncodableValue {

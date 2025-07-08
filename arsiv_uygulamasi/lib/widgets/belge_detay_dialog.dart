@@ -82,9 +82,9 @@ class BelgeDetayDialog extends StatelessWidget {
             if (kisi != null) _buildDetayRow('Kişi', kisi!.tamAd),
             if (kategori != null)
               _buildDetayRow('Kategori', kategori!.kategoriAdi),
-            if (belge.aciklama != null && belge.aciklama!.isNotEmpty)
+            if (belge.aciklama?.isNotEmpty == true)
               _buildDetayRow('Açıklama', belge.aciklama!),
-            if (belge.etiketler != null && belge.etiketler!.isNotEmpty)
+            if (belge.etiketler?.isNotEmpty == true)
               _buildDetayRow('Etiketler', belge.etiketler!.join(', ')),
             _buildDetayRow('Dosya Yolu', belge.dosyaYolu, kopyalanabilir: true),
             if (belge.dosyaHash != null)

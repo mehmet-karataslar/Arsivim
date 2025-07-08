@@ -170,11 +170,11 @@ class _SenkronizasyonProgressDialogState
         _buildIlerlemeCarubu(),
         const SizedBox(height: 16),
         _buildAciklama(),
-        if (_mevcut!.detaylar != null) ...[
+        if (_mevcut?.detaylar != null) ...[
           const SizedBox(height: 16),
           _buildDetaylar(),
         ],
-        if (_hata && _mevcut!.hataMesaji != null) ...[
+        if (_hata && _mevcut?.hataMesaji != null) ...[
           const SizedBox(height: 16),
           _buildHataMesaji(),
         ],
@@ -210,11 +210,13 @@ class _SenkronizasyonProgressDialogState
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children:
           asamalar.map((asama) {
+            final mevcutAsama =
+                _mevcut?.asama ?? SenkronizasyonAsamasi.bagimlilikAnaliz;
             final aktif =
-                _getAsamaSirasi(_mevcut!.asama) >=
+                _getAsamaSirasi(mevcutAsama) >=
                 _getAsamaSirasi(asama['asama'] as SenkronizasyonAsamasi);
             final tamamlandi =
-                _getAsamaSirasi(_mevcut!.asama) >
+                _getAsamaSirasi(mevcutAsama) >
                 _getAsamaSirasi(asama['asama'] as SenkronizasyonAsamasi);
 
             return Column(
@@ -274,7 +276,12 @@ class _SenkronizasyonProgressDialogState
   }
 
   Widget _buildIlerlemeCarubu() {
-    if (_mevcut!.toplamIslem == 0) {
+    final mevcut = _mevcut;
+    if (mevcut == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (mevcut.toplamIslem == 0) {
       return LinearProgressIndicator(
         backgroundColor: Colors.grey[300],
         valueColor: AlwaysStoppedAnimation<Color>(
@@ -296,7 +303,7 @@ class _SenkronizasyonProgressDialogState
               ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
             ),
             Text(
-              '${_mevcut!.tamamlananIslem}/${_mevcut!.toplamIslem}',
+              '${mevcut.tamamlananIslem}/${mevcut.toplamIslem}',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w500,
                 color: Colors.grey[600],
@@ -306,7 +313,7 @@ class _SenkronizasyonProgressDialogState
         ),
         const SizedBox(height: 8),
         LinearProgressIndicator(
-          value: _mevcut!.yuzde,
+          value: mevcut.yuzde,
           backgroundColor: Colors.grey[300],
           valueColor: AlwaysStoppedAnimation<Color>(
             _hata ? Colors.red : Colors.blue,
@@ -314,7 +321,7 @@ class _SenkronizasyonProgressDialogState
         ),
         const SizedBox(height: 4),
         Text(
-          '${(_mevcut!.yuzde * 100).toStringAsFixed(1)}%',
+          '${(mevcut.yuzde * 100).toStringAsFixed(1)}%',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
@@ -324,6 +331,11 @@ class _SenkronizasyonProgressDialogState
   }
 
   Widget _buildAciklama() {
+    final mevcut = _mevcut;
+    if (mevcut == null) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -337,7 +349,7 @@ class _SenkronizasyonProgressDialogState
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _mevcut!.aciklama,
+              mevcut.aciklama,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
@@ -347,7 +359,10 @@ class _SenkronizasyonProgressDialogState
   }
 
   Widget _buildDetaylar() {
-    final detaylar = _mevcut!.detaylar!;
+    final detaylar = _mevcut?.detaylar;
+    if (detaylar == null) {
+      return const SizedBox.shrink();
+    }
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -409,6 +424,11 @@ class _SenkronizasyonProgressDialogState
   }
 
   Widget _buildHataMesaji() {
+    final hataMesaji = _mevcut?.hataMesaji;
+    if (hataMesaji == null) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -434,7 +454,7 @@ class _SenkronizasyonProgressDialogState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _mevcut!.hataMesaji!,
+                  hataMesaji,
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: Colors.red[600]),

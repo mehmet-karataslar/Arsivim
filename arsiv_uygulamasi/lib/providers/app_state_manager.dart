@@ -5,6 +5,7 @@ import '../models/kategori_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/log_servisi.dart';
 import '../services/error_handler_servisi.dart';
+import '../services/cache_servisi.dart';
 
 /// Ana uygulama state manager'ı
 class AppStateManager extends ChangeNotifier {
@@ -12,6 +13,7 @@ class AppStateManager extends ChangeNotifier {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final LogServisi _logServisi = LogServisi.instance;
   final ErrorHandlerServisi _errorHandler = ErrorHandlerServisi.instance;
+  final CacheServisi _cacheServisi = CacheServisi();
 
   // Application state
   bool _initialized = false;
@@ -97,8 +99,23 @@ class AppStateManager extends ChangeNotifier {
   /// Belgeleri yükle
   Future<void> loadBelgeler() async {
     try {
+      // Önce cache'ten dene
+      final cachedBelgeler = await _cacheServisi.cachedBelgeleriGetir();
+
+      if (cachedBelgeler != null) {
+        _belgeler = cachedBelgeler;
+        _logServisi.info('⚡ ${_belgeler.length} belge cache\'ten yüklendi');
+      } else {
+        // Cache'te yoksa veritabanından yükle
       _belgeler = await _veriTabani.belgeleriGetir();
-      _logServisi.info('📄 ${_belgeler.length} belge yüklendi');
+        _logServisi.info(
+          '💽 ${_belgeler.length} belge veritabanından yüklendi',
+        );
+
+        // Cache'e kaydet
+        await _cacheServisi.belgeleriCacheEt(_belgeler);
+      }
+
       notifyListeners();
     } catch (e, stackTrace) {
       _errorHandler.handleDatabaseError(
@@ -460,12 +477,19 @@ class AppStateManager extends ChangeNotifier {
       'is_online': _isOnline,
       'sync_in_progress': _syncInProgress,
       'sync_status': _syncStatus,
+      'cache_stats': _cacheServisi.getCacheStats(),
     };
   }
 
   @override
   void dispose() {
     _logServisi.info('🔄 AppStateManager dispose edildi');
+
+    // Cache servisi'ni dispose et
+    _cacheServisi.dispose().catchError((error) {
+      _logServisi.error('❌ Cache servisi dispose hatası: $error');
+    });
+
     super.dispose();
   }
 }
