@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
 import '../services/auth_servisi.dart';
@@ -21,6 +24,7 @@ import 'yedekleme_ekrani.dart';
 import 'senkronizasyon_ekrani.dart';
 import 'auth/login_screen.dart';
 import '../widgets/belge_karti_widget.dart';
+import '../widgets/qr_scanner_widget.dart';
 import 'tarayici_ekrani.dart';
 
 // Ana dashboard ve navigasyon
@@ -58,6 +62,9 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+
+  // Platform kontrolü
+  bool get _isMobilePlatform => Platform.isAndroid || Platform.isIOS;
 
   @override
   void initState() {
@@ -465,6 +472,28 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(width: 8),
+          // QR Login butonu - sadece mobil platformlarda göster
+          if (_isMobilePlatform) ...[
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 5,
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
+                onPressed: _qrLoginTara,
+                tooltip: 'QR ile PC\'ye Giriş',
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // Yenileme butonu - sadece desktop platformlarda göster
           if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
             Container(
@@ -1259,6 +1288,167 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     // Eğer başarılı bir şekilde belge eklendiyse verileri yenile
     if (sonuc == true) {
       _verileriYukle();
+    }
+  }
+
+  Future<void> _qrLoginTara() async {
+    if (!_isMobilePlatform) {
+      ScreenUtils.showErrorSnackBar(
+        context,
+        'QR login sadece mobil cihazlarda kullanılabilir.',
+      );
+      return;
+    }
+
+    try {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => QRScannerScreen(
+                onQRScanned: (qrData) async {
+                  Navigator.pop(context); // Scanner ekranını kapat
+                  await _processQRLogin(qrData);
+                },
+              ),
+        ),
+      );
+    } catch (e) {
+      _logServisi.error('QR scanner açılırken hata: $e');
+      ScreenUtils.showErrorSnackBar(context, 'QR scanner açılamadı.');
+    }
+  }
+
+  Future<void> _processQRLogin(String qrData) async {
+    try {
+      _logServisi.info('QR login verisi işleniyor: $qrData');
+
+      // QR kodunu parse et
+      final qrJson = jsonDecode(qrData);
+
+      if (qrJson['type'] != 'qr_login') {
+        ScreenUtils.showErrorSnackBar(
+          context,
+          'Geçersiz QR kod. Bu bir login QR kodu değil.',
+        );
+        return;
+      }
+
+      final token = qrJson['token'] as String?;
+      final serverIP = qrJson['server_ip'] as String?;
+      final serverPort = qrJson['server_port'] as int?;
+
+      if (token == null || serverIP == null || serverPort == null) {
+        ScreenUtils.showErrorSnackBar(context, 'QR kod eksik bilgi içeriyor.');
+        return;
+      }
+
+      // Mevcut kullanıcı bilgilerini al
+      final currentUser = AuthServisi.instance.currentUser;
+      if (currentUser == null) {
+        ScreenUtils.showErrorSnackBar(context, 'Önce giriş yapmalısınız.');
+        return;
+      }
+
+      _logServisi.info('🔗 PC\'ye bağlanılıyor: $serverIP:$serverPort');
+
+      // Loading göster
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (context) => const AlertDialog(
+              content: Row(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text('PC\'ye bağlanılıyor...'),
+                ],
+              ),
+            ),
+      );
+
+      try {
+        // Önce ping ile bağlantı kontrolü
+        final pingResponse = await http
+            .get(
+              Uri.parse('http://$serverIP:$serverPort/ping'),
+              headers: {'Content-Type': 'application/json'},
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (pingResponse.statusCode != 200) {
+          throw Exception('PC sunucusuna ulaşılamıyor');
+        }
+
+        // PC'ye login isteği gönder - kullanıcı bilgileri ile birlikte
+        final response = await http
+            .post(
+              Uri.parse('http://$serverIP:$serverPort/auth/qr-login'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'kullanici_adi': currentUser.kullaniciAdi,
+                'token': token,
+                'device_id': 'mobile_${DateTime.now().millisecondsSinceEpoch}',
+                'device_name': Platform.isAndroid ? 'Android' : 'iOS',
+                'platform': Platform.operatingSystem,
+                // Kullanıcı bilgilerini ekle
+                'user_info': {
+                  'kullanici_adi': currentUser.kullaniciAdi,
+                  'ad': currentUser.ad,
+                  'soyad': currentUser.soyad,
+                  'kullanici_tipi': currentUser.kullaniciTipi,
+                  'profil_fotografi': currentUser.profilFotografi,
+                  'aktif': currentUser.aktif,
+                  'olusturma_tarihi':
+                      currentUser.olusturmaTarihi.toIso8601String(),
+                },
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
+
+        // Loading kapat
+        Navigator.of(context).pop();
+
+        if (response.statusCode == 200) {
+          final responseData = jsonDecode(response.body);
+          if (responseData['success'] == true) {
+            ScreenUtils.showSuccessSnackBar(
+              context,
+              'PC\'ye başarıyla giriş yapıldı!',
+            );
+            _logServisi.info(
+              '✅ QR login başarılı: ${currentUser.kullaniciAdi}',
+            );
+          } else {
+            ScreenUtils.showErrorSnackBar(
+              context,
+              responseData['error'] ?? 'QR login başarısız.',
+            );
+            _logServisi.error('❌ QR login hatası: ${responseData['error']}');
+          }
+        } else {
+          ScreenUtils.showErrorSnackBar(
+            context,
+            'Sunucu hatası: ${response.statusCode}',
+          );
+          _logServisi.error('❌ HTTP hatası: ${response.statusCode}');
+        }
+      } on TimeoutException {
+        Navigator.of(context).pop(); // Loading kapat
+        ScreenUtils.showErrorSnackBar(
+          context,
+          'PC\'ye bağlantı zaman aşımına uğradı.',
+        );
+        _logServisi.error('❌ QR login timeout');
+      } catch (e) {
+        Navigator.of(context).pop(); // Loading kapat
+        ScreenUtils.showErrorSnackBar(context, 'PC\'ye bağlanılamadı: $e');
+        _logServisi.error('❌ QR login bağlantı hatası: $e');
+      }
+    } catch (e) {
+      _logServisi.error('QR login işleme hatası: $e');
+      ScreenUtils.showErrorSnackBar(context, 'QR login sırasında hata oluştu.');
     }
   }
 

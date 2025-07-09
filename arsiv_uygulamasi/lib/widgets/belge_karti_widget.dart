@@ -3,6 +3,7 @@ import '../models/belge_modeli.dart';
 import '../utils/screen_utils.dart';
 import '../services/belge_islemleri_servisi.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
+import '../widgets/profil_fotografi_widget.dart';
 
 class OptimizedBelgeKartiWidget extends StatefulWidget {
   final BelgeModeli belge;
@@ -433,13 +434,23 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
         color: Colors.grey[200],
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Text(
-        _getKisiAdi()!,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: Colors.grey[800],
-        ),
+      child: Row(
+        children: [
+          ProfilFotografiWidget(
+            profilFotografi: _getKisiFotoUrl(),
+            size: 20,
+            kisininAdi: _getKisiAdi(),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _getKisiAdi()!,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[800],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -558,6 +569,14 @@ class _OptimizedBelgeKartiWidgetState extends State<OptimizedBelgeKartiWidget> {
     final soyad = widget.extraData?['kisi_soyad'];
     if (ad != null && soyad != null) {
       return '$ad $soyad';
+    }
+    return null;
+  }
+
+  String? _getKisiFotoUrl() {
+    final fotoUrl = widget.extraData?['kisi_profil_fotografi'];
+    if (fotoUrl != null && fotoUrl.isNotEmpty) {
+      return fotoUrl;
     }
     return null;
   }

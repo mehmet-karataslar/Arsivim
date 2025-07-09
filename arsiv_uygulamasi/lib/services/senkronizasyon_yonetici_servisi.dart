@@ -350,7 +350,7 @@ class SenkronizasyonYoneticiServisi {
       final response = await _networkOptimizer.resilientRequest(
         method: 'GET',
         url: 'http://$ip:$port/ping',
-            headers: {'Connection': 'keep-alive'},
+        headers: {'Connection': 'keep-alive'},
         maxRetries: 2,
         timeout: const Duration(seconds: 10),
       );
@@ -401,20 +401,20 @@ class SenkronizasyonYoneticiServisi {
         final response = await _networkOptimizer.queueRequest(
           method: 'POST',
           url: 'http://$ip:$port/device-connected',
-            headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json'},
           body: myInfo,
           priority: 1, // High priority
         );
 
-      if (response.statusCode == 200) {
+        if (response.statusCode == 200) {
           _logServisi.info(
             '✅ Bağlantı bildirimi $deviceName\'e gönderildi (kuyruğa alındı)',
           );
-        final responseData = json.decode(response.body);
+          final responseData = json.decode(response.body);
           _logServisi.info(
             '📋 Hedef cihazın cevabı: ${responseData['message']}',
           );
-      } else {
+        } else {
           _logServisi.error(
             '❌ Bağlantı bildirimi hatası: ${response.statusCode}',
           );
@@ -508,7 +508,7 @@ class SenkronizasyonYoneticiServisi {
         await _networkOptimizer.resilientRequest(
           method: 'POST',
           url: 'http://${device['ip']}:8080/device-disconnected',
-              headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json'},
           body: disconnectInfo,
           maxRetries: 1,
           timeout: const Duration(seconds: 5),
@@ -582,13 +582,26 @@ class SenkronizasyonYoneticiServisi {
               .toList();
 
       final kisiler = await _veriTabani.kisileriGetir();
-      // TÜM KİŞİLERİ BEKLEYENCİ OLARAK GÖNDER - Transfer sorunu çözümü
-      final bekleyenKisiler = kisiler; // Tüm kişiler senkronize edilsin
+      // Sadece son 24 saatte oluşturulan kişileri bekleyen olarak kabul et
+      final bekleyenKisiler =
+          kisiler
+              .where(
+                (kisi) => kisi.olusturmaTarihi.isAfter(
+                  DateTime.now().subtract(const Duration(days: 1)),
+                ),
+              )
+              .toList();
 
       final kategoriler = await _veriTabani.kategorileriGetir();
-      // TÜM KATEGORİLERİ BEKLEYENCİ OLARAK GÖNDER - Transfer sorunu çözümü
+      // Sadece son 24 saatte oluşturulan kategorileri bekleyen olarak kabul et
       final bekleyenKategoriler =
-          kategoriler; // Tüm kategoriler senkronize edilsin
+          kategoriler
+              .where(
+                (kategori) => kategori.olusturmaTarihi.isAfter(
+                  DateTime.now().subtract(const Duration(days: 1)),
+                ),
+              )
+              .toList();
 
       return {
         'bekleyen_belgeler': bekleyenBelgeler,
@@ -698,7 +711,7 @@ class SenkronizasyonYoneticiServisi {
       final response = await _networkOptimizer.resilientRequest(
         method: 'POST',
         url: 'http://$hedefIP:8080/sync/belgeler-kapsamli',
-            headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json'},
         body: senkronPaketi,
         maxRetries: 3,
         timeout: const Duration(seconds: 90),
@@ -812,7 +825,7 @@ class SenkronizasyonYoneticiServisi {
       final response = await _networkOptimizer.resilientRequest(
         method: 'POST',
         url: 'http://$hedefIP:8080/sync/belgeler-kapsamli',
-            headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json'},
         body: senkronPaketi,
         maxRetries: 3,
         timeout: const Duration(seconds: 90),
@@ -1010,10 +1023,10 @@ class SenkronizasyonYoneticiServisi {
       final response = await _networkOptimizer.resilientRequest(
         method: 'POST',
         url: 'http://$hedefIP:8080/sync/kisiler',
-            headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json'},
         body: {
-              'kisiler': kisilerJson,
-              'timestamp': DateTime.now().toIso8601String(),
+          'kisiler': kisilerJson,
+          'timestamp': DateTime.now().toIso8601String(),
         },
         maxRetries: 2,
         timeout: const Duration(seconds: 30),
@@ -1022,6 +1035,19 @@ class SenkronizasyonYoneticiServisi {
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
         if (responseData['success']) {
+          // Senkronize edilen kişileri bekleyen sıradan çıkar
+          // Kişilerin olusturmaTarihi'ni güncelle (24 saat filtresinden çıkarır)
+          for (final kisi in kisiler) {
+            final guncellenmiKisi = kisi.copyWith(
+              olusturmaTarihi: DateTime.now().subtract(const Duration(days: 2)),
+              guncellemeTarihi: DateTime.now(),
+            );
+            await _veriTabani.kisiGuncelle(guncellenmiKisi);
+            print(
+              '✅ Kişi senkronizasyon durumu güncellendi: ${kisi.ad} ${kisi.soyad}',
+            );
+          }
+
           onSuccess?.call('${responseData['basarili']} kişi senkronize edildi');
           return true;
         } else {
@@ -1069,10 +1095,10 @@ class SenkronizasyonYoneticiServisi {
       final response = await _networkOptimizer.resilientRequest(
         method: 'POST',
         url: 'http://$hedefIP:8080/sync/kategoriler',
-            headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json'},
         body: {
-              'kategoriler': kategorilerJson,
-              'timestamp': DateTime.now().toIso8601String(),
+          'kategoriler': kategorilerJson,
+          'timestamp': DateTime.now().toIso8601String(),
         },
         maxRetries: 2,
         timeout: const Duration(seconds: 30),
@@ -1081,6 +1107,18 @@ class SenkronizasyonYoneticiServisi {
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
         if (responseData['success']) {
+          // Senkronize edilen kategorileri bekleyen sıradan çıkar
+          // Kategorilerin olusturmaTarihi'ni güncelle (24 saat filtresinden çıkarır)
+          for (final kategori in kategoriler) {
+            final guncellenmiKategori = kategori.copyWith(
+              olusturmaTarihi: DateTime.now().subtract(const Duration(days: 2)),
+            );
+            await _veriTabani.kategoriGuncelle(guncellenmiKategori);
+            print(
+              '✅ Kategori senkronizasyon durumu güncellendi: ${kategori.ad}',
+            );
+          }
+
           onSuccess?.call(
             '${responseData['basarili']} kategori senkronize edildi',
           );

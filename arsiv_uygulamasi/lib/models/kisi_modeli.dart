@@ -9,6 +9,7 @@ class KisiModeli extends BaseModel {
   String? kullaniciAdi;
   String? sifre;
   String? kullaniciTipi;
+  String? profilFotografi; // Profil fotoğrafı yolu
   DateTime olusturmaTarihi;
   DateTime guncellemeTarihi;
   bool aktif;
@@ -20,6 +21,7 @@ class KisiModeli extends BaseModel {
     this.kullaniciAdi,
     this.sifre,
     this.kullaniciTipi,
+    this.profilFotografi,
     required this.olusturmaTarihi,
     required this.guncellemeTarihi,
     this.aktif = true,
@@ -34,6 +36,7 @@ class KisiModeli extends BaseModel {
       kullaniciAdi: map['kullanici_adi'],
       sifre: map['sifre'],
       kullaniciTipi: map['kullanici_tipi'],
+      profilFotografi: map['profil_fotografi'],
       olusturmaTarihi: DateTime.parse(map['olusturma_tarihi']),
       guncellemeTarihi: DateTime.parse(map['guncelleme_tarihi']),
       aktif: map['aktif'] == 1,
@@ -54,6 +57,7 @@ class KisiModeli extends BaseModel {
       'kullanici_adi': kullaniciAdi,
       'sifre': sifre,
       'kullanici_tipi': kullaniciTipi,
+      'profil_fotografi': profilFotografi,
       'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
       'guncelleme_tarihi': guncellemeTarihi.toIso8601String(),
       'aktif': aktif ? 1 : 0,
@@ -68,6 +72,7 @@ class KisiModeli extends BaseModel {
     String? kullaniciAdi,
     String? sifre,
     String? kullaniciTipi,
+    String? profilFotografi,
     DateTime? olusturmaTarihi,
     DateTime? guncellemeTarihi,
     bool? aktif,
@@ -79,6 +84,7 @@ class KisiModeli extends BaseModel {
       kullaniciAdi: kullaniciAdi ?? this.kullaniciAdi,
       sifre: sifre ?? this.sifre,
       kullaniciTipi: kullaniciTipi ?? this.kullaniciTipi,
+      profilFotografi: profilFotografi ?? this.profilFotografi,
       olusturmaTarihi: olusturmaTarihi ?? this.olusturmaTarihi,
       guncellemeTarihi: guncellemeTarihi ?? this.guncellemeTarihi,
       aktif: aktif ?? this.aktif,

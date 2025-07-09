@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../models/belge_modeli.dart';
+import '../models/kisi_modeli.dart';
+import '../models/kategori_modeli.dart';
 import '../services/senkronizasyon_yonetici_servisi.dart';
 import '../utils/timestamp_manager.dart';
 import '../screens/senkron_belgeler_ekrani.dart';
@@ -114,8 +116,13 @@ class SenkronizasyonKartlari {
   static Widget buildHizliIstatistikler(
     BuildContext context,
     SenkronizasyonYoneticiServisi yonetici,
-    VoidCallback bekleyenBelgeleriGoster,
-  ) {
+    VoidCallback bekleyenBelgeleriGoster, {
+    List<BelgeModeli>? bekleyenBelgeler,
+    List<KisiModeli>? bekleyenKisiler,
+    List<KategoriModeli>? bekleyenKategoriler,
+    VoidCallback? bekleyenKisileriGoster,
+    VoidCallback? bekleyenKategorileriGoster,
+  }) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -158,11 +165,21 @@ class SenkronizasyonKartlari {
                   context,
                   yonetici,
                   bekleyenBelgeleriGoster,
+                  bekleyenBelgeler: bekleyenBelgeler,
+                  bekleyenKisiler: bekleyenKisiler,
+                  bekleyenKategoriler: bekleyenKategoriler,
+                  bekleyenKisileriGoster: bekleyenKisileriGoster,
+                  bekleyenKategorileriGoster: bekleyenKategorileriGoster,
                 )
                 : _buildMobileIstatistikler(
                   context,
                   yonetici,
                   bekleyenBelgeleriGoster,
+                  bekleyenBelgeler: bekleyenBelgeler,
+                  bekleyenKisiler: bekleyenKisiler,
+                  bekleyenKategoriler: bekleyenKategoriler,
+                  bekleyenKisileriGoster: bekleyenKisileriGoster,
+                  bekleyenKategorileriGoster: bekleyenKategorileriGoster,
                 ),
           ],
         ),
@@ -173,67 +190,72 @@ class SenkronizasyonKartlari {
   static Widget _buildPCIstatistikler(
     BuildContext context,
     SenkronizasyonYoneticiServisi yonetici,
-    VoidCallback bekleyenBelgeleriGoster,
-  ) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildTiklanabilirStatItem(
-            context,
-            'Bekleyen',
-            '${yonetici.bekleyenDosyaSayisi}',
-            Icons.schedule,
-            bekleyenBelgeleriGoster,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatItem(
-            context,
-            'Senkronize',
-            '${yonetici.senkronizeDosyaSayisi}',
-            Icons.check_circle,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatItem(
-            context,
-            'Toplam',
-            '${yonetici.bekleyenDosyaSayisi + yonetici.senkronizeDosyaSayisi}',
-            Icons.folder,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatItem(
-            context,
-            'Son Senkron',
-            yonetici.sonSenkronizasyon,
-            Icons.access_time,
-          ),
-        ),
-      ],
-    );
-  }
+    VoidCallback bekleyenBelgeleriGoster, {
+    List<BelgeModeli>? bekleyenBelgeler,
+    List<KisiModeli>? bekleyenKisiler,
+    List<KategoriModeli>? bekleyenKategoriler,
+    VoidCallback? bekleyenKisileriGoster,
+    VoidCallback? bekleyenKategorileriGoster,
+  }) {
+    final bekleyenBelgeSayisi =
+        bekleyenBelgeler?.length ?? yonetici.bekleyenDosyaSayisi;
+    final bekleyenKisiSayisi = bekleyenKisiler?.length ?? 0;
+    final bekleyenKategoriSayisi = bekleyenKategoriler?.length ?? 0;
 
-  static Widget _buildMobileIstatistikler(
-    BuildContext context,
-    SenkronizasyonYoneticiServisi yonetici,
-    VoidCallback bekleyenBelgeleriGoster,
-  ) {
     return Column(
       children: [
+        // İlk satır - Belgeler ve Kişiler
         Row(
           children: [
             Expanded(
               child: _buildTiklanabilirStatItem(
                 context,
-                'Bekleyen',
-                '${yonetici.bekleyenDosyaSayisi}',
-                Icons.schedule,
+                'Bekleyen Belgeler',
+                '$bekleyenBelgeSayisi',
+                Icons.description,
                 bekleyenBelgeleriGoster,
               ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child:
+                  bekleyenKisileriGoster != null
+                      ? _buildTiklanabilirStatItem(
+                        context,
+                        'Bekleyen Kişiler',
+                        '$bekleyenKisiSayisi',
+                        Icons.person,
+                        bekleyenKisileriGoster,
+                      )
+                      : _buildStatItem(
+                        context,
+                        'Bekleyen Kişiler',
+                        '$bekleyenKisiSayisi',
+                        Icons.person,
+                      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        // İkinci satır - Kategoriler ve Senkronize
+        Row(
+          children: [
+            Expanded(
+              child:
+                  bekleyenKategorileriGoster != null
+                      ? _buildTiklanabilirStatItem(
+                        context,
+                        'Bekleyen Kategoriler',
+                        '$bekleyenKategoriSayisi',
+                        Icons.folder,
+                        bekleyenKategorileriGoster,
+                      )
+                      : _buildStatItem(
+                        context,
+                        'Bekleyen Kategoriler',
+                        '$bekleyenKategoriSayisi',
+                        Icons.folder,
+                      ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -246,24 +268,87 @@ class SenkronizasyonKartlari {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  static Widget _buildMobileIstatistikler(
+    BuildContext context,
+    SenkronizasyonYoneticiServisi yonetici,
+    VoidCallback bekleyenBelgeleriGoster, {
+    List<BelgeModeli>? bekleyenBelgeler,
+    List<KisiModeli>? bekleyenKisiler,
+    List<KategoriModeli>? bekleyenKategoriler,
+    VoidCallback? bekleyenKisileriGoster,
+    VoidCallback? bekleyenKategorileriGoster,
+  }) {
+    final bekleyenBelgeSayisi =
+        bekleyenBelgeler?.length ?? yonetici.bekleyenDosyaSayisi;
+    final bekleyenKisiSayisi = bekleyenKisiler?.length ?? 0;
+    final bekleyenKategoriSayisi = bekleyenKategoriler?.length ?? 0;
+
+    return Column(
+      children: [
+        // İlk satır - Belgeler ve Kişiler
         Row(
           children: [
             Expanded(
-              child: _buildStatItem(
+              child: _buildTiklanabilirStatItem(
                 context,
-                'Toplam',
-                '${yonetici.bekleyenDosyaSayisi + yonetici.senkronizeDosyaSayisi}',
-                Icons.folder,
+                'Bekleyen Belgeler',
+                '$bekleyenBelgeSayisi',
+                Icons.description,
+                bekleyenBelgeleriGoster,
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
+            Expanded(
+              child:
+                  bekleyenKisileriGoster != null
+                      ? _buildTiklanabilirStatItem(
+                        context,
+                        'Bekleyen Kişiler',
+                        '$bekleyenKisiSayisi',
+                        Icons.person,
+                        bekleyenKisileriGoster,
+                      )
+                      : _buildStatItem(
+                        context,
+                        'Bekleyen Kişiler',
+                        '$bekleyenKisiSayisi',
+                        Icons.person,
+                      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // İkinci satır - Kategoriler ve Senkronize
+        Row(
+          children: [
+            Expanded(
+              child:
+                  bekleyenKategorileriGoster != null
+                      ? _buildTiklanabilirStatItem(
+                        context,
+                        'Bekleyen Kategoriler',
+                        '$bekleyenKategoriSayisi',
+                        Icons.folder,
+                        bekleyenKategorileriGoster,
+                      )
+                      : _buildStatItem(
+                        context,
+                        'Bekleyen Kategoriler',
+                        '$bekleyenKategoriSayisi',
+                        Icons.folder,
+                      ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: _buildStatItem(
                 context,
-                'Son Senkron',
-                yonetici.sonSenkronizasyon,
-                Icons.access_time,
+                'Senkronize',
+                '${yonetici.senkronizeDosyaSayisi}',
+                Icons.check_circle,
               ),
             ),
           ],
@@ -380,162 +465,270 @@ class SenkronizasyonKartlari {
     Function(List<BelgeModeli>) onBelgeleriGonder,
     SenkronizasyonYoneticiServisi yonetici,
   ) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+    if (bekleyenBelgeler.isEmpty) {
+      return Center(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                Icon(Icons.sync_problem, color: Colors.orange[600]),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Bekleyen Belgeler',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${bekleyenBelgeler.length}',
-                    style: TextStyle(
-                      color: Colors.orange[700],
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
+            Icon(
+              Icons.check_circle_outline,
+              size: 64,
+              color: Colors.green[400],
             ),
             const SizedBox(height: 16),
-            if (bekleyenBelgeler.isEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green[600]),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Tüm belgeler senkronize! 🎉',
-                        style: TextStyle(
-                          color: Colors.green[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            Text(
+              'Tüm belgeler senkronize!',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.green[600],
               ),
-            ] else ...[
-              Container(
-                constraints: const BoxConstraints(maxHeight: 300),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: bekleyenBelgeler.length,
-                  itemBuilder: (context, index) {
-                    final belge = bekleyenBelgeler[index];
-                    return _buildBekleyenBelgeItem(context, belge, index);
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed:
-                          () => _belgelerGonderProgressIle(
-                            context,
-                            bekleyenBelgeler,
-                            yonetici,
-                            onBelgeleriGonder,
-                          ),
-                      icon: const Icon(Icons.send, size: 16),
-                      label: Text(
-                        'Tümü (${bekleyenBelgeler.length})',
-                        style: const TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange[600],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 6,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    flex: 1,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // Seçili belgeleri gönder dialog'u
-                        _showSeciliBelgeleriGonderDialog(
-                          context,
-                          bekleyenBelgeler,
-                          onBelgeleriGonder,
-                        );
-                      },
-                      icon: const Icon(Icons.checklist, size: 16),
-                      label: const Text(
-                        'Seç',
-                        style: TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.orange[600],
-                        side: BorderSide(color: Colors.orange[600]!),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 6,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Şu anda senkronizasyon bekleyen belge yok.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
-      ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Üst bilgi
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange[50],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange[600]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${bekleyenBelgeler.length} belge senkronizasyon bekliyor',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Belgeler listesi
+        ...bekleyenBelgeler.map((belge) => _buildBelgeItem(context, belge)),
+        const SizedBox(height: 16),
+        // Aksiyon butonları
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed:
+                    yonetici.bagliCihazlar.isNotEmpty
+                        ? () => onBelgeleriGonder(bekleyenBelgeler)
+                        : null,
+                icon: const Icon(Icons.sync),
+                label: const Text('Tümünü Senkronize Et'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  static Widget _buildBekleyenBelgeItem(
+  static Widget buildBekleyenKisiler(
     BuildContext context,
-    BelgeModeli belge,
-    int index,
+    List<KisiModeli> bekleyenKisiler,
+    Function(List<KisiModeli>) onKisileriGonder,
+    SenkronizasyonYoneticiServisi yonetici,
   ) {
+    if (bekleyenKisiler.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 64,
+              color: Colors.green[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Tüm kişiler senkronize!',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.green[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Şu anda senkronizasyon bekleyen kişi yok.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Üst bilgi
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[600]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${bekleyenKisiler.length} kişi senkronizasyon bekliyor',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Kişiler listesi
+        ...bekleyenKisiler.map((kisi) => _buildKisiItem(context, kisi)),
+        const SizedBox(height: 16),
+        // Aksiyon butonları
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed:
+                    yonetici.bagliCihazlar.isNotEmpty
+                        ? () => onKisileriGonder(bekleyenKisiler)
+                        : null,
+                icon: const Icon(Icons.sync),
+                label: const Text('Tümünü Senkronize Et'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static Widget buildBekleyenKategoriler(
+    BuildContext context,
+    List<KategoriModeli> bekleyenKategoriler,
+    Function(List<KategoriModeli>) onKategorileriGonder,
+    SenkronizasyonYoneticiServisi yonetici,
+  ) {
+    if (bekleyenKategoriler.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 64,
+              color: Colors.green[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Tüm kategoriler senkronize!',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.green[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Şu anda senkronizasyon bekleyen kategori yok.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Üst bilgi
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.purple[50],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.purple[600]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${bekleyenKategoriler.length} kategori senkronizasyon bekliyor',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Kategoriler listesi
+        ...bekleyenKategoriler.map(
+          (kategori) => _buildKategoriItem(context, kategori),
+        ),
+        const SizedBox(height: 16),
+        // Aksiyon butonları
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed:
+                    yonetici.bagliCihazlar.isNotEmpty
+                        ? () => onKategorileriGonder(bekleyenKategoriler)
+                        : null,
+                icon: const Icon(Icons.sync),
+                label: const Text('Tümünü Senkronize Et'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildBelgeItem(BuildContext context, BelgeModeli belge) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -564,12 +757,10 @@ class SenkronizasyonKartlari {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  belge.orijinalDosyaAdi,
+                  belge.dosyaAdi,
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -589,6 +780,129 @@ class SenkronizasyonKartlari {
             ),
             child: Text(
               _getSenkronDurumuText(belge.senkronDurumu),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildKisiItem(BuildContext context, KisiModeli kisi) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue[200]!),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.person, color: Colors.blue[600], size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  kisi.tamAd,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${kisi.kullaniciTipi ?? 'Kullanıcı'} • ${kisi.zamanFarki}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: kisi.aktif ? Colors.green : Colors.grey,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              kisi.aktif ? 'Aktif' : 'Pasif',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildKategoriItem(
+    BuildContext context,
+    KategoriModeli kategori,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.purple[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.purple[200]!),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.purple[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.folder, color: Colors.purple[600], size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  kategori.ad,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${kategori.belgeSayisi ?? 0} belge • ${kategori.zamanFarki}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: kategori.aktif ? Colors.green : Colors.grey,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              kategori.aktif ? 'Aktif' : 'Pasif',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,

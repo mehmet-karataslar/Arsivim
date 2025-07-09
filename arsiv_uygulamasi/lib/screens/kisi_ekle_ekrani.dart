@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../utils/screen_utils.dart';
@@ -16,6 +20,7 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
     with SingleTickerProviderStateMixin {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final _formKey = GlobalKey<FormState>();
+  final ImagePicker _imagePicker = ImagePicker();
 
   final TextEditingController _adController = TextEditingController();
   final TextEditingController _soyadController = TextEditingController();
@@ -26,6 +31,10 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
   bool _kayitEdiliyor = false;
   late AnimationController _animationController;
   late Animation<double> _slideAnimation;
+
+  // Profil fotoğrafı için
+  File? _secilenFoto;
+  String? _mevcutFotoYolu;
 
   @override
   void initState() {
@@ -46,6 +55,7 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
     if (widget.kisi != null) {
       _adController.text = widget.kisi!.ad;
       _soyadController.text = widget.kisi!.soyad;
+      _mevcutFotoYolu = widget.kisi!.profilFotografi;
     }
   }
 
@@ -57,6 +67,108 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
     _soyadFocusNode.dispose();
     _animationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fotografSec() async {
+    try {
+      final XFile? secilenDosya = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (secilenDosya != null) {
+        setState(() {
+          _secilenFoto = File(secilenDosya.path);
+        });
+      }
+    } catch (e) {
+      _hataGoster('Fotoğraf seçilirken hata oluştu: $e');
+    }
+  }
+
+  Future<void> _kameraDanCek() async {
+    try {
+      final XFile? secilenDosya = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (secilenDosya != null) {
+        setState(() {
+          _secilenFoto = File(secilenDosya.path);
+        });
+      }
+    } catch (e) {
+      _hataGoster('Kameradan fotoğraf çekilirken hata oluştu: $e');
+    }
+  }
+
+  void _fotografSecenekleri() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Galeriden Seç'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _fotografSec();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera),
+                title: const Text('Kamera'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _kameraDanCek();
+                },
+              ),
+              if (_secilenFoto != null || _mevcutFotoYolu != null)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text('Fotoğrafı Kaldır'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _secilenFoto = null;
+                      _mevcutFotoYolu = null;
+                    });
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> _fotografKaydet() async {
+    if (_secilenFoto == null) return _mevcutFotoYolu;
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final profilePhotosDir = Directory('${appDir.path}/profile_photos');
+
+      if (!await profilePhotosDir.exists()) {
+        await profilePhotosDir.create(recursive: true);
+      }
+
+      final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final savedPath = '${profilePhotosDir.path}/$fileName';
+
+      await _secilenFoto!.copy(savedPath);
+      return savedPath;
+    } catch (e) {
+      _hataGoster('Fotoğraf kaydedilirken hata oluştu: $e');
+      return null;
+    }
   }
 
   void _hataGoster(String mesaj) {
@@ -232,6 +344,20 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
                     ),
 
                     const SizedBox(height: 32),
+
+                    // Profil Fotoğrafı Seçici
+                    Text(
+                      'Profil Fotoğrafı',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildProfilFotografiSecici(),
+
+                    const SizedBox(height: 24),
 
                     // Ad alanı
                     Text(
@@ -484,6 +610,43 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
     );
   }
 
+  Widget _buildProfilFotografiSecici() {
+    return GestureDetector(
+      onTap: _fotografSecenekleri,
+      child: Container(
+        width: 100,
+        height: 100,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(
+            color:
+                _secilenFoto != null || _mevcutFotoYolu != null
+                    ? Theme.of(context).primaryColor
+                    : Colors.grey.shade400,
+            width: 2,
+          ),
+        ),
+        child:
+            _secilenFoto != null || _mevcutFotoYolu != null
+                ? ClipRRect(
+                  borderRadius: BorderRadius.circular(50),
+                  child: Image.file(
+                    _secilenFoto ?? File(_mevcutFotoYolu!),
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                )
+                : Icon(
+                  Icons.camera_alt_outlined,
+                  size: 30,
+                  color: Colors.grey.shade600,
+                ),
+      ),
+    );
+  }
+
   Future<void> _kisiKaydet() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -500,6 +663,7 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
       DateTime simdi = DateTime.now();
       String ad = _adController.text.trim();
       String soyad = _soyadController.text.trim();
+      String? profilFotografi = await _fotografKaydet();
 
       if (widget.kisi == null) {
         // Yeni kişi ekle
@@ -508,6 +672,7 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
           soyad: soyad,
           olusturmaTarihi: simdi,
           guncellemeTarihi: simdi,
+          profilFotografi: profilFotografi,
         );
 
         await _veriTabani.kisiEkle(yeniKisi);
@@ -518,6 +683,7 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani>
           ad: ad,
           soyad: soyad,
           guncellemeTarihi: simdi,
+          profilFotografi: profilFotografi,
         );
 
         await _veriTabani.kisiGuncelle(guncellenmisKisi);

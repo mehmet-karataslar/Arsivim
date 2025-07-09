@@ -477,7 +477,12 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: AramaSonuclariWidget(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return ClipRect(
+                        child: SizedBox(
+                          height: constraints.maxHeight,
+                          child: AramaSonuclariWidget(
                     belgeler: _filtrelenmsBelgeler,
                     detayliBelgeler: _detayliBelgeler,
                     kategoriler: _kategoriler,
@@ -531,6 +536,10 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
                     },
                     onBelgelerGuncellendi: () {
                       _verileriYukle();
+                    },
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),

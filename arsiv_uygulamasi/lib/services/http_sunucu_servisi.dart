@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path_provider/path_provider.dart';
 import 'veritabani_servisi.dart';
 import 'dosya_servisi.dart';
 import '../models/belge_modeli.dart';
@@ -37,6 +38,7 @@ class HttpSunucuServisi {
   Function(String)? onConnectionReceived;
   Function(String)? onDeviceConnected;
   Function(String, Map<String, dynamic>)? onDeviceDisconnected;
+  Function(Map<String, dynamic>)? _onQRLoginRequest;
 
   bool get calisiyorMu => _calisiyorMu;
   String? get cihazId => _cihazId;
@@ -51,6 +53,12 @@ class HttpSunucuServisi {
   }
 
   String? get manuelIP => _manuelIP;
+
+  // QR Login callback ayarlama
+  void setOnQRLoginRequest(Function(Map<String, dynamic>) callback) {
+    _onQRLoginRequest = callback;
+    print('📱 QR Login callback ayarlandı');
+  }
 
   // Baglanti callback'leri
   Function(Map<String, dynamic>)? _onDeviceConnected;
@@ -235,6 +243,14 @@ class HttpSunucuServisi {
               break;
             case '/sync/status':
               responseBody = await _handleSyncStatus();
+              break;
+            case '/auth/qr-login':
+              if (request.method == 'POST') {
+                responseBody = await _handleQRLogin(request);
+              } else {
+                statusCode = 405;
+                responseBody = json.encode({'error': 'Method not allowed'});
+              }
               break;
             default:
               statusCode = 404;
@@ -994,7 +1010,13 @@ class HttpSunucuServisi {
             final mevcutKategori = await _veriTabani.kategoriBulAd(kategori.ad);
             if (mevcutKategori == null) {
               // Kategori ID'sini korumak için özel ekleme
-              await _veriTabani.kategoriEkleIdIle(kategori);
+              // Alan tarafta kaydedilen kategorilerin tarihini eski yap
+              final eskiTarihliKategori = kategori.copyWith(
+                olusturmaTarihi: DateTime.now().subtract(
+                  const Duration(days: 2),
+                ),
+              );
+              await _veriTabani.kategoriEkleIdIle(eskiTarihliKategori);
               kategorilerEklendi++;
               print('✅ Kategori eklendi: ${kategori.ad}');
             } else {
@@ -1018,7 +1040,13 @@ class HttpSunucuServisi {
             );
             if (mevcutKisi == null) {
               // Kişi ID'sini korumak için özel ekleme
-              await _veriTabani.kisiEkleIdIle(kisi);
+              // Alan tarafta kaydedilen kişilerin tarihini eski yap
+              final eskiTarihliKisi = kisi.copyWith(
+                olusturmaTarihi: DateTime.now().subtract(
+                  const Duration(days: 2),
+                ),
+              );
+              await _veriTabani.kisiEkleIdIle(eskiTarihliKisi);
               kisilerEklendi++;
               print('✅ Kişi eklendi: ${kisi.ad} ${kisi.soyad}');
             } else {
@@ -1126,7 +1154,29 @@ class HttpSunucuServisi {
 
       print('📊 ${bekleyenKisiler.length} bekleyen kişi bulundu');
 
-      final kisilerJson = bekleyenKisiler.map((kisi) => kisi.toMap()).toList();
+      final kisilerJson = <Map<String, dynamic>>[];
+
+      for (final kisi in bekleyenKisiler) {
+        final kisiMap = kisi.toMap();
+
+        // Profil fotoğrafını dahil et
+        if (kisi.profilFotografi != null && kisi.profilFotografi!.isNotEmpty) {
+          try {
+            final dosyaBytes = File(kisi.profilFotografi!).readAsBytesSync();
+            kisiMap['profil_fotografi_icerigi'] = base64Encode(dosyaBytes);
+            print('📸 Profil fotoğrafı dahil edildi: ${kisi.ad} ${kisi.soyad}');
+          } catch (e) {
+            print(
+              '⚠️ Profil fotoğrafı okunamadı: ${kisi.ad} ${kisi.soyad} - $e',
+            );
+            kisiMap['profil_fotografi_icerigi'] = null;
+          }
+        } else {
+          kisiMap['profil_fotografi_icerigi'] = null;
+        }
+
+        kisilerJson.add(kisiMap);
+      }
 
       return json.encode({
         'success': true,
@@ -1165,25 +1215,75 @@ class HttpSunucuServisi {
         try {
           final kisi = KisiModeli.fromMap(kisiData);
 
+          // Profil fotoğrafını kaydet
+          String? profilFotografiYolu;
+          if (kisiData['profil_fotografi_icerigi'] != null) {
+            try {
+              final dosyaBytes = base64Decode(
+                kisiData['profil_fotografi_icerigi'],
+              );
+
+              // Profil fotoğrafı dizinini oluştur
+              final appDir = await getApplicationDocumentsDirectory();
+              final profilePhotosDir = Directory(
+                '${appDir.path}/profile_photos',
+              );
+              if (!await profilePhotosDir.exists()) {
+                await profilePhotosDir.create(recursive: true);
+              }
+
+              final dosyaAdi =
+                  'profile_${kisi.ad}_${kisi.soyad}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+              final savedPath = '${profilePhotosDir.path}/$dosyaAdi';
+
+              // Dosyayı kaydet
+              final file = File(savedPath);
+              await file.writeAsBytes(dosyaBytes);
+              profilFotografiYolu = savedPath;
+
+              print(
+                '📸 Profil fotoğrafı kaydedildi: ${kisi.ad} ${kisi.soyad} -> $savedPath',
+              );
+            } catch (e) {
+              print(
+                '⚠️ Profil fotoğrafı kaydedilemedi: ${kisi.ad} ${kisi.soyad} - $e',
+              );
+            }
+          }
+
+          // Kişi modelini profil fotoğrafı yolu ile güncelle
+          final guncellenmiKisi = kisi.copyWith(
+            profilFotografi: profilFotografiYolu ?? kisi.profilFotografi,
+          );
+
           // Kişi zaten var mı kontrol et (ad-soyad kombinasyonu)
           final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
-            kisi.ad,
-            kisi.soyad,
+            guncellenmiKisi.ad,
+            guncellenmiKisi.soyad,
           );
 
           if (mevcutKisi == null) {
             // Kişi ID'sini korumak için özel ekleme
-            await _veriTabani.kisiEkleIdIle(kisi);
+            // Alan tarafta kaydedilen kişilerin tarihini eski yap (bekleyen sıradan çıkar)
+            final eskiTarihliKisi = guncellenmiKisi.copyWith(
+              olusturmaTarihi: DateTime.now().subtract(const Duration(days: 2)),
+            );
+            await _veriTabani.kisiEkleIdIle(eskiTarihliKisi);
             basariliSayisi++;
-            print('✅ Kişi kaydedildi: ${kisi.ad} ${kisi.soyad}');
+            print(
+              '✅ Kişi kaydedildi: ${guncellenmiKisi.ad} ${guncellenmiKisi.soyad}',
+            );
           } else {
             // Kişi mevcut, güncelle
-            final guncelKisi = kisi.copyWith(
+            final guncelKisi = guncellenmiKisi.copyWith(
               id: mevcutKisi.id, // Mevcut kişinin ID'sini koru
+              olusturmaTarihi: DateTime.now().subtract(const Duration(days: 2)),
             );
             await _veriTabani.kisiGuncelle(guncelKisi);
             mevcutSayisi++;
-            print('🔄 Kişi güncellendi: ${kisi.ad} ${kisi.soyad}');
+            print(
+              '🔄 Kişi güncellendi: ${guncellenmiKisi.ad} ${guncellenmiKisi.soyad}',
+            );
           }
         } catch (e) {
           print('❌ Kişi kaydetme hatası: $e');
@@ -1266,7 +1366,11 @@ class HttpSunucuServisi {
       for (final kategoriData in kategorilerData) {
         try {
           final kategori = KategoriModeli.fromMap(kategoriData);
-          await _veriTabani.kategoriEkle(kategori);
+          // Alan tarafta kaydedilen kategorilerin tarihini eski yap (bekleyen sıradan çıkar)
+          final eskiTarihliKategori = kategori.copyWith(
+            olusturmaTarihi: DateTime.now().subtract(const Duration(days: 2)),
+          );
+          await _veriTabani.kategoriEkle(eskiTarihliKategori);
           basariliSayisi++;
           print('✅ Kategori kaydedildi: ${kategori.ad}');
         } catch (e) {
@@ -1386,6 +1490,189 @@ class HttpSunucuServisi {
         'error': 'Senkronizasyon durumu sorgulanamadı',
         'message': e.toString(),
       });
+    }
+  }
+
+  /// QR Login endpoint'i
+  Future<String> _handleQRLogin(HttpRequest request) async {
+    try {
+      print('📱 QR Login istegi alindi');
+
+      final bodyBytes = await request.fold<List<int>>(
+        <int>[],
+        (previous, element) => previous..addAll(element),
+      );
+      final body = utf8.decode(bodyBytes);
+      final data = json.decode(body);
+
+      final kullaniciAdi = data['kullanici_adi'] as String?;
+      final token = data['token'] as String?;
+      final deviceId = data['device_id'] as String?;
+      final deviceName = data['device_name'] as String?;
+      final platform = data['platform'] as String?;
+      final userInfo = data['user_info'] as Map<String, dynamic>?;
+
+      print('📊 QR Login verileri:');
+      print('  - Kullanici: $kullaniciAdi');
+      print('  - Token: $token');
+      print('  - Device ID: $deviceId');
+      print('  - Device Name: $deviceName');
+      print('  - Platform: $platform');
+      print('  - User Info: ${userInfo != null ? 'Mevcut' : 'Yok'}');
+
+      if (kullaniciAdi == null || token == null) {
+        print('❌ Eksik veri: kullanici_adi ve token gerekli');
+        return json.encode({
+          'success': false,
+          'error': 'kullanici_adi ve token gerekli',
+        });
+      }
+
+      // Kullanıcı bilgilerini kontrol et ve gerekirse otomatik kayıt yap
+      if (userInfo != null) {
+        print('👤 Kullanıcı bilgileri kontrol ediliyor...');
+        await _ensureUserExists(userInfo);
+      }
+
+      // QR Login callback'ini çağır
+      if (_onQRLoginRequest != null) {
+        print('🔑 QR Login callback çağırılıyor: $kullaniciAdi');
+
+        // Callback'i hemen çağır, microtask kullanma
+        _onQRLoginRequest!({
+          'kullanici_adi': kullaniciAdi,
+          'token': token,
+          'device_id': deviceId,
+          'device_name': deviceName,
+          'platform': platform,
+          'user_info': userInfo,
+        });
+
+        print('✅ QR Login callback çağırıldı');
+      } else {
+        print('❌ QR Login callback tanımlanmamış!');
+      }
+
+      return json.encode({
+        'success': true,
+        'message': 'QR Login isteği alındı',
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ QR Login handler hatası: $e');
+      return json.encode({
+        'success': false,
+        'error': 'QR Login hatası',
+        'message': e.toString(),
+      });
+    }
+  }
+
+  /// Kullanıcı adı ile kullanıcı getir
+  Future<KisiModeli?> _getUserByUsername(String kullaniciAdi) async {
+    try {
+      final db = await _veriTabani.database;
+      final result = await db.query(
+        'kisiler',
+        where: 'kullanici_adi = ? AND aktif = ?',
+        whereArgs: [kullaniciAdi, 1],
+      );
+
+      if (result.isNotEmpty) {
+        return KisiModeli.fromMap(result.first);
+      }
+      return null;
+    } catch (e) {
+      print('❌ Kullanıcı getir hatası: $e');
+      return null;
+    }
+  }
+
+  /// Kullanıcının var olduğundan emin ol, yoksa otomatik kayıt yap
+  Future<void> _ensureUserExists(Map<String, dynamic> userInfo) async {
+    try {
+      final kullaniciAdi = userInfo['kullanici_adi'] as String?;
+      if (kullaniciAdi == null) return;
+
+      print('🔍 Kullanıcı kontrol ediliyor: $kullaniciAdi');
+
+      // Kullanıcı var mı kontrol et
+      final existingUser = await _getUserByUsername(kullaniciAdi);
+
+      if (existingUser == null) {
+        print('➕ Kullanıcı bulunamadı, otomatik kayıt yapılıyor...');
+
+        // Yeni kullanıcı oluştur
+        final yeniKullanici = KisiModeli(
+          ad: userInfo['ad'] ?? 'Bilinmeyen',
+          soyad: userInfo['soyad'] ?? 'Kullanıcı',
+          kullaniciAdi: kullaniciAdi,
+          sifre: null, // QR login için şifre gerekmez
+          kullaniciTipi: userInfo['kullanici_tipi'] ?? 'kullanici',
+          profilFotografi: userInfo['profil_fotografi'],
+          olusturmaTarihi: DateTime.now(),
+          guncellemeTarihi: DateTime.now(),
+          aktif: true,
+        );
+
+        await _veriTabani.kisiEkle(yeniKullanici);
+        print('✅ Kullanıcı otomatik kayıt edildi: $kullaniciAdi');
+
+        // Cihaz bilgilerini kaydet
+        await _registerDevice(kullaniciAdi, userInfo);
+      } else {
+        print('✅ Kullanıcı mevcut: $kullaniciAdi');
+
+        // Mevcut kullanıcının bilgilerini güncelle (profil fotoğrafı vs.)
+        final guncelKullanici = existingUser.copyWith(
+          ad: userInfo['ad'] ?? existingUser.ad,
+          soyad: userInfo['soyad'] ?? existingUser.soyad,
+          profilFotografi:
+              userInfo['profil_fotografi'] ?? existingUser.profilFotografi,
+          guncellemeTarihi: DateTime.now(),
+        );
+
+        await _veriTabani.kisiGuncelle(guncelKullanici);
+        print('✅ Kullanıcı bilgileri güncellendi: $kullaniciAdi');
+
+        // Cihaz bilgilerini kaydet
+        await _registerDevice(kullaniciAdi, userInfo);
+      }
+    } catch (e) {
+      print('❌ Kullanıcı kontrol/kayıt hatası: $e');
+    }
+  }
+
+  /// Cihaz bilgilerini kaydet (çoklu cihaz desteği için)
+  Future<void> _registerDevice(
+    String kullaniciAdi,
+    Map<String, dynamic> userInfo,
+  ) async {
+    try {
+      final deviceId = 'mobile_${DateTime.now().millisecondsSinceEpoch}';
+      final deviceName = userInfo['device_name'] ?? 'Bilinmeyen Cihaz';
+      final platform = userInfo['platform'] ?? 'unknown';
+
+      print('📱 Cihaz kaydediliyor: $deviceName ($platform)');
+
+      // Cihaz bilgilerini log olarak kaydet (şimdilik)
+      // Daha sonra ayrı bir cihaz tablosu oluşturulabilir
+      print('✅ Cihaz kaydedildi: $kullaniciAdi -> $deviceName');
+
+      // Gelecekte burada cihaz tablosuna kayıt yapılabilir:
+      // await _veriTabani.cihazEkle(deviceId, kullaniciAdi, deviceName, platform);
+
+      // Çoklu cihaz desteği için cihaz bilgilerini sakla
+      _bagliCihazlar.add({
+        'device_id': deviceId,
+        'kullanici_adi': kullaniciAdi,
+        'device_name': deviceName,
+        'platform': platform,
+        'connection_time': DateTime.now().toIso8601String(),
+        'last_seen': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('❌ Cihaz kayıt hatası: $e');
     }
   }
 }

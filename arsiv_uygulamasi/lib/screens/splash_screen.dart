@@ -297,8 +297,9 @@ class _SplashScreenState extends State<SplashScreen>
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Spacer(flex: 2),
+                  const SizedBox(height: 40),
 
                   // Logo ve animasyonlar
                   AnimatedBuilder(
@@ -306,40 +307,40 @@ class _SplashScreenState extends State<SplashScreen>
                     builder: (context, child) {
                       return LayoutBuilder(
                         builder: (context, constraints) {
-                      return Transform.scale(
-                        scale: _logoScaleAnimation.value,
-                        child: Transform.rotate(
-                          angle: _logoRotationAnimation.value,
-                          child: Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFF4CAF50), // Yeşil
-                                  Color(0xFF2E7D32), // Koyu yeşil
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(30),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF4CAF50,
-                                  ).withOpacity(0.5 * _glowAnimation.value),
-                                  blurRadius: 30,
-                                  spreadRadius: 10,
+                          return Transform.scale(
+                            scale: _logoScaleAnimation.value,
+                            child: Transform.rotate(
+                              angle: _logoRotationAnimation.value,
+                              child: Container(
+                                width: 120,
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF4CAF50), // Yeşil
+                                      Color(0xFF2E7D32), // Koyu yeşil
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(30),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF4CAF50,
+                                      ).withOpacity(0.5 * _glowAnimation.value),
+                                      blurRadius: 30,
+                                      spreadRadius: 10,
+                                    ),
+                                  ],
                                 ),
-                              ],
+                                child: Icon(
+                                  Icons.archive_rounded,
+                                  size: 60,
+                                  color: Colors.white.withOpacity(0.95),
+                                ),
+                              ),
                             ),
-                            child: Icon(
-                              Icons.archive_rounded,
-                              size: 60,
-                              color: Colors.white.withOpacity(0.95),
-                            ),
-                          ),
-                        ),
                           );
                         },
                       );
@@ -405,7 +406,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                   ),
 
-                  const Spacer(flex: 1),
+                  const SizedBox(height: 40),
 
                   // Yükleme göstergesi ve durum
                   Column(
@@ -467,7 +468,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ],
                   ),
 
-                  const Spacer(flex: 2),
+                  const SizedBox(height: 40),
 
                   // Alt bilgi
                   Column(

@@ -10,6 +10,8 @@ import '../widgets/qr_scanner_widget.dart';
 import '../models/belge_modeli.dart';
 import '../screens/senkron_belgeler_ekrani.dart';
 import '../utils/screen_utils.dart';
+import '../models/kisi_modeli.dart';
+import '../models/kategori_modeli.dart';
 
 class SenkronizasyonEkrani extends StatefulWidget {
   const SenkronizasyonEkrani({Key? key}) : super(key: key);
@@ -30,6 +32,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
 
   bool _yukleniyor = false;
   List<BelgeModeli> _bekleyenBelgeler = [];
+  List<KisiModeli> _bekleyenKisiler = [];
+  List<KategoriModeli> _bekleyenKategoriler = [];
 
   // Anlık güncelleme için Timer
   Timer? _refreshTimer;
@@ -105,9 +109,36 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   Future<void> _verileriYukle() async {
     if (!mounted) return;
     setState(() => _yukleniyor = true);
-    await _yonetici.verileriYukle();
-    if (!mounted) return;
-    setState(() => _yukleniyor = false);
+
+    try {
+      await _yonetici.verileriYukle();
+
+      // Bekleyen senkronizasyonları yükle
+      final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
+
+      if (mounted) {
+        setState(() {
+          _bekleyenBelgeler =
+              (bekleyenler['bekleyen_belgeler'] as List<dynamic>?)
+                  ?.cast<BelgeModeli>() ??
+              [];
+          _bekleyenKisiler =
+              (bekleyenler['bekleyen_kisiler'] as List<dynamic>?)
+                  ?.cast<KisiModeli>() ??
+              [];
+          _bekleyenKategoriler =
+              (bekleyenler['bekleyen_kategoriler'] as List<dynamic>?)
+                  ?.cast<KategoriModeli>() ??
+              [];
+        });
+      }
+    } catch (e) {
+      print('❌ Veriler yüklenirken hata: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _yukleniyor = false);
+      }
+    }
   }
 
   /// Anlık güncelleme timer'ını başlat
@@ -182,6 +213,11 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                         context,
                         _yonetici,
                         _bekleyenBelgeleriGoster,
+                        bekleyenBelgeler: _bekleyenBelgeler,
+                        bekleyenKisiler: _bekleyenKisiler,
+                        bekleyenKategoriler: _bekleyenKategoriler,
+                        bekleyenKisileriGoster: _bekleyenKisileriGoster,
+                        bekleyenKategorileriGoster: _bekleyenKategorileriGoster,
                       ),
                     ],
                   ),
@@ -231,6 +267,11 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               context,
               _yonetici,
               _bekleyenBelgeleriGoster,
+              bekleyenBelgeler: _bekleyenBelgeler,
+              bekleyenKisiler: _bekleyenKisiler,
+              bekleyenKategoriler: _bekleyenKategoriler,
+              bekleyenKisileriGoster: _bekleyenKisileriGoster,
+              bekleyenKategorileriGoster: _bekleyenKategorileriGoster,
             ),
             const SizedBox(height: 16),
             CihazBaglantiPaneli(
@@ -538,6 +579,41 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     }
   }
 
+  void _bekleyenKisileriGoster() async {
+    try {
+      final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
+      final bekleyenKisiler = bekleyenler['bekleyen_kisiler'] as List<dynamic>?;
+
+      if (bekleyenKisiler != null) {
+        setState(() {
+          _bekleyenKisiler = bekleyenKisiler.cast<KisiModeli>();
+        });
+      }
+
+      _showBekleyenKisilerDialog();
+    } catch (e) {
+      _hataGoster('Bekleyen kişiler yüklenemedi: $e');
+    }
+  }
+
+  void _bekleyenKategorileriGoster() async {
+    try {
+      final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
+      final bekleyenKategoriler =
+          bekleyenler['bekleyen_kategoriler'] as List<dynamic>?;
+
+      if (bekleyenKategoriler != null) {
+        setState(() {
+          _bekleyenKategoriler = bekleyenKategoriler.cast<KategoriModeli>();
+        });
+      }
+
+      _showBekleyenKategorilerDialog();
+    } catch (e) {
+      _hataGoster('Bekleyen kategoriler yüklenemedi: $e');
+    }
+  }
+
   void _showBekleyenBelgelerDialog() {
     showDialog(
       context: context,
@@ -603,6 +679,136 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     );
   }
 
+  void _showBekleyenKisilerDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: _pcPlatform ? 600 : 400,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.person, color: Colors.blue[600]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Senkronizasyon Bekleyen Kişiler',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: SenkronizasyonKartlari.buildBekleyenKisiler(
+                          context,
+                          _bekleyenKisiler,
+                          _kisileriCihazaGonder,
+                          _yonetici,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
+  void _showBekleyenKategorilerDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: _pcPlatform ? 600 : 400,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.purple[50],
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.category, color: Colors.purple[600]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Senkronizasyon Bekleyen Kategoriler',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: SenkronizasyonKartlari.buildBekleyenKategoriler(
+                          context,
+                          _bekleyenKategoriler,
+                          _kategorileriCihazaGonder,
+                          _yonetici,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
   void _belgeleriCihazaGonder(List<BelgeModeli> belgeler) async {
     // Eğer bağlı cihaz varsa
     if (_yonetici.bagliCihazlar.isNotEmpty) {
@@ -620,6 +826,52 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         if (basarili) {
           // Bekleyen belgeleri yeniden yükle
           _bekleyenBelgeleriGoster();
+        }
+      } else {
+        _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
+      }
+    } else {
+      _hataGoster('Önce bir cihaz bağlanmalı');
+    }
+  }
+
+  void _kisileriCihazaGonder(List<KisiModeli> kisiler) async {
+    if (_yonetici.bagliCihazlar.isNotEmpty) {
+      final hedefCihaz = _yonetici.bagliCihazlar.first;
+      final hedefIP = hedefCihaz['ip'] as String;
+
+      if (hedefIP != 'incoming') {
+        Navigator.pop(context);
+        final basarili = await _yonetici.kisileriSenkronEt(
+          hedefIP,
+          kisiler: kisiler,
+        );
+
+        if (basarili) {
+          _bekleyenKisileriGoster();
+        }
+      } else {
+        _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
+      }
+    } else {
+      _hataGoster('Önce bir cihaz bağlanmalı');
+    }
+  }
+
+  void _kategorileriCihazaGonder(List<KategoriModeli> kategoriler) async {
+    if (_yonetici.bagliCihazlar.isNotEmpty) {
+      final hedefCihaz = _yonetici.bagliCihazlar.first;
+      final hedefIP = hedefCihaz['ip'] as String;
+
+      if (hedefIP != 'incoming') {
+        Navigator.pop(context);
+        final basarili = await _yonetici.kategorileriSenkronEt(
+          hedefIP,
+          kategoriler: kategoriler,
+        );
+
+        if (basarili) {
+          _bekleyenKategorileriGoster();
         }
       } else {
         _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');

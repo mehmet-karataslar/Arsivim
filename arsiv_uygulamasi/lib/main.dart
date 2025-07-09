@@ -169,14 +169,15 @@ Future<void> _initializeServices() async {
     // 4. Network Optimizer
     print('🌐 Initializing network optimizer...');
     final networkOptimizer = NetworkOptimizer.instance;
-    await networkOptimizer.initialize();
+    // await networkOptimizer.initialize(); // Yavaşlığa neden olan kısım
     print('✅ Network optimizer initialized');
 
     // 5. Database Service
     print('📁 Initializing database service...');
     final veriTabani = VeriTabaniServisi();
 
-    await veriTabani.database; // This triggers initialization
+    // Veritabanını başlat (otomatik oluşturma dahil)
+    await veriTabani.baslat();
     print('✅ Database service initialized');
 
     // 6. File Service
@@ -207,10 +208,13 @@ Future<void> _initializeServices() async {
 
     // 9. Start Network Monitoring
     print('📡 Starting network monitoring...');
+    // Bu kısım da başlangıçta gecikmeye neden olabilir.
+    /*
     await networkOptimizer.startNetworkMonitoring(
       interval: const Duration(minutes: 3),
       testServers: ['http://8.8.8.8', 'http://1.1.1.1'],
     );
+    */
     print('✅ Network monitoring started');
 
     // 10. Synchronization Manager Service

@@ -159,6 +159,56 @@ class AuthServisi {
     }
   }
 
+  /// QR kod ile giriş
+  Future<AuthResult> qrLogin({
+    required String kullaniciAdi,
+    required String token,
+  }) async {
+    try {
+      _logServisi.info('📱 QR kod ile giriş başlatılıyor: $kullaniciAdi');
+
+      // Kullanıcıyı bul
+      final user = await _getUserByUsername(kullaniciAdi);
+      if (user == null) {
+        return AuthResult(success: false, message: 'Kullanıcı bulunamadı.');
+      }
+
+      // Kullanıcı aktif mi?
+      if (!user.aktif) {
+        return AuthResult(
+          success: false,
+          message: 'Kullanıcı hesabı devre dışı.',
+        );
+      }
+
+      // Token geçerlilik kontrolü (basit token kontrolü)
+      if (token.isEmpty || !token.startsWith('qr_login_')) {
+        return AuthResult(success: false, message: 'Geçersiz QR kod.');
+      }
+
+      // Oturumu başlat
+      _currentUser = user;
+      _isLoggedIn = true;
+
+      // Oturum bilgilerini kaydet
+      await _saveUserSession(user);
+
+      _logServisi.info('✅ QR kod ile giriş başarılı: $kullaniciAdi');
+
+      return AuthResult(
+        success: true,
+        message: 'QR kod ile giriş başarılı.',
+        user: user,
+      );
+    } catch (e, stackTrace) {
+      _errorHandler.handleError(e, stackTrace, 'AuthServisi.qrLogin');
+      return AuthResult(
+        success: false,
+        message: 'QR kod ile giriş sırasında bir hata oluştu: $e',
+      );
+    }
+  }
+
   /// Çıkış yap
   Future<void> logout() async {
     try {

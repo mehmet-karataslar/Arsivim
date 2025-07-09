@@ -65,13 +65,6 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (!_acceptTerms) {
-      ScreenUtils.showWarningSnackBar(
-        context,
-        'Kullanım şartlarını kabul etmelisiniz.',
-      );
-      return;
-    }
 
     setState(() {
       _isLoading = true;
@@ -258,9 +251,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                         _buildRegisterForm(),
 
                         const SizedBox(height: 24),
-
-                        // Kullanım şartları
-                        _buildTermsCheckbox(),
 
                         const SizedBox(height: 24),
 
@@ -546,15 +536,6 @@ class _RegisterScreenState extends State<RegisterScreen>
             },
             activeColor: Colors.white,
             checkColor: const Color(0xFF2E7D32),
-          ),
-          Expanded(
-            child: Text(
-              'Kullanım şartlarını ve gizlilik politikasını kabul ediyorum',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
-                fontSize: 14,
-              ),
-            ),
           ),
         ],
       ),

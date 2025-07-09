@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/kisi_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import '../utils/screen_utils.dart';
+import '../widgets/profil_fotografi_widget.dart';
 import 'kisi_ekle_ekrani.dart';
 import 'kisi_belgeleri_ekrani.dart';
 
@@ -137,31 +138,12 @@ class _KisilerEkraniState extends State<KisilerEkrani> {
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  // Avatar
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(context).primaryColor.withOpacity(0.8),
-                          Theme.of(context).primaryColor,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Center(
-                      child: Text(
-                        kisi.ad.isNotEmpty ? kisi.ad[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 24,
-                        ),
-                      ),
-                    ),
+                  // Profil Fotoğrafı
+                  ProfilFotografiWidget(
+                    profilFotografi: kisi.profilFotografi,
+                    size: 60,
+                    kisininAdi: kisi.tamAd,
+                    showBorder: true,
                   ),
                   const SizedBox(width: 16),
                   // Kişi bilgileri

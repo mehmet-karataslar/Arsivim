@@ -17,6 +17,18 @@ class VeriTabaniServisi {
   factory VeriTabaniServisi() => _instance;
   VeriTabaniServisi._internal();
 
+  /// Veritabanını manuel olarak başlat (uygulama başlangıcında kullanılabilir)
+  Future<void> baslat() async {
+    try {
+      print('🚀 Veritabanı servisi başlatılıyor...');
+      await database; // Bu, veritabanını otomatik olarak başlatır
+      print('✅ Veritabanı servisi başarıyla başlatıldı!');
+    } catch (e) {
+      print('❌ Veritabanı servisi başlatma hatası: $e');
+      rethrow;
+    }
+  }
+
   // Veritabanı bağlantısı ve tablo oluşturma
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -28,12 +40,59 @@ class VeriTabaniServisi {
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
     String path = join(documentsDirectory.path, Sabitler.VERITABANI_ADI);
 
-    return await openDatabase(
-      path,
-      version: Sabitler.VERITABANI_VERSIYONU,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
+    // Veritabanı dosyasının varlığını kontrol et
+    bool databaseExists = await File(path).exists();
+
+    if (databaseExists) {
+      print('✅ Mevcut veritabanı bulundu: $path');
+      print('📂 Mevcut veritabanı kullanılıyor...');
+    } else {
+      print('🆕 Veritabanı bulunamadı: $path');
+      print('🔧 Yeni veritabanı oluşturuluyor...');
+    }
+
+    try {
+      final database = await openDatabase(
+        path,
+        version: Sabitler.VERITABANI_VERSIYONU,
+        onCreate: (db, version) async {
+          print('🎯 Yeni veritabanı oluşturuluyor (versiyon: $version)');
+          await _onCreate(db, version);
+          print('✅ Veritabanı başarıyla oluşturuldu!');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          print('🔄 Veritabanı güncelleniyor ($oldVersion -> $newVersion)');
+          await _onUpgrade(db, oldVersion, newVersion);
+          print('✅ Veritabanı başarıyla güncellendi!');
+        },
+        onOpen: (db) async {
+          print('🔓 Veritabanı açıldı: $path');
+          // Veritabanı bütünlüğünü kontrol et
+          await _checkDatabaseIntegrity(db);
+        },
+      );
+
+      return database;
+    } catch (e) {
+      print('❌ Veritabanı başlatma hatası: $e');
+
+      // Hata durumunda veritabanı dosyasını sil ve yeniden oluştur
+      if (await File(path).exists()) {
+        print('🗑️ Bozuk veritabanı dosyası siliniyor...');
+        await File(path).delete();
+      }
+
+      print('🔧 Veritabanı yeniden oluşturuluyor...');
+      return await openDatabase(
+        path,
+        version: Sabitler.VERITABANI_VERSIYONU,
+        onCreate: (db, version) async {
+          print('🎯 Yedek veritabanı oluşturuluyor (versiyon: $version)');
+          await _onCreate(db, version);
+          print('✅ Yedek veritabanı başarıyla oluşturuldu!');
+        },
+      );
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -46,6 +105,7 @@ class VeriTabaniServisi {
         kullanici_adi TEXT UNIQUE,
         sifre TEXT,
         kullanici_tipi TEXT DEFAULT 'NORMAL',
+        profil_fotografi TEXT,
         olusturma_tarihi TEXT NOT NULL,
         guncelleme_tarihi TEXT NOT NULL,
         aktif INTEGER DEFAULT 1
@@ -174,11 +234,41 @@ class VeriTabaniServisi {
     }
   }
 
+  /// Veritabanı bütünlüğünü kontrol et
+  Future<void> _checkDatabaseIntegrity(Database db) async {
+    try {
+      // Temel tabloların varlığını kontrol et
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
+
+      final requiredTables = ['kisiler', 'kategoriler', 'belgeler'];
+      final existingTables = tables.map((t) => t['name'] as String).toList();
+
+      for (final table in requiredTables) {
+        if (!existingTables.contains(table)) {
+          print('⚠️ Eksik tablo tespit edildi: $table');
+          throw Exception('Eksik tablo: $table');
+        }
+      }
+
+      // Basit bir query ile veritabanının çalıştığını kontrol et
+      await db.rawQuery('SELECT COUNT(*) FROM kisiler');
+      await db.rawQuery('SELECT COUNT(*) FROM kategoriler');
+      await db.rawQuery('SELECT COUNT(*) FROM belgeler');
+
+      print('✅ Veritabanı bütünlük kontrolü başarılı');
+    } catch (e) {
+      print('❌ Veritabanı bütünlük kontrolü başarısız: $e');
+      throw e;
+    }
+  }
+
   Future<void> _performMigration(
-      Database db,
-      int oldVersion,
-      int newVersion,
-      ) async {
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 2) {
       // Kişiler tablosunu ekle
       await db.execute('''
@@ -352,6 +442,38 @@ class VeriTabaniServisi {
         print('✅ Veritabanı yeniden oluşturuldu');
       }
     }
+
+    if (oldVersion < 7) {
+      // V7 Migration - kişiler tablosuna profil_fotografi kolonu ekle
+      try {
+        print(
+          '🔄 V7 Migration başlatılıyor - profil fotoğrafı kolonu ekleniyor...',
+        );
+
+        // Önce mevcut kolonları kontrol et
+        final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
+        final existingColumns = columns.map((col) => col['name']).toSet();
+
+        print('Mevcut kolonlar: $existingColumns');
+
+        // Profil fotoğrafı alanını ekle (sadece yoksa)
+        if (!existingColumns.contains('profil_fotografi')) {
+          await db.execute(
+            'ALTER TABLE kisiler ADD COLUMN profil_fotografi TEXT',
+          );
+          print('✅ profil_fotografi kolonu eklendi');
+        }
+
+        print('✅ Profil fotoğrafı sistemi V7 ile eklendi');
+      } catch (e) {
+        print('❌ V7 migration hatası: $e');
+        // Migration başarısız olursa veritabanını sıfırla
+        print('🔄 Veritabanı sıfırlanıyor...');
+        await _dropAllTables(db);
+        await _onCreate(db, 7);
+        print('✅ Veritabanı yeniden oluşturuldu');
+      }
+    }
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -418,7 +540,7 @@ class VeriTabaniServisi {
 
   Future<void> _insertDefaultCategories(Database db) async {
     List<KategoriModeli> defaultCategories =
-    KategoriModeli.ontanimliKategoriler();
+        KategoriModeli.ontanimliKategoriler();
 
     for (KategoriModeli kategori in defaultCategories) {
       await db.insert('kategoriler', kategori.toMap());
@@ -427,7 +549,7 @@ class VeriTabaniServisi {
 
   Future<void> _ensureDefaultCategories(Database db) async {
     List<KategoriModeli> defaultCategories =
-    KategoriModeli.ontanimliKategoriler();
+        KategoriModeli.ontanimliKategoriler();
 
     // Mevcut kategori adlarını al
     final existingMaps = await db.query(
@@ -438,7 +560,7 @@ class VeriTabaniServisi {
     );
 
     Set<String> existingNames =
-    existingMaps.map((map) => map['kategori_adi'] as String).toSet();
+        existingMaps.map((map) => map['kategori_adi'] as String).toSet();
 
     print('Mevcut kategori adları: $existingNames');
 
@@ -588,7 +710,8 @@ class VeriTabaniServisi {
         k.renk_kodu,
         k.simge_kodu,
         ki.ad as kisi_ad,
-        ki.soyad as kisi_soyad
+        ki.soyad as kisi_soyad,
+        ki.profil_fotografi as kisi_profil_fotografi
       FROM belgeler b
       LEFT JOIN kategoriler k ON b.kategori_id = k.id
       LEFT JOIN kisiler ki ON b.kisi_id = ki.id
@@ -623,10 +746,10 @@ class VeriTabaniServisi {
 
   // Kategori ID'ye göre belgeleri getir
   Future<List<BelgeModeli>> kategoriyeGoreBelgeleriGetir(
-      int kategoriId, {
-        int? limit,
-        int? offset,
-      }) async {
+    int kategoriId, {
+    int? limit,
+    int? offset,
+  }) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
@@ -644,12 +767,12 @@ class VeriTabaniServisi {
 
   // Belgeleri kategori ve kişi bilgileri ile birlikte getir - JOIN kullanımı
   Future<List<Map<String, dynamic>>> kategoriyeGoreBelgeleriDetayliGetir(
-      int kategoriId, {
-        int? limit,
-        int? offset,
-        DateTime? baslangicTarihi,
-        DateTime? bitisTarihi,
-      }) async {
+    int kategoriId, {
+    int? limit,
+    int? offset,
+    DateTime? baslangicTarihi,
+    DateTime? bitisTarihi,
+  }) async {
     final db = await database;
 
     // WHERE clause'u dinamik olarak oluştur
@@ -679,7 +802,8 @@ class VeriTabaniServisi {
         k.renk_kodu,
         k.simge_kodu,
         ki.ad as kisi_ad,
-        ki.soyad as kisi_soyad
+        ki.soyad as kisi_soyad,
+        ki.profil_fotografi as kisi_profil_fotografi
       FROM belgeler b
       LEFT JOIN kategoriler k ON b.kategori_id = k.id
       LEFT JOIN kisiler ki ON b.kisi_id = ki.id
@@ -1125,10 +1249,10 @@ class VeriTabaniServisi {
 
     // Başka belgelerde kullanılmayan kişileri sil
     final kisiIdleri =
-    belgelerResult
-        .map((e) => e['kisi_id'] as int?)
-        .where((id) => id != null)
-        .toSet();
+        belgelerResult
+            .map((e) => e['kisi_id'] as int?)
+            .where((id) => id != null)
+            .toSet();
 
     int silinenKisiSayisi = 0;
     for (int? kisiId in kisiIdleri) {
@@ -1290,7 +1414,8 @@ class VeriTabaniServisi {
         k.renk_kodu,
         k.simge_kodu,
         ki.ad as kisi_ad,
-        ki.soyad as kisi_soyad
+        ki.soyad as kisi_soyad,
+        ki.profil_fotografi as kisi_profil_fotografi
       FROM belgeler b
       LEFT JOIN kategoriler k ON b.kategori_id = k.id
       LEFT JOIN kisiler ki ON b.kisi_id = ki.id
@@ -1393,8 +1518,8 @@ class VeriTabaniServisi {
 
   // Senkron durumuna göre belgeleri getir
   Future<List<BelgeModeli>> senkronDurumunaGoreBelgeleriGetir(
-      int senkronDurumu,
-      ) async {
+    int senkronDurumu,
+  ) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
@@ -1445,13 +1570,13 @@ class VeriTabaniServisi {
   }
 
   Future<int> belgeVersiyonKaydet(
-      int belgeId,
-      int versiyonNumarasi,
-      String dosyaHash,
-      String? metadataHash,
-      String? degisiklikAciklamasi,
-      String? olusturanCihaz,
-      ) async {
+    int belgeId,
+    int versiyonNumarasi,
+    String dosyaHash,
+    String? metadataHash,
+    String? degisiklikAciklamasi,
+    String? olusturanCihaz,
+  ) async {
     final db = await database;
     return await db.insert('belge_versiyonlari', {
       'belge_id': belgeId,
@@ -1466,8 +1591,8 @@ class VeriTabaniServisi {
 
   // Son değişiklikleri getir (raporda belirtilen)
   Future<List<Map<String, dynamic>>> sonDegisiklikleriGetir(
-      DateTime since,
-      ) async {
+    DateTime since,
+  ) async {
     final db = await database;
     return await db.query(
       'belgeler',
@@ -1479,12 +1604,12 @@ class VeriTabaniServisi {
 
   // Metadata güncelleme (raporda belirtilen)
   Future<int> metadataGuncelle(
-      int belgeId,
-      String? baslik,
-      String? aciklama,
-      String? etiketler,
-      String? metadataHash,
-      ) async {
+    int belgeId,
+    String? baslik,
+    String? aciklama,
+    String? etiketler,
+    String? metadataHash,
+  ) async {
     final db = await database;
     final guncellemeTarihi = DateTime.now().toIso8601String();
 
@@ -1507,11 +1632,11 @@ class VeriTabaniServisi {
 
   // Sync state kaydet/güncelle
   Future<void> syncStateGuncelle(
-      String dosyaHash,
-      String syncDurumu,
-      String? cihazId,
-      String? metadataHash,
-      ) async {
+    String dosyaHash,
+    String syncDurumu,
+    String? cihazId,
+    String? metadataHash,
+  ) async {
     final db = await database;
     final tarih = DateTime.now().toIso8601String();
 
@@ -1572,13 +1697,13 @@ class VeriTabaniServisi {
 
   // Metadata değişikliği kaydet
   Future<int> metadataDegisikligiKaydet(
-      String entityType,
-      int entityId,
-      String degisiklikTipi,
-      String? eskiDeger,
-      String? yeniDeger,
-      String? cihazId,
-      ) async {
+    String entityType,
+    int entityId,
+    String degisiklikTipi,
+    String? eskiDeger,
+    String? yeniDeger,
+    String? cihazId,
+  ) async {
     final db = await database;
     return await db.insert('metadata_degisiklikleri', {
       'entity_type': entityType,
@@ -1631,8 +1756,8 @@ class VeriTabaniServisi {
 
   // Belgenin tüm versiyonlarını getir
   Future<List<Map<String, dynamic>>> belgeVersiyonlariniGetir(
-      int belgeId,
-      ) async {
+    int belgeId,
+  ) async {
     final db = await database;
     return await db.query(
       'belge_versiyonlari',
@@ -1659,9 +1784,9 @@ class VeriTabaniServisi {
 
   // Belgenin versiyon numarasını güncelle
   Future<void> belgeVersiyonNumarasiniGuncelle(
-      int belgeId,
-      int yeniVersiyon,
-      ) async {
+    int belgeId,
+    int yeniVersiyon,
+  ) async {
     final db = await database;
     await db.update(
       'belgeler',
