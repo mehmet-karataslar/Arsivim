@@ -1,31 +1,38 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../services/veritabani_servisi.dart';
-import '../services/dosya_servisi.dart';
-import '../services/auth_servisi.dart';
-import '../services/cache_servisi.dart';
-import '../services/log_servisi.dart';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
-import '../utils/screen_utils.dart';
-import '../utils/sabitler.dart';
+import '../providers/app_state_manager.dart';
+import '../services/auth_servisi.dart';
+import '../services/belge_islemleri_servisi.dart';
+import '../services/cache_servisi.dart';
+import '../services/log_servisi.dart';
+import '../services/veritabani_servisi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import '../utils/sabitler.dart';
+import '../utils/screen_utils.dart';
+import '../utils/yardimci_fonksiyonlar.dart';
+import '../widgets/belge_karti_widget.dart';
+import '../widgets/kategori_karti_widget.dart';
+import 'auth/login_screen.dart';
 import 'belgeler_ekrani.dart';
 import 'kategoriler_ekrani.dart';
+import 'kisi_belgeleri_ekrani.dart';
+import 'kisi_ekle_ekrani.dart';
 import 'kisiler_ekrani.dart';
-import 'yeni_belge_ekle_ekrani.dart';
-import 'yedekleme_ekrani.dart';
 import 'senkronizasyon_ekrani.dart';
-import 'auth/login_screen.dart';
-import '../widgets/belge_karti_widget.dart';
-import '../widgets/qr_scanner_widget.dart';
 import 'tarayici_ekrani.dart';
+import 'yedekleme_ekrani.dart';
+import 'yeni_belge_ekle_ekrani.dart';
+import 'package:http/http.dart' as http;
+import '../services/http_sunucu_servisi.dart';
 
 // Ana dashboard ve navigasyon
 class AnaEkran extends StatefulWidget {
@@ -37,10 +44,12 @@ class AnaEkran extends StatefulWidget {
 
 class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   int _secilenTab = 0;
-  final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
-  final DosyaServisi _dosyaServisi = DosyaServisi();
+  // Ana servisleri tanımla
+  final VeriTabaniServisi _veritabaniServisi = VeriTabaniServisi();
   final CacheServisi _cacheServisi = CacheServisi();
   final LogServisi _logServisi = LogServisi.instance;
+  final AuthServisi _authServisi = AuthServisi.instance;
+  final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
 
   int _toplamBelgeSayisi = 0;
   int _toplamDosyaBoyutu = 0;
@@ -97,8 +106,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
       _logServisi.info('Ana ekran verileri yükleniyor...');
 
       final futures = await Future.wait([
-        _veriTabani.belgeIstatistikleriGetir(),
-        _veriTabani.onceakliBelgeleriDetayliGetir(limit: 5),
+        _veritabaniServisi.belgeIstatistikleriGetir(),
+        _veritabaniServisi.onceakliBelgeleriDetayliGetir(limit: 5),
       ]);
 
       if (!mounted) return;
@@ -472,62 +481,26 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(width: 8),
-          // QR Login butonu - sadece mobil platformlarda göster
-          if (_isMobilePlatform) ...[
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    spreadRadius: 1,
-                    blurRadius: 5,
-                  ),
-                ],
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
-                onPressed: _qrLoginTara,
-                tooltip: 'QR ile PC\'ye Giriş',
-              ),
+          // QR butonları kaldırıldı
+          // Yenileme butonu
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 5,
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-          ],
-          // Yenileme butonu - sadece desktop platformlarda göster
-          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    spreadRadius: 1,
-                    blurRadius: 5,
-                  ),
-                ],
-              ),
-              child: IconButton(
-                icon:
-                    _yukleniyor
-                        ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Theme.of(context).primaryColor,
-                            ),
-                          ),
-                        )
-                        : const Icon(Icons.refresh),
-                onPressed: _yukleniyor ? null : _verileriYenile,
-                tooltip: 'Yenile',
-              ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.green),
+              onPressed: _verileriYenile,
+              tooltip: 'Yenile',
             ),
-            const SizedBox(width: 8),
-          ],
+          ),
           // Çıkış yap butonu
           Container(
             decoration: BoxDecoration(
@@ -1291,166 +1264,12 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _qrLoginTara() async {
-    if (!_isMobilePlatform) {
-      ScreenUtils.showErrorSnackBar(
-        context,
-        'QR login sadece mobil cihazlarda kullanılabilir.',
-      );
-      return;
-    }
-
-    try {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (context) => QRScannerScreen(
-                onQRScanned: (qrData) async {
-                  Navigator.pop(context); // Scanner ekranını kapat
-                  await _processQRLogin(qrData);
-                },
-              ),
-        ),
-      );
-    } catch (e) {
-      _logServisi.error('QR scanner açılırken hata: $e');
-      ScreenUtils.showErrorSnackBar(context, 'QR scanner açılamadı.');
-    }
-  }
-
-  Future<void> _processQRLogin(String qrData) async {
-    try {
-      _logServisi.info('QR login verisi işleniyor: $qrData');
-
-      // QR kodunu parse et
-      final qrJson = jsonDecode(qrData);
-
-      if (qrJson['type'] != 'qr_login') {
-        ScreenUtils.showErrorSnackBar(
-          context,
-          'Geçersiz QR kod. Bu bir login QR kodu değil.',
-        );
-        return;
-      }
-
-      final token = qrJson['token'] as String?;
-      final serverIP = qrJson['server_ip'] as String?;
-      final serverPort = qrJson['server_port'] as int?;
-
-      if (token == null || serverIP == null || serverPort == null) {
-        ScreenUtils.showErrorSnackBar(context, 'QR kod eksik bilgi içeriyor.');
-        return;
-      }
-
-      // Mevcut kullanıcı bilgilerini al
-      final currentUser = AuthServisi.instance.currentUser;
-      if (currentUser == null) {
-        ScreenUtils.showErrorSnackBar(context, 'Önce giriş yapmalısınız.');
-        return;
-      }
-
-      _logServisi.info('🔗 PC\'ye bağlanılıyor: $serverIP:$serverPort');
-
-      // Loading göster
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder:
-            (context) => const AlertDialog(
-              content: Row(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
-                  Text('PC\'ye bağlanılıyor...'),
-                ],
-              ),
-            ),
-      );
-
-      try {
-        // Önce ping ile bağlantı kontrolü
-        final pingResponse = await http
-            .get(
-              Uri.parse('http://$serverIP:$serverPort/ping'),
-              headers: {'Content-Type': 'application/json'},
-            )
-            .timeout(const Duration(seconds: 5));
-
-        if (pingResponse.statusCode != 200) {
-          throw Exception('PC sunucusuna ulaşılamıyor');
-        }
-
-        // PC'ye login isteği gönder - kullanıcı bilgileri ile birlikte
-        final response = await http
-            .post(
-              Uri.parse('http://$serverIP:$serverPort/auth/qr-login'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'kullanici_adi': currentUser.kullaniciAdi,
-                'token': token,
-                'device_id': 'mobile_${DateTime.now().millisecondsSinceEpoch}',
-                'device_name': Platform.isAndroid ? 'Android' : 'iOS',
-                'platform': Platform.operatingSystem,
-                // Kullanıcı bilgilerini ekle
-                'user_info': {
-                  'kullanici_adi': currentUser.kullaniciAdi,
-                  'ad': currentUser.ad,
-                  'soyad': currentUser.soyad,
-                  'kullanici_tipi': currentUser.kullaniciTipi,
-                  'profil_fotografi': currentUser.profilFotografi,
-                  'aktif': currentUser.aktif,
-                  'olusturma_tarihi':
-                      currentUser.olusturmaTarihi.toIso8601String(),
-                },
-              }),
-            )
-            .timeout(const Duration(seconds: 10));
-
-        // Loading kapat
-        Navigator.of(context).pop();
-
-        if (response.statusCode == 200) {
-          final responseData = jsonDecode(response.body);
-          if (responseData['success'] == true) {
-            ScreenUtils.showSuccessSnackBar(
-              context,
-              'PC\'ye başarıyla giriş yapıldı!',
-            );
-            _logServisi.info(
-              '✅ QR login başarılı: ${currentUser.kullaniciAdi}',
-            );
-          } else {
-            ScreenUtils.showErrorSnackBar(
-              context,
-              responseData['error'] ?? 'QR login başarısız.',
-            );
-            _logServisi.error('❌ QR login hatası: ${responseData['error']}');
-          }
-        } else {
-          ScreenUtils.showErrorSnackBar(
-            context,
-            'Sunucu hatası: ${response.statusCode}',
-          );
-          _logServisi.error('❌ HTTP hatası: ${response.statusCode}');
-        }
-      } on TimeoutException {
-        Navigator.of(context).pop(); // Loading kapat
-        ScreenUtils.showErrorSnackBar(
-          context,
-          'PC\'ye bağlantı zaman aşımına uğradı.',
-        );
-        _logServisi.error('❌ QR login timeout');
-      } catch (e) {
-        Navigator.of(context).pop(); // Loading kapat
-        ScreenUtils.showErrorSnackBar(context, 'PC\'ye bağlanılamadı: $e');
-        _logServisi.error('❌ QR login bağlantı hatası: $e');
-      }
-    } catch (e) {
-      _logServisi.error('QR login işleme hatası: $e');
-      ScreenUtils.showErrorSnackBar(context, 'QR login sırasında hata oluştu.');
-    }
-  }
+  // QR fonksiyonları kaldırıldı
+  // void _qrScanForPCLogin() async { ... }
+  // Future<void> _processPCLoginQR(String qrData) async { ... }
+  // void _showQRForMobileLogin() async { ... }
+  // void _scanQRForMobileLogin() async { ... }
+  // Future<void> _processMobileLoginQR(String qrData) async { ... }
 
   /// Veritabanı bilgilerini al
   Future<Map<String, dynamic>> _veritabaniBilgileriAl() async {

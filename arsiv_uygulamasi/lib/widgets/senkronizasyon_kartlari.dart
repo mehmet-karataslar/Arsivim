@@ -548,183 +548,404 @@ class SenkronizasyonKartlari {
     );
   }
 
+  // Kişi senkronizasyonu build fonksiyonu
   static Widget buildBekleyenKisiler(
     BuildContext context,
-    List<KisiModeli> bekleyenKisiler,
+    List<KisiModeli> kisiler,
     Function(List<KisiModeli>) onKisileriGonder,
     SenkronizasyonYoneticiServisi yonetici,
   ) {
-    if (bekleyenKisiler.isEmpty) {
+    if (kisiler.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: 64,
-              color: Colors.green[400],
-            ),
+            Icon(Icons.person_off, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              'Tüm kişiler senkronize!',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.green[600],
+              'Senkronizasyon bekleyen kişi yok',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Şu anda senkronizasyon bekleyen kişi yok.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
+              'Yeni eklenen kişiler burada görünecek',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             ),
           ],
         ),
       );
     }
 
-    return Column(
-      children: [
-        // Üst bilgi
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.blue[600]),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '${bekleyenKisiler.length} kişi senkronizasyon bekliyor',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+    return StatefulBuilder(
+      builder: (context, setState) {
+        final secilenKisiler = <KisiModeli>[];
+        final tumKisiler = kisiler;
+
+        return Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Kişiler listesi
-        ...bekleyenKisiler.map((kisi) => _buildKisiItem(context, kisi)),
-        const SizedBox(height: 16),
-        // Aksiyon butonları
-        Row(
-          children: [
+              child: Row(
+                children: [
+                  Icon(Icons.person, color: Colors.blue[600]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${tumKisiler.length} kişi senkronizasyon bekliyor',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        if (secilenKisiler.length == tumKisiler.length) {
+                          secilenKisiler.clear();
+                        } else {
+                          secilenKisiler.clear();
+                          secilenKisiler.addAll(tumKisiler);
+                        }
+                      });
+                    },
+                    child: Text(
+                      secilenKisiler.length == tumKisiler.length
+                          ? 'Tümünü Kaldır'
+                          : 'Tümünü Seç',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed:
-                    yonetici.bagliCihazlar.isNotEmpty
-                        ? () => onKisileriGonder(bekleyenKisiler)
-                        : null,
-                icon: const Icon(Icons.sync),
-                label: const Text('Tümünü Senkronize Et'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView.builder(
+                  itemCount: tumKisiler.length,
+                  itemBuilder: (context, index) {
+                    final kisi = tumKisiler[index];
+                    final secilimi = secilenKisiler.contains(kisi);
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        border:
+                            index > 0
+                                ? Border(
+                                  top: BorderSide(
+                                    color: Colors.grey[200]!,
+                                    width: 1,
+                                  ),
+                                )
+                                : null,
+                      ),
+                      child: CheckboxListTile(
+                        value: secilimi,
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              secilenKisiler.add(kisi);
+                            } else {
+                              secilenKisiler.remove(kisi);
+                            }
+                          });
+                        },
+                        title: Text(
+                          '${kisi.ad} ${kisi.soyad}',
+                          style: const TextStyle(fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          kisi.kullaniciAdi ?? 'Kullanıcı adı yok',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        secondary: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.blue[600],
+                            size: 20,
+                          ),
+                        ),
+                        dense: true,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${secilenKisiler.length} / ${tumKisiler.length} kişi seçildi',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('İptal'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed:
+                        secilenKisiler.isNotEmpty
+                            ? () {
+                              Navigator.pop(context);
+                              onKisileriGonder(secilenKisiler);
+                            }
+                            : null,
+                    icon: const Icon(Icons.send),
+                    label: Text('Gönder (${secilenKisiler.length})'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[600],
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 
+  // Kategori senkronizasyonu build fonksiyonu
   static Widget buildBekleyenKategoriler(
     BuildContext context,
-    List<KategoriModeli> bekleyenKategoriler,
+    List<KategoriModeli> kategoriler,
     Function(List<KategoriModeli>) onKategorileriGonder,
     SenkronizasyonYoneticiServisi yonetici,
   ) {
-    if (bekleyenKategoriler.isEmpty) {
+    if (kategoriler.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: 64,
-              color: Colors.green[400],
-            ),
+            Icon(Icons.folder_off, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              'Tüm kategoriler senkronize!',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.green[600],
+              'Senkronizasyon bekleyen kategori yok',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Şu anda senkronizasyon bekleyen kategori yok.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
+              'Yeni eklenen kategoriler burada görünecek',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             ),
           ],
         ),
       );
     }
 
-    return Column(
-      children: [
-        // Üst bilgi
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.purple[50],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.purple[600]),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '${bekleyenKategoriler.length} kategori senkronizasyon bekliyor',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+    return StatefulBuilder(
+      builder: (context, setState) {
+        final secilenKategoriler = <KategoriModeli>[];
+        final tumKategoriler = kategoriler;
+
+        return Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.purple[50],
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Kategoriler listesi
-        ...bekleyenKategoriler.map(
-          (kategori) => _buildKategoriItem(context, kategori),
-        ),
-        const SizedBox(height: 16),
-        // Aksiyon butonları
-        Row(
-          children: [
+              child: Row(
+                children: [
+                  Icon(Icons.category, color: Colors.purple[600]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${tumKategoriler.length} kategori senkronizasyon bekliyor',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        if (secilenKategoriler.length ==
+                            tumKategoriler.length) {
+                          secilenKategoriler.clear();
+                        } else {
+                          secilenKategoriler.clear();
+                          secilenKategoriler.addAll(tumKategoriler);
+                        }
+                      });
+                    },
+                    child: Text(
+                      secilenKategoriler.length == tumKategoriler.length
+                          ? 'Tümünü Kaldır'
+                          : 'Tümünü Seç',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed:
-                    yonetici.bagliCihazlar.isNotEmpty
-                        ? () => onKategorileriGonder(bekleyenKategoriler)
-                        : null,
-                icon: const Icon(Icons.sync),
-                label: const Text('Tümünü Senkronize Et'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView.builder(
+                  itemCount: tumKategoriler.length,
+                  itemBuilder: (context, index) {
+                    final kategori = tumKategoriler[index];
+                    final secilimi = secilenKategoriler.contains(kategori);
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        border:
+                            index > 0
+                                ? Border(
+                                  top: BorderSide(
+                                    color: Colors.grey[200]!,
+                                    width: 1,
+                                  ),
+                                )
+                                : null,
+                      ),
+                      child: CheckboxListTile(
+                        value: secilimi,
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              secilenKategoriler.add(kategori);
+                            } else {
+                              secilenKategoriler.remove(kategori);
+                            }
+                          });
+                        },
+                        title: Text(
+                          kategori.ad,
+                          style: const TextStyle(fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          kategori.aciklama ?? 'Açıklama yok',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        secondary: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.category,
+                            color: Colors.purple[600],
+                            size: 20,
+                          ),
+                        ),
+                        dense: true,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${secilenKategoriler.length} / ${tumKategoriler.length} kategori seçildi',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('İptal'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed:
+                        secilenKategoriler.isNotEmpty
+                            ? () {
+                              Navigator.pop(context);
+                              onKategorileriGonder(secilenKategoriler);
+                            }
+                            : null,
+                    icon: const Icon(Icons.send),
+                    label: Text('Gönder (${secilenKategoriler.length})'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple[600],
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 

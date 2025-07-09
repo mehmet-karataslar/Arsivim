@@ -182,7 +182,8 @@ class AuthServisi {
       }
 
       // Token geçerlilik kontrolü (basit token kontrolü)
-      if (token.isEmpty || !token.startsWith('qr_login_')) {
+      if (token.isEmpty ||
+          (!token.startsWith('qr_login_') && !token.startsWith('pc_mobile_') && !token.startsWith('pc_login_'))) {
         return AuthResult(success: false, message: 'Geçersiz QR kod.');
       }
 

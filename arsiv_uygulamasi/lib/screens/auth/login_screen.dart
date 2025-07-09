@@ -1,13 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+
+import '../../models/kisi_modeli.dart';
 import '../../services/auth_servisi.dart';
-import '../../services/log_servisi.dart';
 import '../../services/error_handler_servisi.dart';
-import '../../services/http_sunucu_servisi.dart';
+import '../../services/log_servisi.dart';
 import '../../utils/screen_utils.dart';
-import '../../widgets/qr_generator_widget.dart';
 import '../ana_ekran.dart';
 import 'register_screen.dart';
 
@@ -27,7 +28,6 @@ class _LoginScreenState extends State<LoginScreen>
   final AuthServisi _authServisi = AuthServisi.instance;
   final LogServisi _logServisi = LogServisi.instance;
   final ErrorHandlerServisi _errorHandler = ErrorHandlerServisi.instance;
-  final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -37,21 +37,10 @@ class _LoginScreenState extends State<LoginScreen>
   bool _obscurePassword = true;
   bool _rememberMe = false;
 
-  // PC için çift giriş modu
-  bool _isQRMode = false;
-  String? _qrLoginToken;
-
-  // Platform kontrolü
-  bool get _isPCPlatform =>
-      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
-    if (_isPCPlatform) {
-      _setupQRLoginListener();
-    }
   }
 
   void _initializeAnimations() {
@@ -74,111 +63,27 @@ class _LoginScreenState extends State<LoginScreen>
     _animationController.forward();
   }
 
-  void _setupQRLoginListener() {
-    _logServisi.info('🔧 QR Login listener ayarlanıyor...');
-
-    // QR kod ile giriş için HTTP sunucusunu başlat
-    _httpSunucu.setOnQRLoginRequest((loginData) async {
-      _logServisi.info(
-        '📱 QR kod ile giriş isteği alındı: ${loginData['kullanici_adi']}',
-      );
-
-      try {
-        final result = await _authServisi.qrLogin(
-          kullaniciAdi: loginData['kullanici_adi'],
-          token: loginData['token'],
-        );
-
-        // UI thread'de çalıştır
-        if (mounted) {
-          if (result.success) {
-            _logServisi.info(
-              '✅ QR giriş başarılı: ${loginData['kullanici_adi']}',
-            );
-
-            // UI güncellemelerini main thread'de yap
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                ScreenUtils.showSuccessSnackBar(
-                  context,
-                  'QR kod ile giriş başarılı!',
-                );
-
-                // Ana ekrana yönlendir
-                Navigator.of(context).pushReplacement(
-                  PageRouteBuilder(
-                    pageBuilder:
-                        (context, animation, secondaryAnimation) =>
-                            const AnaEkran(),
-                    transitionsBuilder: (
-                      context,
-                      animation,
-                      secondaryAnimation,
-                      child,
-                    ) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    transitionDuration: const Duration(milliseconds: 500),
-                  ),
-                );
-              }
-            });
-          } else {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                ScreenUtils.showErrorSnackBar(context, result.message);
-              }
-            });
-          }
-        }
-      } catch (e) {
-        _logServisi.error('❌ QR giriş hatası: $e');
-        if (mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              ScreenUtils.showErrorSnackBar(
-                context,
-                'QR kod ile giriş başarısız.',
-              );
-            }
-          });
-        }
-      }
-    });
-
-    _logServisi.info('✅ QR Login listener ayarlandı');
-  }
-
   void _toggleLoginMode() {
-    setState(() {
-      _isQRMode = !_isQRMode;
-      if (_isQRMode) {
-        _generateQRLoginToken();
-      }
-    });
+    // Kaldırıldı
   }
 
   void _generateQRLoginToken() {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    _qrLoginToken = 'qr_login_${timestamp}_${_httpSunucu.cihazId}';
-    _logServisi.info('🔑 QR giriş token oluşturuldu: $_qrLoginToken');
+    // Kaldırıldı
+  }
+
+  Widget _buildLoginModeSelector() {
+    // Kaldırıldı - sadece normal giriş
+    return Container();
+  }
+
+  Widget _buildQRLoginSection() {
+    // Kaldırıldı - sadece normal giriş
+    return Container();
   }
 
   Future<String> _getLocalIP() async {
-    // HTTP sunucusundan gerçek IP adresini al
-    final httpSunucu = HttpSunucuServisi.instance;
-
-    // Sunucu çalışıyorsa gerçek IP'yi döndür
-    if (httpSunucu.calisiyorMu) {
-      final realIP = await httpSunucu.getRealIPAddress();
-      if (realIP != null) {
-        _logServisi.info('🌐 QR için gerçek IP alındı: $realIP');
-        return realIP;
-      }
-    }
-
-    _logServisi.warning('⚠️ Gerçek IP alınamadı, varsayılan kullanılıyor');
-    return '192.168.1.100'; // Varsayılan local IP
+    // Kaldırıldı
+    return '127.0.0.1';
   }
 
   Future<void> _login() async {
@@ -257,9 +162,9 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
-    _animationController.dispose();
     _kullaniciAdiController.dispose();
     _sifreController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -306,23 +211,18 @@ class _LoginScreenState extends State<LoginScreen>
 
                         const SizedBox(height: 40),
 
-                        // PC için giriş modu seçici
-                        if (_isPCPlatform) _buildLoginModeSelector(),
-
-                        const SizedBox(height: 20),
-
-                        // Giriş formu veya QR kod
-                        _isQRMode ? _buildQRLoginSection() : _buildLoginForm(),
+                        // Giriş formu
+                        _buildLoginForm(),
 
                         const SizedBox(height: 32),
 
                         // Giriş butonu (sadece normal mod için)
-                        if (!_isQRMode) _buildLoginButton(),
+                        _buildLoginButton(),
 
                         const SizedBox(height: 24),
 
-                        // Kayıt ol linki (sadece normal mod için)
-                        if (!_isQRMode) _buildRegisterLink(),
+                        // Kayıt ol linki
+                        _buildRegisterLink(),
 
                         const SizedBox(height: 40),
                       ],
@@ -388,198 +288,6 @@ class _LoginScreenState extends State<LoginScreen>
           style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.9)),
         ),
       ],
-    );
-  }
-
-  Widget _buildLoginModeSelector() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (_isQRMode) _toggleLoginMode();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: !_isQRMode ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow:
-                      !_isQRMode
-                          ? [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 5,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                          : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.login,
-                      color:
-                          !_isQRMode ? const Color(0xFF2E7D32) : Colors.white,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Normal Giriş',
-                      style: TextStyle(
-                        color:
-                            !_isQRMode ? const Color(0xFF2E7D32) : Colors.white,
-                        fontWeight:
-                            !_isQRMode ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (!_isQRMode) _toggleLoginMode();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _isQRMode ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow:
-                      _isQRMode
-                          ? [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 5,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                          : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.qr_code_scanner,
-                      color: _isQRMode ? const Color(0xFF2E7D32) : Colors.white,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'QR Kod Giriş',
-                      style: TextStyle(
-                        color:
-                            _isQRMode ? const Color(0xFF2E7D32) : Colors.white,
-                        fontWeight:
-                            _isQRMode ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQRLoginSection() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.qr_code_2, size: 60, color: Color(0xFF2E7D32)),
-          const SizedBox(height: 16),
-          const Text(
-            'QR Kod ile Giriş',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2E7D32),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Mobil cihazınızdan QR kodu okutarak hızlı giriş yapın',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 24),
-
-          // QR Kod gösterimi
-          if (_qrLoginToken != null) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Column(
-                children: [
-                  FutureBuilder<String>(
-                    future: _getLocalIP(),
-                    builder: (context, snapshot) {
-                      final serverIP = snapshot.data ?? '192.168.1.100';
-                      return QRGeneratorWidget(
-                        connectionData: jsonEncode({
-                          'type': 'qr_login',
-                          'token': _qrLoginToken,
-                          'server_ip': serverIP,
-                          'server_port': _httpSunucu.port,
-                          'timestamp': DateTime.now().toIso8601String(),
-                        }),
-                        title: 'QR Kod ile Giriş',
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'QR kodu mobil cihazınızla okutun',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _generateQRLoginToken,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Yeni QR Kod'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2E7D32),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ] else ...[
-            const CircularProgressIndicator(color: Color(0xFF2E7D32)),
-            const SizedBox(height: 16),
-            const Text('QR kod oluşturuluyor...'),
-          ],
-        ],
-      ),
     );
   }
 

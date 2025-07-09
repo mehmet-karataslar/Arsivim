@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/services.dart';
+
 import '../services/senkronizasyon_yonetici_servisi.dart';
 import '../utils/timestamp_manager.dart';
-import '../widgets/qr_generator_widget.dart';
-import '../widgets/qr_scanner_widget.dart';
+// QR widget'ları kaldırıldı
+// import '../widgets/qr_generator_widget.dart';
+// import '../widgets/qr_scanner_widget.dart';
 
 class CihazBaglantiPaneli extends StatelessWidget {
   final SenkronizasyonYoneticiServisi yonetici;
