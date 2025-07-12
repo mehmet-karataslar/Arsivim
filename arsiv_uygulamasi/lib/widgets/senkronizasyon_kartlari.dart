@@ -199,15 +199,14 @@ class SenkronizasyonKartlari {
   }) {
     final bekleyenBelgeSayisi =
         bekleyenBelgeler?.length ?? yonetici.bekleyenDosyaSayisi;
-    final bekleyenKisiSayisi = bekleyenKisiler?.length ?? 0;
-    final bekleyenKategoriSayisi = bekleyenKategoriler?.length ?? 0;
 
     return Column(
       children: [
-        // İlk satır - Belgeler ve Kişiler
+        // Sadece belgeler ve senkronize bilgisi gösterilir
         Row(
           children: [
             Expanded(
+              flex: 2,
               child: _buildTiklanabilirStatItem(
                 context,
                 'Bekleyen Belgeler',
@@ -218,55 +217,40 @@ class SenkronizasyonKartlari {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child:
-                  bekleyenKisileriGoster != null
-                      ? _buildTiklanabilirStatItem(
-                        context,
-                        'Bekleyen Kişiler',
-                        '$bekleyenKisiSayisi',
-                        Icons.person,
-                        bekleyenKisileriGoster,
-                      )
-                      : _buildStatItem(
-                        context,
-                        'Bekleyen Kişiler',
-                        '$bekleyenKisiSayisi',
-                        Icons.person,
-                      ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // İkinci satır - Kategoriler ve Senkronize
-        Row(
-          children: [
-            Expanded(
-              child:
-                  bekleyenKategorileriGoster != null
-                      ? _buildTiklanabilirStatItem(
-                        context,
-                        'Bekleyen Kategoriler',
-                        '$bekleyenKategoriSayisi',
-                        Icons.folder,
-                        bekleyenKategorileriGoster,
-                      )
-                      : _buildStatItem(
-                        context,
-                        'Bekleyen Kategoriler',
-                        '$bekleyenKategoriSayisi',
-                        Icons.folder,
-                      ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
               child: _buildStatItem(
                 context,
-                'Senkronize',
+                'Senkronize Belgeler',
                 '${yonetici.senkronizeDosyaSayisi}',
                 Icons.check_circle,
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        // Bilgilendirme kartı
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[600], size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Kişiler ve kategoriler belgelerle birlikte otomatik senkronize edilir',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue[700],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -284,15 +268,14 @@ class SenkronizasyonKartlari {
   }) {
     final bekleyenBelgeSayisi =
         bekleyenBelgeler?.length ?? yonetici.bekleyenDosyaSayisi;
-    final bekleyenKisiSayisi = bekleyenKisiler?.length ?? 0;
-    final bekleyenKategoriSayisi = bekleyenKategoriler?.length ?? 0;
 
     return Column(
       children: [
-        // İlk satır - Belgeler ve Kişiler
+        // Sadece belgeler ve senkronize bilgisi gösterilir
         Row(
           children: [
             Expanded(
+              flex: 2,
               child: _buildTiklanabilirStatItem(
                 context,
                 'Bekleyen Belgeler',
@@ -303,55 +286,40 @@ class SenkronizasyonKartlari {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child:
-                  bekleyenKisileriGoster != null
-                      ? _buildTiklanabilirStatItem(
-                        context,
-                        'Bekleyen Kişiler',
-                        '$bekleyenKisiSayisi',
-                        Icons.person,
-                        bekleyenKisileriGoster,
-                      )
-                      : _buildStatItem(
-                        context,
-                        'Bekleyen Kişiler',
-                        '$bekleyenKisiSayisi',
-                        Icons.person,
-                      ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // İkinci satır - Kategoriler ve Senkronize
-        Row(
-          children: [
-            Expanded(
-              child:
-                  bekleyenKategorileriGoster != null
-                      ? _buildTiklanabilirStatItem(
-                        context,
-                        'Bekleyen Kategoriler',
-                        '$bekleyenKategoriSayisi',
-                        Icons.folder,
-                        bekleyenKategorileriGoster,
-                      )
-                      : _buildStatItem(
-                        context,
-                        'Bekleyen Kategoriler',
-                        '$bekleyenKategoriSayisi',
-                        Icons.folder,
-                      ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
               child: _buildStatItem(
                 context,
-                'Senkronize',
+                'Senkronize Belgeler',
                 '${yonetici.senkronizeDosyaSayisi}',
                 Icons.check_circle,
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        // Bilgilendirme kartı
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[600], size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Kişiler ve kategoriler belgelerle birlikte otomatik senkronize edilir',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue[700],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

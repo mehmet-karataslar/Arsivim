@@ -828,11 +828,6 @@ class VeriTabaniServisi {
     return null;
   }
 
-  // Hash'e göre belge bul (alias for consistency)
-  Future<BelgeModeli?> belgeBulHash(String hash) async {
-    return await belgeGetirByHash(hash);
-  }
-
   // Belge güncelleme
   Future<int> belgeGuncelle(BelgeModeli belge) async {
     final db = await database;
@@ -1175,6 +1170,21 @@ class VeriTabaniServisi {
 
     if (maps.isNotEmpty) {
       return KategoriModeli.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  // Belge hash'ine göre belge bul
+  Future<BelgeModeli?> belgeBulHash(String hash) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'belgeler',
+      where: 'dosya_hash = ? AND aktif = ?',
+      whereArgs: [hash, 1],
+    );
+
+    if (maps.isNotEmpty) {
+      return BelgeModeli.fromMap(maps.first);
     }
     return null;
   }

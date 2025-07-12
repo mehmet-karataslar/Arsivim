@@ -1308,23 +1308,50 @@ class HttpSunucuServisi {
                 final kisiAd = belgeData['kisi_ad'] as String;
                 final kisiSoyad = belgeData['kisi_soyad'] as String;
 
+                // Tam ad-soyad eşleştirme yap
                 final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
                   kisiAd,
                   kisiSoyad,
                 );
+
                 if (mevcutKisi != null) {
                   dogruKisiId = mevcutKisi.id;
                   print(
-                    '👤 Kişi eşleştirildi: $kisiAd $kisiSoyad (ID: $dogruKisiId)',
+                    '✅ Kişi eşleştirildi: $kisiAd $kisiSoyad (ID: $dogruKisiId)',
                   );
                 } else {
+                  // Kişi bulunamadı - otomatik oluştur
                   print(
-                    '⚠️ Kişi bulunamadı: $kisiAd $kisiSoyad - Eski ID korunuyor',
+                    '➕ Kişi bulunamadı, otomatik oluşturuluyor: $kisiAd $kisiSoyad',
                   );
-                  dogruKisiId = belge.kisiId;
+
+                  final yeniKisi = KisiModeli(
+                    ad: kisiAd,
+                    soyad: kisiSoyad,
+                    kullaniciAdi: belgeData['kisi_kullanici_adi'] as String?,
+                    kullaniciTipi: 'otomatik', // Otomatik oluşturulan kişi
+                    olusturmaTarihi: DateTime.now().subtract(
+                      const Duration(
+                        days: 1,
+                      ), // Bekleyen listesine düşmemesi için
+                    ),
+                    guncellemeTarihi: DateTime.now(),
+                    aktif: true,
+                  );
+
+                  try {
+                    dogruKisiId = await _veriTabani.kisiEkle(yeniKisi);
+                    print(
+                      '✅ Kişi otomatik oluşturuldu: $kisiAd $kisiSoyad (ID: $dogruKisiId)',
+                    );
+                  } catch (e) {
+                    print('❌ Kişi oluşturma hatası: $e');
+                    dogruKisiId = null; // Kişi oluşturulamazsa null
+                  }
                 }
               } else {
-                dogruKisiId = belge.kisiId;
+                // Kişi bilgisi yoksa null
+                dogruKisiId = null;
               }
 
               // Kategori ID'sini doğru şekilde eşleştir
@@ -1332,22 +1359,51 @@ class HttpSunucuServisi {
               if (belgeData['kategori_adi'] != null) {
                 final kategoriAdi = belgeData['kategori_adi'] as String;
 
+                // Tam kategori adı eşleştirme yap
                 final mevcutKategori = await _veriTabani.kategoriBulAd(
                   kategoriAdi,
                 );
+
                 if (mevcutKategori != null) {
                   dogruKategoriId = mevcutKategori.id;
                   print(
-                    '📁 Kategori eşleştirildi: $kategoriAdi (ID: $dogruKategoriId)',
+                    '✅ Kategori eşleştirildi: $kategoriAdi (ID: $dogruKategoriId)',
                   );
                 } else {
+                  // Kategori bulunamadı - otomatik oluştur
                   print(
-                    '⚠️ Kategori bulunamadı: $kategoriAdi - Eski ID korunuyor',
+                    '➕ Kategori bulunamadı, otomatik oluşturuluyor: $kategoriAdi',
                   );
-                  dogruKategoriId = belge.kategoriId;
+
+                  final yeniKategori = KategoriModeli(
+                    kategoriAdi: kategoriAdi,
+                    renkKodu:
+                        belgeData['kategori_renk'] as String? ?? '#2196F3',
+                    simgeKodu: 'folder', // Varsayılan simge
+                    aciklama: 'Senkronizasyon sırasında otomatik oluşturuldu',
+                    olusturmaTarihi: DateTime.now().subtract(
+                      const Duration(
+                        days: 1,
+                      ), // Bekleyen listesine düşmemesi için
+                    ),
+                    aktif: true,
+                  );
+
+                  try {
+                    dogruKategoriId = await _veriTabani.kategoriEkle(
+                      yeniKategori,
+                    );
+                    print(
+                      '✅ Kategori otomatik oluşturuldu: $kategoriAdi (ID: $dogruKategoriId)',
+                    );
+                  } catch (e) {
+                    print('❌ Kategori oluşturma hatası: $e');
+                    dogruKategoriId = null; // Kategori oluşturulamazsa null
+                  }
                 }
               } else {
-                dogruKategoriId = belge.kategoriId;
+                // Kategori bilgisi yoksa null
+                dogruKategoriId = null;
               }
 
               // Dosya içeriğini kaydet

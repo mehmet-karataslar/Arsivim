@@ -190,16 +190,6 @@ class _SenkronizasyonProgressDialogState
         'asama': SenkronizasyonAsamasi.bagimlilikAnaliz,
       },
       {
-        'icon': Icons.folder,
-        'text': 'Kategoriler',
-        'asama': SenkronizasyonAsamasi.kategorilerGonderiliyor,
-      },
-      {
-        'icon': Icons.people,
-        'text': 'Kişiler',
-        'asama': SenkronizasyonAsamasi.kisilerGonderiliyor,
-      },
-      {
         'icon': Icons.description,
         'text': 'Belgeler',
         'asama': SenkronizasyonAsamasi.belgelerGonderiliyor,
@@ -262,14 +252,14 @@ class _SenkronizasyonProgressDialogState
     switch (asama) {
       case SenkronizasyonAsamasi.bagimlilikAnaliz:
         return 0;
-      case SenkronizasyonAsamasi.kategorilerGonderiliyor:
-        return 1;
-      case SenkronizasyonAsamasi.kisilerGonderiliyor:
-        return 2;
       case SenkronizasyonAsamasi.belgelerGonderiliyor:
-        return 3;
+        return 1;
       case SenkronizasyonAsamasi.tamamlandi:
-        return 4;
+        return 2;
+      case SenkronizasyonAsamasi.kategorilerGonderiliyor:
+      case SenkronizasyonAsamasi.kisilerGonderiliyor:
+        // Eski aşamalar - artık kullanılmıyor
+        return 1; // Belgeler aşaması ile aynı seviye
       case SenkronizasyonAsamasi.hata:
         return -1;
     }

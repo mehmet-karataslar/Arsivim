@@ -217,8 +217,10 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                         bekleyenBelgeler: _bekleyenBelgeler,
                         bekleyenKisiler: _bekleyenKisiler,
                         bekleyenKategoriler: _bekleyenKategoriler,
-                        bekleyenKisileriGoster: _bekleyenKisileriGoster,
-                        bekleyenKategorileriGoster: _bekleyenKategorileriGoster,
+                        bekleyenKisileriGoster:
+                            null, // Kişiler senkronizasyonu kaldırıldı
+                        bekleyenKategorileriGoster:
+                            null, // Kategoriler senkronizasyonu kaldırıldı
                       ),
                       const SizedBox(height: 16),
                       // PC için senkronizasyon kontrolleri
@@ -277,8 +279,10 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               bekleyenBelgeler: _bekleyenBelgeler,
               bekleyenKisiler: _bekleyenKisiler,
               bekleyenKategoriler: _bekleyenKategoriler,
-              bekleyenKisileriGoster: _bekleyenKisileriGoster,
-              bekleyenKategorileriGoster: _bekleyenKategorileriGoster,
+              bekleyenKisileriGoster:
+                  null, // Kişiler senkronizasyonu kaldırıldı
+              bekleyenKategorileriGoster:
+                  null, // Kategoriler senkronizasyonu kaldırıldı
             ),
             const SizedBox(height: 16),
             CihazBaglantiPaneli(
@@ -572,7 +576,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     );
   }
 
-  // Navigasyon fonksiyonları
+  // Kişiler ve kategoriler senkronizasyon fonksiyonları kaldırıldı
+  // Sadece belgeler senkronizasyonu aktif
+
   void _bekleyenBelgeleriGoster() async {
     try {
       final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
@@ -588,49 +594,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       _showBekleyenBelgelerDialog();
     } catch (e) {
       _hataGoster('Bekleyen belgeler yüklenemedi: $e');
-    }
-  }
-
-  void _bekleyenKisileriGoster() async {
-    try {
-      final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
-      final bekleyenKisiler = bekleyenler['bekleyen_kisiler'] as List<dynamic>?;
-
-      if (bekleyenKisiler != null && mounted) {
-        setState(() {
-          _bekleyenKisiler = bekleyenKisiler.cast<KisiModeli>();
-        });
-      }
-
-      if (mounted) {
-        _showBekleyenKisilerDialog();
-      }
-    } catch (e) {
-      if (mounted) {
-        _hataGoster('Bekleyen kişiler yüklenemedi: $e');
-      }
-    }
-  }
-
-  void _bekleyenKategorileriGoster() async {
-    try {
-      final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
-      final bekleyenKategoriler =
-          bekleyenler['bekleyen_kategoriler'] as List<dynamic>?;
-
-      if (bekleyenKategoriler != null && mounted) {
-        setState(() {
-          _bekleyenKategoriler = bekleyenKategoriler.cast<KategoriModeli>();
-        });
-      }
-
-      if (mounted) {
-        _showBekleyenKategorilerDialog();
-      }
-    } catch (e) {
-      if (mounted) {
-        _hataGoster('Bekleyen kategoriler yüklenemedi: $e');
-      }
     }
   }
 
@@ -687,136 +650,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                           context,
                           _bekleyenBelgeler,
                           _belgeleriCihazaGonder,
-                          _yonetici,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  void _showBekleyenKisilerDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: _pcPlatform ? 600 : 400,
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.person, color: Colors.blue[600]),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Senkronizasyon Bekleyen Kişiler',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Content
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: SenkronizasyonKartlari.buildBekleyenKisiler(
-                          context,
-                          _bekleyenKisiler,
-                          _kisileriCihazaGonder,
-                          _yonetici,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  void _showBekleyenKategorilerDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: _pcPlatform ? 600 : 400,
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.purple[50],
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.category, color: Colors.purple[600]),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Senkronizasyon Bekleyen Kategoriler',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Content
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: SenkronizasyonKartlari.buildBekleyenKategoriler(
-                          context,
-                          _bekleyenKategoriler,
-                          _kategorileriCihazaGonder,
                           _yonetici,
                         ),
                       ),
@@ -919,222 +752,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         dialogAcik = false;
       }
       _hataGoster('Belge senkronizasyon hatası: $e');
-    } finally {
-      // Son güvenlik kontrolü
-      if (mounted && dialogAcik) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (navError) {
-          print('Final navigation error: $navError');
-        }
-      }
-
-      // Loading durumunu kapat
-      if (mounted) {
-        setState(() => _yukleniyor = false);
-      }
-    }
-  }
-
-  void _kisileriCihazaGonder(List<KisiModeli> kisiler) async {
-    if (_yonetici.bagliCihazlar.isEmpty) {
-      _hataGoster('Önce bir cihaz bağlanmalı');
-      return;
-    }
-
-    final hedefCihaz = _yonetici.bagliCihazlar.first;
-    final hedefIP = hedefCihaz['ip'] as String;
-
-    if (hedefIP == 'incoming') {
-      _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
-      return;
-    }
-
-    // Dialog kapatma ve progress gösterme
-    bool dialogAcik = false;
-
-    try {
-      // Ana dialog'u kapat
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      // Progress dialog göster
-      if (mounted) {
-        dialogAcik = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder:
-              (BuildContext dialogContext) => PopScope(
-                canPop: false,
-                child: AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 20),
-                      Text(
-                        '${kisiler.length} kişi senkronize ediliyor...',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Profil fotoğrafları ve tüm bilgiler dahil ediliyor...',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-        );
-      }
-
-      // Async olarak senkronize et
-      final basarili = await _yonetici.kisileriSenkronEt(
-        hedefIP,
-        kisiler: kisiler,
-      );
-
-      // Progress dialog'u güvenli şekilde kapat
-      if (mounted && dialogAcik) {
-        Navigator.of(context, rootNavigator: true).pop();
-        dialogAcik = false;
-      }
-
-      if (basarili) {
-        _basariMesaji('${kisiler.length} kişi başarıyla senkronize edildi');
-        // Verileri yenile
-        await _verileriYukle();
-      } else {
-        _hataGoster('Kişi senkronizasyonu başarısız oldu');
-      }
-    } catch (e) {
-      // Progress dialog'u güvenli şekilde kapat
-      if (mounted && dialogAcik) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (navError) {
-          print('Navigation error: $navError');
-        }
-        dialogAcik = false;
-      }
-      _hataGoster('Kişi senkronizasyon hatası: $e');
-    } finally {
-      // Son güvenlik kontrolü
-      if (mounted && dialogAcik) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (navError) {
-          print('Final navigation error: $navError');
-        }
-      }
-
-      // Loading durumunu kapat
-      if (mounted) {
-        setState(() => _yukleniyor = false);
-      }
-    }
-  }
-
-  void _kategorileriCihazaGonder(List<KategoriModeli> kategoriler) async {
-    if (_yonetici.bagliCihazlar.isEmpty) {
-      _hataGoster('Önce bir cihaz bağlanmalı');
-      return;
-    }
-
-    final hedefCihaz = _yonetici.bagliCihazlar.first;
-    final hedefIP = hedefCihaz['ip'] as String;
-
-    if (hedefIP == 'incoming') {
-      _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
-      return;
-    }
-
-    // Dialog kapatma ve progress gösterme
-    bool dialogAcik = false;
-
-    try {
-      // Ana dialog'u kapat
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      // Progress dialog göster
-      if (mounted) {
-        dialogAcik = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder:
-              (BuildContext dialogContext) => PopScope(
-                canPop: false,
-                child: AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 20),
-                      Text(
-                        '${kategoriler.length} kategori senkronize ediliyor...',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Tüm kategori bilgileri dahil ediliyor...',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-        );
-      }
-
-      // Async olarak senkronize et
-      final basarili = await _yonetici.kategorileriSenkronEt(
-        hedefIP,
-        kategoriler: kategoriler,
-      );
-
-      // Progress dialog'u güvenli şekilde kapat
-      if (mounted && dialogAcik) {
-        Navigator.of(context, rootNavigator: true).pop();
-        dialogAcik = false;
-      }
-
-      if (basarili) {
-        _basariMesaji(
-          '${kategoriler.length} kategori başarıyla senkronize edildi',
-        );
-        // Verileri yenile
-        await _verileriYukle();
-      } else {
-        _hataGoster('Kategori senkronizasyonu başarısız oldu');
-      }
-    } catch (e) {
-      // Progress dialog'u güvenli şekilde kapat
-      if (mounted && dialogAcik) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (navError) {
-          print('Navigation error: $navError');
-        }
-        dialogAcik = false;
-      }
-      _hataGoster('Kategori senkronizasyon hatası: $e');
     } finally {
       // Son güvenlik kontrolü
       if (mounted && dialogAcik) {
