@@ -1,15 +1,15 @@
 # 📁 Arşivim - Kişisel Belge Arşiv Uygulaması
 
-## 📦 Hemen İndir (v1.0.0)
+## 📦 Hemen İndir (v2.4.0)
 
 <div align="center">
 
-[![Android APK](https://img.shields.io/badge/Android-APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/releases/download/v1.0.0/Arsivcim-v1.0.0-android.apk)
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/releases/download/v1.0.0/Arsivcim-v1.0.0-windows-x64.zip)
+[![Android APK](https://img.shields.io/badge/Android-APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/Arsivcim-v2.4.0.apk)
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/Arsivcim-v2.4.0-windows-x64.zip)
 
 **📱 Android APK: 38.3 MB** | **💻 Windows x64: 12 MB (ZIP)**
 
-[📋 Tüm Sürümler](https://github.com/mehmet-karataslar/Arsivim/releases) | [📖 Kurulum Rehberi](arsiv_uygulamasi/releases/README.md)
+[📋 En güncel sürüm v2.4.0 ]
 
 </div>
 
