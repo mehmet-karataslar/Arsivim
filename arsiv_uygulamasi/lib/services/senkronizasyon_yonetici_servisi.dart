@@ -999,6 +999,32 @@ class SenkronizasyonYoneticiServisi {
         belgeMap['kisi_ad'] = kisi.ad;
         belgeMap['kisi_soyad'] = kisi.soyad;
         belgeMap['kisi_kullanici_adi'] = kisi.kullaniciAdi;
+
+        // Kişi profil fotoğrafını da belge metadatasına ekle
+        if (kisi.profilFotografi != null && kisi.profilFotografi!.isNotEmpty) {
+          try {
+            final profilFile = File(kisi.profilFotografi!);
+            if (await profilFile.exists()) {
+              final dosyaBytes = await profilFile.readAsBytes();
+              if (dosyaBytes.isNotEmpty &&
+                  dosyaBytes.length <= 5 * 1024 * 1024) {
+                belgeMap['kisi_profil_fotografi_icerigi'] = base64Encode(
+                  dosyaBytes,
+                );
+                belgeMap['kisi_profil_fotografi_dosya_adi'] = path.basename(
+                  kisi.profilFotografi!,
+                );
+                print(
+                  '📸 Kişi profil fotoğrafı belge metadatasına eklendi: ${kisi.ad} ${kisi.soyad}',
+                );
+              }
+            }
+          } catch (e) {
+            print(
+              '⚠️ Kişi profil fotoğrafı metadata ekleme hatası: ${kisi.ad} ${kisi.soyad} - $e',
+            );
+          }
+        }
       }
 
       // Kategori bilgilerini ID yerine ad ile ekle

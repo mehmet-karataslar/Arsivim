@@ -1167,14 +1167,146 @@ class HttpSunucuServisi {
               }
             } else if (belgeData['buyuk_dosya'] == true) {
               print('📋 Büyük dosya metadata kaydediliyor: ${belge.dosyaAdi}');
+
+              // Büyük dosya için kişi ve kategori ID'lerini doğru şekilde eşleştir
+              int? dogruKisiId;
+              if (belgeData['kisi_ad'] != null &&
+                  belgeData['kisi_soyad'] != null) {
+                final kisiAd = belgeData['kisi_ad'] as String;
+                final kisiSoyad = belgeData['kisi_soyad'] as String;
+
+                // Tam ad-soyad eşleştirme yap
+                final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
+                  kisiAd,
+                  kisiSoyad,
+                );
+
+                if (mevcutKisi != null) {
+                  dogruKisiId = mevcutKisi.id;
+                  print(
+                    '✅ Büyük dosya - Kişi eşleştirildi: $kisiAd $kisiSoyad (ID: $dogruKisiId)',
+                  );
+                } else {
+                  // Kişi bulunamadı - otomatik oluştur
+                  print(
+                    '➕ Büyük dosya - Kişi bulunamadı, otomatik oluşturuluyor: $kisiAd $kisiSoyad',
+                  );
+
+                  // Profil fotoğrafı varsa işle
+                  String? profilFotografiYolu;
+                  if (belgeData['kisi_profil_fotografi_icerigi'] != null) {
+                    try {
+                      final profilBytes = base64Decode(
+                        belgeData['kisi_profil_fotografi_icerigi'],
+                      );
+
+                      if (profilBytes.isNotEmpty &&
+                          profilBytes.length <= MAX_PROFILE_PHOTO_SIZE) {
+                        final dosyaAdi = '${kisiAd}_${kisiSoyad}_profil.jpg';
+                        profilFotografiYolu = await _dosyaServisi
+                            .senkronDosyasiKaydet(dosyaAdi, profilBytes);
+                        print(
+                          '📸 Büyük dosya - Profil fotoğrafı kaydedildi: $profilFotografiYolu',
+                        );
+                      }
+                    } catch (e) {
+                      print(
+                        '❌ Büyük dosya - Profil fotoğrafı kaydetme hatası: $e',
+                      );
+                    }
+                  }
+
+                  final yeniKisi = KisiModeli(
+                    ad: kisiAd,
+                    soyad: kisiSoyad,
+                    kullaniciAdi: belgeData['kisi_kullanici_adi'] as String?,
+                    kullaniciTipi: 'otomatik', // Otomatik oluşturulan kişi
+                    profilFotografi:
+                        profilFotografiYolu, // Profil fotoğrafı yolu
+                    olusturmaTarihi: DateTime.now().subtract(
+                      const Duration(days: 1),
+                    ), // Bekleyen listesine düşmemesi için
+                    guncellemeTarihi: DateTime.now(),
+                    aktif: true,
+                  );
+
+                  try {
+                    dogruKisiId = await _veriTabani.kisiEkle(yeniKisi);
+                    print(
+                      '✅ Büyük dosya - Kişi otomatik oluşturuldu: $kisiAd $kisiSoyad (ID: $dogruKisiId)${profilFotografiYolu != null ? ' - Profil fotoğrafı ile' : ''}',
+                    );
+                  } catch (e) {
+                    print('❌ Büyük dosya - Kişi oluşturma hatası: $e');
+                    dogruKisiId = null;
+                  }
+                }
+              } else {
+                dogruKisiId = belge.kisiId; // Orijinal kişi ID'sini koru
+              }
+
+              // Kategori ID'sini doğru şekilde eşleştir
+              int? dogruKategoriId;
+              if (belgeData['kategori_adi'] != null) {
+                final kategoriAdi = belgeData['kategori_adi'] as String;
+
+                // Tam kategori adı eşleştirme yap
+                final mevcutKategori = await _veriTabani.kategoriBulAd(
+                  kategoriAdi,
+                );
+
+                if (mevcutKategori != null) {
+                  dogruKategoriId = mevcutKategori.id;
+                  print(
+                    '✅ Büyük dosya - Kategori eşleştirildi: $kategoriAdi (ID: $dogruKategoriId)',
+                  );
+                } else {
+                  // Kategori bulunamadı - otomatik oluştur
+                  print(
+                    '➕ Büyük dosya - Kategori bulunamadı, otomatik oluşturuluyor: $kategoriAdi',
+                  );
+
+                  final yeniKategori = KategoriModeli(
+                    kategoriAdi: kategoriAdi,
+                    renkKodu:
+                        belgeData['kategori_renk'] as String? ?? '#2196F3',
+                    simgeKodu: 'folder', // Varsayılan simge
+                    aciklama: 'Senkronizasyon sırasında otomatik oluşturuldu',
+                    olusturmaTarihi: DateTime.now().subtract(
+                      const Duration(days: 1),
+                    ), // Bekleyen listesine düşmemesi için
+                    aktif: true,
+                  );
+
+                  try {
+                    dogruKategoriId = await _veriTabani.kategoriEkle(
+                      yeniKategori,
+                    );
+                    print(
+                      '✅ Büyük dosya - Kategori otomatik oluşturuldu: $kategoriAdi (ID: $dogruKategoriId)',
+                    );
+                  } catch (e) {
+                    print('❌ Büyük dosya - Kategori oluşturma hatası: $e');
+                    dogruKategoriId = null;
+                  }
+                }
+              } else {
+                dogruKategoriId =
+                    belge.kategoriId; // Orijinal kategori ID'sini koru
+              }
+
               // Büyük dosyalar için sadece metadata kaydet
               final metadataBelge = belge.copyWith(
                 dosyaYolu: '', // Boş dosya yolu
+                kisiId: dogruKisiId, // Doğru kişi ID'si
+                kategoriId: dogruKategoriId, // Doğru kategori ID'si
                 senkronDurumu:
                     SenkronDurumu.BEKLEMEDE, // Dosya içeriği beklemede
               );
               await _veriTabani.belgeEkle(metadataBelge);
               basariliSayisi++;
+              print(
+                '✅ Büyük dosya metadata kaydedildi: ${belge.dosyaAdi} (Kişi: $dogruKisiId, Kategori: $dogruKategoriId)',
+              );
             } else {
               print('⚠️ Belge içeriği bulunamadı: ${belge.dosyaAdi}');
               hataliSayisi++;
@@ -1325,11 +1457,37 @@ class HttpSunucuServisi {
                     '➕ Kişi bulunamadı, otomatik oluşturuluyor: $kisiAd $kisiSoyad',
                   );
 
+                  // Profil fotoğrafı varsa işle
+                  String? profilFotografiYolu;
+                  if (belgeData['kisi_profil_fotografi_icerigi'] != null) {
+                    try {
+                      final profilBytes = base64Decode(
+                        belgeData['kisi_profil_fotografi_icerigi'],
+                      );
+
+                      if (profilBytes.isNotEmpty &&
+                          profilBytes.length <= MAX_PROFILE_PHOTO_SIZE) {
+                        final dosyaAdi = '${kisiAd}_${kisiSoyad}_profil.jpg';
+                        profilFotografiYolu = await _dosyaServisi
+                            .senkronDosyasiKaydet(dosyaAdi, profilBytes);
+                        print(
+                          '📸 Profil fotoğrafı kaydedildi: $profilFotografiYolu',
+                        );
+                      } else {
+                        print('⚠️ Profil fotoğrafı çok büyük veya boş');
+                      }
+                    } catch (e) {
+                      print('❌ Profil fotoğrafı kaydetme hatası: $e');
+                    }
+                  }
+
                   final yeniKisi = KisiModeli(
                     ad: kisiAd,
                     soyad: kisiSoyad,
                     kullaniciAdi: belgeData['kisi_kullanici_adi'] as String?,
                     kullaniciTipi: 'otomatik', // Otomatik oluşturulan kişi
+                    profilFotografi:
+                        profilFotografiYolu, // Profil fotoğrafı yolu
                     olusturmaTarihi: DateTime.now().subtract(
                       const Duration(
                         days: 1,
@@ -1342,7 +1500,7 @@ class HttpSunucuServisi {
                   try {
                     dogruKisiId = await _veriTabani.kisiEkle(yeniKisi);
                     print(
-                      '✅ Kişi otomatik oluşturuldu: $kisiAd $kisiSoyad (ID: $dogruKisiId)',
+                      '✅ Kişi otomatik oluşturuldu: $kisiAd $kisiSoyad (ID: $dogruKisiId)${profilFotografiYolu != null ? ' - Profil fotoğrafı ile' : ''}',
                     );
                   } catch (e) {
                     print('❌ Kişi oluşturma hatası: $e');
