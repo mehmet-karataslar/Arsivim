@@ -75,23 +75,7 @@ class VeriTabaniServisi {
       return database;
     } catch (e) {
       print('❌ Veritabanı başlatma hatası: $e');
-
-      // Hata durumunda veritabanı dosyasını sil ve yeniden oluştur
-      if (await File(path).exists()) {
-        print('🗑️ Bozuk veritabanı dosyası siliniyor...');
-        await File(path).delete();
-      }
-
-      print('🔧 Veritabanı yeniden oluşturuluyor...');
-      return await openDatabase(
-        path,
-        version: Sabitler.VERITABANI_VERSIYONU,
-        onCreate: (db, version) async {
-          print('🎯 Yedek veritabanı oluşturuluyor (versiyon: $version)');
-          await _onCreate(db, version);
-          print('✅ Yedek veritabanı başarıyla oluşturuldu!');
-        },
-      );
+      rethrow;
     }
   }
 
@@ -222,16 +206,8 @@ class VeriTabaniServisi {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     print('🔄 Database upgrade: $oldVersion -> $newVersion');
 
-    // Kritik migration hatası durumunda veritabanını sıfırla
-    try {
-      await _performMigration(db, oldVersion, newVersion);
-    } catch (e) {
-      print('❌ Migration başarısız: $e');
-      print('🔄 Veritabanı sıfırlanıyor...');
-      await _dropAllTables(db);
-      await _onCreate(db, newVersion);
-      print('✅ Veritabanı yeniden oluşturuldu');
-    }
+    // Migration işlemini yap
+    await _performMigration(db, oldVersion, newVersion);
   }
 
   /// Veritabanı bütünlüğünü kontrol et
@@ -435,11 +411,7 @@ class VeriTabaniServisi {
         print('✅ Kullanıcı sistemi V6 ile eklendi');
       } catch (e) {
         print('❌ V6 migration hatası: $e');
-        // Migration başarısız olursa veritabanını sıfırla
-        print('🔄 Veritabanı sıfırlanıyor...');
-        await _dropAllTables(db);
-        await _onCreate(db, 6);
-        print('✅ Veritabanı yeniden oluşturuldu');
+        rethrow;
       }
     }
 
@@ -467,11 +439,7 @@ class VeriTabaniServisi {
         print('✅ Profil fotoğrafı sistemi V7 ile eklendi');
       } catch (e) {
         print('❌ V7 migration hatası: $e');
-        // Migration başarısız olursa veritabanını sıfırla
-        print('🔄 Veritabanı sıfırlanıyor...');
-        await _dropAllTables(db);
-        await _onCreate(db, 7);
-        print('✅ Veritabanı yeniden oluşturuldu');
+        rethrow;
       }
     }
   }
@@ -583,33 +551,45 @@ class VeriTabaniServisi {
     await db.execute('DROP TABLE IF EXISTS kisiler');
   }
 
-  /// Veritabanını manuel olarak sıfırlama (kullanıcı için)
-  Future<void> resetDatabase() async {
-    try {
-      print('🔄 Veritabanı manuel olarak sıfırlanıyor...');
+  /// Mevcut kategorilerin tarihlerini güncelle - senkronizasyon optimizasyonu için
+  Future<void> _mevcutKategorilerTarihGuncelle() async {
+    final db = await database;
 
-      // Mevcut database bağlantısını kapat
-      if (_database != null) {
-        await _database!.close();
-        _database = null;
+    // Mevcut kategorilerin sayısını kontrol et
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1',
+    );
+    final mevcutKategoriSayisi = result.first['count'] as int;
+
+    // Eğer kategoriler varsa ve tarihler bugün ise, geriye çek
+    if (mevcutKategoriSayisi > 0) {
+      final bugun = DateTime.now();
+      final bugunBaslangic = DateTime(bugun.year, bugun.month, bugun.day);
+
+      // Bugün oluşturulmuş kategorileri bul
+      final bugunkuKategoriler = await db.query(
+        'kategoriler',
+        where: 'aktif = 1 AND olusturma_tarihi >= ?',
+        whereArgs: [bugunBaslangic.toIso8601String()],
+      );
+
+      if (bugunkuKategoriler.isNotEmpty) {
+        print(
+          '📅 ${bugunkuKategoriler.length} kategori tarihi güncelleniyor (mevcut kategoriler senkronizasyondan çıkarılıyor)',
+        );
+
+        // Mevcut kategorilerin tarihlerini 1 hafta öncesine çek
+        final eskiTarih = DateTime.now().subtract(const Duration(days: 7));
+
+        await db.update(
+          'kategoriler',
+          {'olusturma_tarihi': eskiTarih.toIso8601String()},
+          where: 'aktif = 1 AND olusturma_tarihi >= ?',
+          whereArgs: [bugunBaslangic.toIso8601String()],
+        );
+
+        print('✅ Mevcut kategoriler senkronizasyon listesinden çıkarıldı');
       }
-
-      // Veritabanı dosyasını sil
-      Directory documentsDirectory = await getApplicationDocumentsDirectory();
-      String path = join(documentsDirectory.path, Sabitler.VERITABANI_ADI);
-      File dbFile = File(path);
-
-      if (await dbFile.exists()) {
-        await dbFile.delete();
-        print('✅ Veritabanı dosyası silindi');
-      }
-
-      // Yeni veritabanını oluştur
-      _database = await _initDatabase();
-      print('✅ Veritabanı yeniden oluşturuldu');
-    } catch (e) {
-      print('❌ Veritabanı sıfırlanırken hata: $e');
-      rethrow;
     }
   }
 
@@ -928,30 +908,54 @@ class VeriTabaniServisi {
   }) async {
     final db = await database;
 
+    // Minimum karakter kontrolü
+    if (aramaMetni != null && aramaMetni.trim().length < 1) {
+      // Çok kısa arama metni için boş liste döndür
+      return [];
+    }
+
     // Dinamik WHERE koşulları
     List<String> kosullar = ['b.aktif = 1'];
     List<dynamic> parametreler = [];
 
-    // Metin araması
-    if (aramaMetni != null && aramaMetni.isNotEmpty) {
-      kosullar.add('''(
-        b.dosya_adi LIKE ? OR 
-        b.orijinal_dosya_adi LIKE ? OR 
-        b.baslik LIKE ? OR 
-        b.aciklama LIKE ? OR 
-        b.etiketler LIKE ? OR
-        k.kategori_adi LIKE ? OR
-        (ki.ad || ' ' || ki.soyad) LIKE ?
-      )''');
-      parametreler.addAll([
-        '%$aramaMetni%', // dosya_adi
-        '%$aramaMetni%', // orijinal_dosya_adi
-        '%$aramaMetni%', // baslik
-        '%$aramaMetni%', // aciklama
-        '%$aramaMetni%', // etiketler
-        '%$aramaMetni%', // kategori_adi
-        '%$aramaMetni%', // kişi adı soyadı
-      ]);
+    // Gelişmiş metin araması
+    if (aramaMetni != null && aramaMetni.trim().isNotEmpty) {
+      final arananMetin = aramaMetni.trim().toLowerCase();
+      final aramaSozcukleri =
+          arananMetin.split(' ').where((s) => s.length >= 1).toList();
+
+      if (aramaSozcukleri.isNotEmpty) {
+        // Çoklu arama koşulları oluştur
+        List<String> aramaKosullari = [];
+
+        for (final sozcuk in aramaSozcukleri) {
+          final sozcukKosulu = '''(
+            b.dosya_adi LIKE ? OR 
+            b.orijinal_dosya_adi LIKE ? OR 
+            b.baslik LIKE ? OR 
+            b.aciklama LIKE ? OR 
+            b.etiketler LIKE ? OR
+            k.kategori_adi LIKE ? OR
+            (ki.ad || ' ' || ki.soyad) LIKE ?
+          )''';
+
+          aramaKosullari.add(sozcukKosulu);
+
+          // Her sözcük için parametreleri ekle
+          parametreler.addAll([
+            '%$sozcuk%', // dosya_adi
+            '%$sozcuk%', // orijinal_dosya_adi
+            '%$sozcuk%', // baslik
+            '%$sozcuk%', // aciklama
+            '%$sozcuk%', // etiketler
+            '%$sozcuk%', // kategori_adi
+            '%$sozcuk%', // kişi adı soyadı
+          ]);
+        }
+
+        // Tüm sözcüklerin en az birinde eşleşme olmalı
+        kosullar.add('(${aramaKosullari.join(' OR ')})');
+      }
     }
 
     // Ay filtresi
@@ -978,12 +982,35 @@ class VeriTabaniServisi {
       parametreler.add(kisiId);
     }
 
+    // Gelişmiş sıralama - tam eşleşmeler önce gelsin
+    String siralamaKosulu = 'b.guncelleme_tarihi DESC';
+
+    if (aramaMetni != null && aramaMetni.trim().isNotEmpty) {
+      final arananMetin = aramaMetni.trim().toLowerCase();
+
+      // Tam eşleşme kontrolü için CASE WHEN yapısı
+      siralamaKosulu = '''
+        CASE 
+          WHEN LOWER(b.dosya_adi) = '$arananMetin' THEN 1
+          WHEN LOWER(b.orijinal_dosya_adi) = '$arananMetin' THEN 2
+          WHEN LOWER(b.baslik) = '$arananMetin' THEN 3
+          WHEN LOWER(b.dosya_adi) LIKE '$arananMetin%' THEN 4
+          WHEN LOWER(b.orijinal_dosya_adi) LIKE '$arananMetin%' THEN 5
+          WHEN LOWER(b.baslik) LIKE '$arananMetin%' THEN 6
+          WHEN LOWER(k.kategori_adi) = '$arananMetin' THEN 7
+          WHEN LOWER(ki.ad || ' ' || ki.soyad) = '$arananMetin' THEN 8
+          ELSE 9
+        END ASC,
+        b.guncelleme_tarihi DESC
+      ''';
+    }
+
     final sorgu = '''
       SELECT DISTINCT b.* FROM belgeler b
       LEFT JOIN kategoriler k ON b.kategori_id = k.id
       LEFT JOIN kisiler ki ON b.kisi_id = ki.id
       WHERE ${kosullar.join(' AND ')}
-      ORDER BY b.guncelleme_tarihi DESC
+      ORDER BY $siralamaKosulu
     ''';
 
     final List<Map<String, dynamic>> maps = await db.rawQuery(
@@ -1155,6 +1182,10 @@ class VeriTabaniServisi {
   // Tüm kategorileri getir
   Future<List<KategoriModeli>> kategorileriGetir() async {
     final db = await database;
+
+    // Önce mevcut kategorilerin tarihlerini güncelle
+    await _mevcutKategorilerTarihGuncelle();
+
     final List<Map<String, dynamic>> maps = await db.query(
       'kategoriler',
       where: 'aktif = ?',

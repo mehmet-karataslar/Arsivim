@@ -279,8 +279,7 @@ class ArsivimApp extends StatelessWidget {
         return MaterialPageRoute(builder: (_) => const AnaEkran());
       default:
         return MaterialPageRoute(
-          builder:
-              (_) => Scaffold(
+          builder: (_) => Scaffold(
                 body: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -331,7 +330,7 @@ class ArsivimApp extends StatelessWidget {
       ),
 
       // Card theme
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         clipBehavior: Clip.antiAlias,

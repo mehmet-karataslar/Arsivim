@@ -580,171 +580,184 @@ class SenkronizasyonKartlari {
       );
     }
 
-    return StatefulBuilder(
-      builder: (context, setState) {
-        final secilenKisiler = <KisiModeli>[];
-        final tumKisiler = kisiler;
-
-        return Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.person, color: Colors.blue[600]),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${tumKisiler.length} kişi senkronizasyon bekliyor',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        if (secilenKisiler.length == tumKisiler.length) {
-                          secilenKisiler.clear();
-                        } else {
-                          secilenKisiler.clear();
-                          secilenKisiler.addAll(tumKisiler);
-                        }
-                      });
-                    },
-                    child: Text(
-                      secilenKisiler.length == tumKisiler.length
-                          ? 'Tümünü Kaldır'
-                          : 'Tümünü Seç',
-                    ),
-                  ),
-                ],
-              ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
             ),
-            // Content
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.person, color: Colors.blue[600]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${kisiler.length} kişi senkronizasyon bekliyor',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                child: ListView.builder(
-                  itemCount: tumKisiler.length,
-                  itemBuilder: (context, index) {
-                    final kisi = tumKisiler[index];
-                    final secilimi = secilenKisiler.contains(kisi);
+              ),
+            ],
+          ),
+        ),
+        // Content - Sabit yükseklik ile
+        Container(
+          height: 300,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ListView.builder(
+            itemCount: kisiler.length,
+            itemBuilder: (context, index) {
+              final kisi = kisiler[index];
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        border:
-                            index > 0
-                                ? Border(
-                                  top: BorderSide(
-                                    color: Colors.grey[200]!,
-                                    width: 1,
-                                  ),
-                                )
-                                : null,
-                      ),
-                      child: CheckboxListTile(
-                        value: secilimi,
-                        onChanged: (value) {
-                          setState(() {
-                            if (value == true) {
-                              secilenKisiler.add(kisi);
-                            } else {
-                              secilenKisiler.remove(kisi);
-                            }
-                          });
-                        },
-                        title: Text(
-                          '${kisi.ad} ${kisi.soyad}',
-                          style: const TextStyle(fontSize: 14),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          kisi.kullaniciAdi ?? 'Kullanıcı adı yok',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        secondary: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.blue[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.person,
-                            color: Colors.blue[600],
-                            size: 20,
-                          ),
-                        ),
-                        dense: true,
-                      ),
-                    );
+              return Container(
+                decoration: BoxDecoration(
+                  border:
+                      index > 0
+                          ? Border(
+                            top: BorderSide(color: Colors.grey[200]!, width: 1),
+                          )
+                          : null,
+                ),
+                child: ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.person,
+                      color: Colors.blue[600],
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    '${kisi.ad} ${kisi.soyad}',
+                    style: const TextStyle(fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    kisi.kullaniciAdi ?? 'Kullanıcı adı yok',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  onTap: () {
+                    // Kişi detaylarını göster
+                    _showKisiDetay(context, kisi);
                   },
                 ),
-              ),
+              );
+            },
+          ),
+        ),
+        // Footer
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(16),
+              bottomRight: Radius.circular(16),
             ),
-            // Footer
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-              ),
-              child: Row(
+          ),
+          child: Column(
+            children: [
+              // İstatistik
+              Row(
                 children: [
                   Expanded(
                     child: Text(
-                      '${secilenKisiler.length} / ${tumKisiler.length} kişi seçildi',
+                      '${kisiler.length} kişi hazır',
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('İptal'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Butonlar
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('İptal'),
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed:
-                        secilenKisiler.isNotEmpty
-                            ? () {
-                              Navigator.pop(context);
-                              onKisileriGonder(secilenKisiler);
-                            }
-                            : null,
-                    icon: const Icon(Icons.send),
-                    label: Text('Gönder (${secilenKisiler.length})'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[600],
-                      foregroundColor: Colors.white,
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          yonetici.bagliCihazlar.isNotEmpty
+                              ? () {
+                                Navigator.pop(context);
+                                onKisileriGonder(kisiler);
+                              }
+                              : null,
+                      icon: const Icon(Icons.send, size: 18),
+                      label: Text(
+                        'Gönder (${kisiler.length})',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[600],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Kişi detaylarını göster
+  static void _showKisiDetay(BuildContext context, KisiModeli kisi) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('${kisi.ad} ${kisi.soyad}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Ad: ${kisi.ad}'),
+                Text('Soyad: ${kisi.soyad}'),
+                Text('Kullanıcı Adı: ${kisi.kullaniciAdi ?? 'Belirtilmemiş'}'),
+                Text('Oluşturulma Tarihi: ${kisi.formatliOlusturmaTarihi}'),
+                Text('Güncelleme Tarihi: ${kisi.formatliGuncellemeTarihi}'),
+              ],
             ),
-          ],
-        );
-      },
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Kapat'),
+              ),
+            ],
+          ),
     );
   }
 
@@ -780,172 +793,156 @@ class SenkronizasyonKartlari {
       );
     }
 
-    return StatefulBuilder(
-      builder: (context, setState) {
-        final secilenKategoriler = <KategoriModeli>[];
-        final tumKategoriler = kategoriler;
-
-        return Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.purple[50],
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.category, color: Colors.purple[600]),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${tumKategoriler.length} kategori senkronizasyon bekliyor',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        if (secilenKategoriler.length ==
-                            tumKategoriler.length) {
-                          secilenKategoriler.clear();
-                        } else {
-                          secilenKategoriler.clear();
-                          secilenKategoriler.addAll(tumKategoriler);
-                        }
-                      });
-                    },
-                    child: Text(
-                      secilenKategoriler.length == tumKategoriler.length
-                          ? 'Tümünü Kaldır'
-                          : 'Tümünü Seç',
-                    ),
-                  ),
-                ],
-              ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.purple[50],
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
             ),
-            // Content
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.category, color: Colors.purple[600]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${kategoriler.length} kategori senkronizasyon bekliyor',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                child: ListView.builder(
-                  itemCount: tumKategoriler.length,
-                  itemBuilder: (context, index) {
-                    final kategori = tumKategoriler[index];
-                    final secilimi = secilenKategoriler.contains(kategori);
+              ),
+            ],
+          ),
+        ),
+        // Content - Sabit yükseklik ile
+        Container(
+          height: 300,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ListView.builder(
+            itemCount: kategoriler.length,
+            itemBuilder: (context, index) {
+              final kategori = kategoriler[index];
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        border:
-                            index > 0
-                                ? Border(
-                                  top: BorderSide(
-                                    color: Colors.grey[200]!,
-                                    width: 1,
-                                  ),
-                                )
-                                : null,
-                      ),
-                      child: CheckboxListTile(
-                        value: secilimi,
-                        onChanged: (value) {
-                          setState(() {
-                            if (value == true) {
-                              secilenKategoriler.add(kategori);
-                            } else {
-                              secilenKategoriler.remove(kategori);
-                            }
-                          });
-                        },
-                        title: Text(
-                          kategori.ad,
-                          style: const TextStyle(fontSize: 14),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          kategori.aciklama ?? 'Açıklama yok',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        secondary: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.purple[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.category,
-                            color: Colors.purple[600],
-                            size: 20,
-                          ),
-                        ),
-                        dense: true,
-                      ),
-                    );
+              return Container(
+                decoration: BoxDecoration(
+                  border:
+                      index > 0
+                          ? Border(
+                            top: BorderSide(color: Colors.grey[200]!, width: 1),
+                          )
+                          : null,
+                ),
+                child: ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.category,
+                      color: Colors.purple[600],
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    kategori.kategoriAdi,
+                    style: const TextStyle(fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    kategori.aciklama ?? 'Açıklama yok',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  onTap: () {
+                    // Kategori detaylarını göster
+                    _showKategoriDetay(context, kategori);
                   },
                 ),
-              ),
+              );
+            },
+          ),
+        ),
+        // Footer
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(16),
+              bottomRight: Radius.circular(16),
             ),
-            // Footer
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-              ),
-              child: Row(
+          ),
+          child: Column(
+            children: [
+              // İstatistik
+              Row(
                 children: [
                   Expanded(
                     child: Text(
-                      '${secilenKategoriler.length} / ${tumKategoriler.length} kategori seçildi',
+                      '${kategoriler.length} kategori hazır',
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('İptal'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Butonlar
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('İptal'),
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed:
-                        secilenKategoriler.isNotEmpty
-                            ? () {
-                              Navigator.pop(context);
-                              onKategorileriGonder(secilenKategoriler);
-                            }
-                            : null,
-                    icon: const Icon(Icons.send),
-                    label: Text('Gönder (${secilenKategoriler.length})'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple[600],
-                      foregroundColor: Colors.white,
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          yonetici.bagliCihazlar.isNotEmpty
+                              ? () {
+                                Navigator.pop(context);
+                                onKategorileriGonder(kategoriler);
+                              }
+                              : null,
+                      icon: const Icon(Icons.send, size: 18),
+                      label: Text(
+                        'Gönder (${kategoriler.length})',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple[600],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1133,6 +1130,35 @@ class SenkronizasyonKartlari {
           ),
         ],
       ),
+    );
+  }
+
+  // Kategori detaylarını göster
+  static void _showKategoriDetay(
+    BuildContext context,
+    KategoriModeli kategori,
+  ) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(kategori.kategoriAdi),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Kategori Adı: ${kategori.kategoriAdi}'),
+                Text('Açıklama: ${kategori.aciklama ?? 'Belirtilmemiş'}'),
+                Text('Oluşturulma Tarihi: ${kategori.formatliOlusturmaTarihi}'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Kapat'),
+              ),
+            ],
+          ),
     );
   }
 
@@ -1378,40 +1404,61 @@ class SenkronizasyonKartlari {
                               bottomRight: Radius.circular(16),
                             ),
                           ),
-                          child: Row(
+                          child: Column(
                             children: [
-                              // Selected count
-                              Expanded(
-                                child: Text(
-                                  '${secilenBelgeler.length} / ${tumBelgeler.length} belge seçildi',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
+                              // İstatistik
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${secilenBelgeler.length} / ${tumBelgeler.length} belge seçildi',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                              // Actions
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('İptal'),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed:
-                                    secilenBelgeler.isNotEmpty
-                                        ? () {
-                                          Navigator.pop(context);
-                                          onBelgeleriGonder(secilenBelgeler);
-                                        }
-                                        : null,
-                                icon: const Icon(Icons.send),
-                                label: Text(
-                                  'Gönder (${secilenBelgeler.length})',
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange[600],
-                                  foregroundColor: Colors.white,
-                                ),
+                              const SizedBox(height: 12),
+                              // Butonlar
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('İptal'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    flex: 2,
+                                    child: ElevatedButton.icon(
+                                      onPressed:
+                                          secilenBelgeler.isNotEmpty
+                                              ? () {
+                                                Navigator.pop(context);
+                                                onBelgeleriGonder(
+                                                  secilenBelgeler,
+                                                );
+                                              }
+                                              : null,
+                                      icon: const Icon(Icons.send, size: 18),
+                                      label: Text(
+                                        'Gönder (${secilenBelgeler.length})',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange[600],
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

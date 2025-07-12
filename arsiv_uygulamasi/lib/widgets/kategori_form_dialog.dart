@@ -124,68 +124,31 @@ class _KategoriFormDialogState extends State<KategoriFormDialog>
             // Aksiyon butonları
             Row(
               children: [
-                // Önizleme
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: _hexToColor(
-                              _secilenRenk,
-                            ).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              _getIconData(_secilenSimge),
-                              color: _hexToColor(_secilenRenk),
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _kategoriAdiController.text.isEmpty
-                                ? 'Kategori Adı'
-                                : _kategoriAdiController.text,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
 
                 // İptal butonu
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('İptal'),
+                Flexible(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('İptal'),
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
 
                 // Kaydet butonu
-                ElevatedButton(
-                  onPressed: _kaydet,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                Flexible(
+                  child: ElevatedButton(
+                    onPressed: _kaydet,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      widget.kategori != null ? 'Güncelle' : 'Kaydet',
                     ),
                   ),
-                  child: Text(widget.kategori != null ? 'Güncelle' : 'Kaydet'),
                 ),
               ],
             ),

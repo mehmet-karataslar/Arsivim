@@ -5,6 +5,7 @@ import 'dart:async';
 import '../services/senkronizasyon_yonetici_servisi.dart';
 import '../widgets/senkronizasyon_kartlari.dart';
 import '../widgets/cihaz_baglanti_paneli.dart';
+import '../widgets/senkronizasyon_kontrolleri.dart';
 import '../widgets/qr_generator_widget.dart';
 import '../widgets/qr_scanner_widget.dart';
 import '../models/belge_modeli.dart';
@@ -219,6 +220,12 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                         bekleyenKisileriGoster: _bekleyenKisileriGoster,
                         bekleyenKategorileriGoster: _bekleyenKategorileriGoster,
                       ),
+                      const SizedBox(height: 16),
+                      // PC için senkronizasyon kontrolleri
+                      SenkronizasyonKontrolleri(
+                        yonetici: _yonetici,
+                        onTumSistemSenkron: _tumSistemSenkronEt,
+                      ),
                     ],
                   ),
                 ),
@@ -279,6 +286,11 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               onQRKodGoster: _qrKodGoster,
               onQRKodTara: _qrKodTara,
               onTamEkranQR: _tamEkranQRGoster,
+            ),
+            const SizedBox(height: 16),
+            SenkronizasyonKontrolleri(
+              yonetici: _yonetici,
+              onTumSistemSenkron: _tumSistemSenkronEt,
             ),
             const SizedBox(height: 80), // Bottom padding
           ],
@@ -584,15 +596,19 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
       final bekleyenKisiler = bekleyenler['bekleyen_kisiler'] as List<dynamic>?;
 
-      if (bekleyenKisiler != null) {
+      if (bekleyenKisiler != null && mounted) {
         setState(() {
           _bekleyenKisiler = bekleyenKisiler.cast<KisiModeli>();
         });
       }
 
-      _showBekleyenKisilerDialog();
+      if (mounted) {
+        _showBekleyenKisilerDialog();
+      }
     } catch (e) {
-      _hataGoster('Bekleyen kişiler yüklenemedi: $e');
+      if (mounted) {
+        _hataGoster('Bekleyen kişiler yüklenemedi: $e');
+      }
     }
   }
 
@@ -602,15 +618,19 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       final bekleyenKategoriler =
           bekleyenler['bekleyen_kategoriler'] as List<dynamic>?;
 
-      if (bekleyenKategoriler != null) {
+      if (bekleyenKategoriler != null && mounted) {
         setState(() {
           _bekleyenKategoriler = bekleyenKategoriler.cast<KategoriModeli>();
         });
       }
 
-      _showBekleyenKategorilerDialog();
+      if (mounted) {
+        _showBekleyenKategorilerDialog();
+      }
     } catch (e) {
-      _hataGoster('Bekleyen kategoriler yüklenemedi: $e');
+      if (mounted) {
+        _hataGoster('Bekleyen kategoriler yüklenemedi: $e');
+      }
     }
   }
 
@@ -810,79 +830,331 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   void _belgeleriCihazaGonder(List<BelgeModeli> belgeler) async {
-    // Eğer bağlı cihaz varsa
-    if (_yonetici.bagliCihazlar.isNotEmpty) {
-      // İlk bağlı cihaza gönder (veya kullanıcı seçsin)
-      final hedefCihaz = _yonetici.bagliCihazlar.first;
-      final hedefIP = hedefCihaz['ip'] as String;
-
-      if (hedefIP != 'incoming') {
-        Navigator.pop(context); // Dialog'u kapat
-        final basarili = await _yonetici.belgeleriSenkronEt(
-          hedefIP,
-          belgeler: belgeler,
-        );
-
-        if (basarili) {
-          // Bekleyen belgeleri yeniden yükle
-          _bekleyenBelgeleriGoster();
-        }
-      } else {
-        _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
-      }
-    } else {
+    if (_yonetici.bagliCihazlar.isEmpty) {
       _hataGoster('Önce bir cihaz bağlanmalı');
+      return;
+    }
+
+    final hedefCihaz = _yonetici.bagliCihazlar.first;
+    final hedefIP = hedefCihaz['ip'] as String;
+
+    if (hedefIP == 'incoming') {
+      _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
+      return;
+    }
+
+    // Dialog kapatma ve progress gösterme
+    bool dialogAcik = false;
+
+    try {
+      // Ana dialog'u kapat
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // Progress dialog göster
+      if (mounted) {
+        dialogAcik = true;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (BuildContext dialogContext) => PopScope(
+                canPop: false,
+                child: AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 20),
+                      Text(
+                        '${belgeler.length} belge senkronize ediliyor...',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Belgeler tüm metadata ile transfer ediliyor...',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        );
+      }
+
+      // Async olarak senkronize et
+      final basarili = await _yonetici.belgeleriSenkronEt(
+        hedefIP,
+        belgeler: belgeler,
+      );
+
+      // Progress dialog'u güvenli şekilde kapat
+      if (mounted && dialogAcik) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogAcik = false;
+      }
+
+      if (basarili) {
+        _basariMesaji('${belgeler.length} belge başarıyla senkronize edildi');
+        // Verileri yenile
+        await _verileriYukle();
+      } else {
+        _hataGoster('Belge senkronizasyonu başarısız oldu');
+      }
+    } catch (e) {
+      // Progress dialog'u güvenli şekilde kapat
+      if (mounted && dialogAcik) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (navError) {
+          print('Navigation error: $navError');
+        }
+        dialogAcik = false;
+      }
+      _hataGoster('Belge senkronizasyon hatası: $e');
+    } finally {
+      // Son güvenlik kontrolü
+      if (mounted && dialogAcik) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (navError) {
+          print('Final navigation error: $navError');
+        }
+      }
+
+      // Loading durumunu kapat
+      if (mounted) {
+        setState(() => _yukleniyor = false);
+      }
     }
   }
 
   void _kisileriCihazaGonder(List<KisiModeli> kisiler) async {
-    if (_yonetici.bagliCihazlar.isNotEmpty) {
-      final hedefCihaz = _yonetici.bagliCihazlar.first;
-      final hedefIP = hedefCihaz['ip'] as String;
-
-      if (hedefIP != 'incoming') {
-        Navigator.pop(context);
-        final basarili = await _yonetici.kisileriSenkronEt(
-          hedefIP,
-          kisiler: kisiler,
-        );
-
-        if (basarili) {
-          _bekleyenKisileriGoster();
-        }
-      } else {
-        _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
-      }
-    } else {
+    if (_yonetici.bagliCihazlar.isEmpty) {
       _hataGoster('Önce bir cihaz bağlanmalı');
+      return;
+    }
+
+    final hedefCihaz = _yonetici.bagliCihazlar.first;
+    final hedefIP = hedefCihaz['ip'] as String;
+
+    if (hedefIP == 'incoming') {
+      _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
+      return;
+    }
+
+    // Dialog kapatma ve progress gösterme
+    bool dialogAcik = false;
+
+    try {
+      // Ana dialog'u kapat
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // Progress dialog göster
+      if (mounted) {
+        dialogAcik = true;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (BuildContext dialogContext) => PopScope(
+                canPop: false,
+                child: AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 20),
+                      Text(
+                        '${kisiler.length} kişi senkronize ediliyor...',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Profil fotoğrafları ve tüm bilgiler dahil ediliyor...',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        );
+      }
+
+      // Async olarak senkronize et
+      final basarili = await _yonetici.kisileriSenkronEt(
+        hedefIP,
+        kisiler: kisiler,
+      );
+
+      // Progress dialog'u güvenli şekilde kapat
+      if (mounted && dialogAcik) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogAcik = false;
+      }
+
+      if (basarili) {
+        _basariMesaji('${kisiler.length} kişi başarıyla senkronize edildi');
+        // Verileri yenile
+        await _verileriYukle();
+      } else {
+        _hataGoster('Kişi senkronizasyonu başarısız oldu');
+      }
+    } catch (e) {
+      // Progress dialog'u güvenli şekilde kapat
+      if (mounted && dialogAcik) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (navError) {
+          print('Navigation error: $navError');
+        }
+        dialogAcik = false;
+      }
+      _hataGoster('Kişi senkronizasyon hatası: $e');
+    } finally {
+      // Son güvenlik kontrolü
+      if (mounted && dialogAcik) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (navError) {
+          print('Final navigation error: $navError');
+        }
+      }
+
+      // Loading durumunu kapat
+      if (mounted) {
+        setState(() => _yukleniyor = false);
+      }
     }
   }
 
   void _kategorileriCihazaGonder(List<KategoriModeli> kategoriler) async {
-    if (_yonetici.bagliCihazlar.isNotEmpty) {
-      final hedefCihaz = _yonetici.bagliCihazlar.first;
-      final hedefIP = hedefCihaz['ip'] as String;
-
-      if (hedefIP != 'incoming') {
-        Navigator.pop(context);
-        final basarili = await _yonetici.kategorileriSenkronEt(
-          hedefIP,
-          kategoriler: kategoriler,
-        );
-
-        if (basarili) {
-          _bekleyenKategorileriGoster();
-        }
-      } else {
-        _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
-      }
-    } else {
+    if (_yonetici.bagliCihazlar.isEmpty) {
       _hataGoster('Önce bir cihaz bağlanmalı');
+      return;
+    }
+
+    final hedefCihaz = _yonetici.bagliCihazlar.first;
+    final hedefIP = hedefCihaz['ip'] as String;
+
+    if (hedefIP == 'incoming') {
+      _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
+      return;
+    }
+
+    // Dialog kapatma ve progress gösterme
+    bool dialogAcik = false;
+
+    try {
+      // Ana dialog'u kapat
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // Progress dialog göster
+      if (mounted) {
+        dialogAcik = true;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (BuildContext dialogContext) => PopScope(
+                canPop: false,
+                child: AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 20),
+                      Text(
+                        '${kategoriler.length} kategori senkronize ediliyor...',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Tüm kategori bilgileri dahil ediliyor...',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        );
+      }
+
+      // Async olarak senkronize et
+      final basarili = await _yonetici.kategorileriSenkronEt(
+        hedefIP,
+        kategoriler: kategoriler,
+      );
+
+      // Progress dialog'u güvenli şekilde kapat
+      if (mounted && dialogAcik) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogAcik = false;
+      }
+
+      if (basarili) {
+        _basariMesaji(
+          '${kategoriler.length} kategori başarıyla senkronize edildi',
+        );
+        // Verileri yenile
+        await _verileriYukle();
+      } else {
+        _hataGoster('Kategori senkronizasyonu başarısız oldu');
+      }
+    } catch (e) {
+      // Progress dialog'u güvenli şekilde kapat
+      if (mounted && dialogAcik) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (navError) {
+          print('Navigation error: $navError');
+        }
+        dialogAcik = false;
+      }
+      _hataGoster('Kategori senkronizasyon hatası: $e');
+    } finally {
+      // Son güvenlik kontrolü
+      if (mounted && dialogAcik) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (navError) {
+          print('Final navigation error: $navError');
+        }
+      }
+
+      // Loading durumunu kapat
+      if (mounted) {
+        setState(() => _yukleniyor = false);
+      }
     }
   }
 
   // Mesaj gösterme fonksiyonları
   void _hataGoster(String mesaj) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -900,6 +1172,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   void _basariMesaji(String mesaj) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -914,5 +1187,65 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
+  }
+
+  /// Tüm sistemi senkronize et
+  Future<void> _tumSistemSenkronEt() async {
+    if (_yonetici.bagliCihazlar.isEmpty) {
+      _hataGoster('Hiçbir cihaz bağlı değil! Önce bir cihaza bağlanın.');
+      return;
+    }
+
+    try {
+      // İlk bağlı cihazı al
+      final hedefCihaz = _yonetici.bagliCihazlar.first;
+      final hedefIP = hedefCihaz['ip'] as String;
+
+      if (hedefIP == 'incoming') {
+        _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
+        return;
+      }
+
+      // Onay dialog'u göster
+      final onay = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Tüm Sistem Senkronizasyonu'),
+              content: Text(
+                'Tüm belgeler, kişiler ve kategoriler "${hedefCihaz['device_name']}" cihazına gönderilecek.\n\n'
+                'Bu işlem uzun sürebilir. Devam etmek istiyor musunuz?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('İptal'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Devam Et'),
+                ),
+              ],
+            ),
+      );
+
+      if (onay == true) {
+        setState(() => _yukleniyor = true);
+        final sonuc = await _yonetici.tumSistemiSenkronEt(hedefIP);
+
+        if (sonuc) {
+          _basariMesaji('Tüm sistem başarıyla senkronize edildi!');
+          _verileriYukle(); // Verileri yenile
+        } else {
+          _hataGoster('Tüm sistem senkronizasyonu başarısız oldu.');
+        }
+      }
+    } catch (e) {
+      _hataGoster('Tüm sistem senkronizasyon hatası: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _yukleniyor = false);
+      }
+    }
   }
 }

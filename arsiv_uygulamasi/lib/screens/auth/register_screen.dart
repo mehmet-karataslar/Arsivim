@@ -52,10 +52,8 @@ class _RegisterScreenState extends State<RegisterScreen>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0.0, 0.5),
-      end: Offset.zero,
-    ).animate(
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0.0, 0.5), end: Offset.zero).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
 
@@ -64,7 +62,6 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
-
 
     setState(() {
       _isLoading = true;
@@ -85,13 +82,8 @@ class _RegisterScreenState extends State<RegisterScreen>
 
           // Giriş ekranına dön
           Navigator.of(context).pop();
-        } else {
-          // Veritabanı sıfırlama gerekiyor mu?
-          if (result.needsDatabaseReset) {
-            _showDatabaseResetDialog();
           } else {
             ScreenUtils.showErrorSnackBar(context, result.message);
-          }
         }
       }
     } catch (e, stackTrace) {
@@ -113,84 +105,6 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   void _navigateToLogin() {
     Navigator.of(context).pop();
-  }
-
-  /// Veritabanı sıfırlama dialog'u göster
-  void _showDatabaseResetDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Veritabanı Güncellemesi Gerekli'),
-            content: const Text(
-              'Veritabanı şeması güncellenmiş. Uygulamanın düzgün çalışması için veritabanını sıfırlamanız gerekmektedir.\n\n'
-              'Bu işlem mevcut verilerinizi silecektir. Devam etmek istiyor musunuz?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // Ana ekrana dön
-                  Navigator.pop(context);
-                },
-                child: const Text('İptal'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _resetDatabase();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Veritabanını Sıfırla'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  /// Veritabanını sıfırla
-  Future<void> _resetDatabase() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final veriTabani = VeriTabaniServisi();
-      await veriTabani.resetDatabase();
-
-      if (mounted) {
-        ScreenUtils.showSuccessSnackBar(
-          context,
-          'Veritabanı başarıyla sıfırlandı. Şimdi kayıt olabilirsiniz.',
-        );
-        // Form alanlarını temizle
-        _adController.clear();
-        _soyadController.clear();
-        _kullaniciAdiController.clear();
-        _sifreController.clear();
-        _sifreTekrarController.clear();
-        setState(() {
-          _acceptTerms = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScreenUtils.showErrorSnackBar(
-          context,
-          'Veritabanı sıfırlanırken hata oluştu: $e',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
   }
 
   @override
@@ -549,8 +463,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
-          colors:
-              _isLoading
+          colors: _isLoading
                   ? [Colors.grey, Colors.grey[400]!]
                   : [const Color(0xFF2E7D32), const Color(0xFF4CAF50)],
         ),
@@ -568,8 +481,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           borderRadius: BorderRadius.circular(16),
           onTap: _isLoading ? null : _register,
           child: Center(
-            child:
-                _isLoading
+            child: _isLoading
                     ? const SizedBox(
                       width: 24,
                       height: 24,

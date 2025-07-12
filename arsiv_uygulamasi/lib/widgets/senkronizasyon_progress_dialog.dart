@@ -521,3 +521,189 @@ Future<void> showSenkronizasyonProgressDialog(
         ),
   );
 }
+
+/// Senkronizasyon detay progress dialog'u
+class SenkronizasyonDetayProgressDialog extends StatefulWidget {
+  final String baslik;
+  final String aciklama;
+  final int toplam;
+  final VoidCallback? onIptal;
+
+  const SenkronizasyonDetayProgressDialog({
+    Key? key,
+    required this.baslik,
+    required this.aciklama,
+    required this.toplam,
+    this.onIptal,
+  }) : super(key: key);
+
+  @override
+  State<SenkronizasyonDetayProgressDialog> createState() =>
+      _SenkronizasyonDetayProgressDialogState();
+}
+
+class _SenkronizasyonDetayProgressDialogState
+    extends State<SenkronizasyonDetayProgressDialog>
+    with TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+  bool _basarili = false;
+  String _durumMesaji = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _animationController.repeat(reverse: true);
+    _durumMesaji = widget.aciklama;
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void basariliOldu(String mesaj) {
+    if (mounted) {
+      setState(() {
+        _basarili = true;
+        _durumMesaji = mesaj;
+      });
+      _animationController.stop();
+      _animationController.value = 1.0;
+
+      // 2 saniye sonra dialog'u kapat
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false, // Geri tuşunu devre dışı bırak
+      child: AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.all(24),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon
+            AnimatedBuilder(
+              animation: _animation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: 0.8 + (_animation.value * 0.4),
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: _basarili ? Colors.green[100] : Colors.blue[100],
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    child: Icon(
+                      _basarili ? Icons.check_circle : Icons.sync,
+                      size: 40,
+                      color: _basarili ? Colors.green[600] : Colors.blue[600],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+
+            // Başlık
+            Text(
+              widget.baslik,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: _basarili ? Colors.green[700] : Colors.blue[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+
+            // Açıklama
+            Text(
+              _durumMesaji,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+
+            // Progress indicator
+            if (!_basarili) ...[
+              const LinearProgressIndicator(
+                backgroundColor: Colors.grey,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '${widget.toplam} öğe işleniyor...',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+              ),
+            ],
+
+            // İptal butonu (sadece işlem devam ederken)
+            if (!_basarili && widget.onIptal != null) ...[
+              const SizedBox(height: 20),
+              TextButton(onPressed: widget.onIptal, child: const Text('İptal')),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Basit senkronizasyon progress göstergesi
+class BasitSenkronizasyonProgress {
+  static void goster({
+    required BuildContext context,
+    required String baslik,
+    required String aciklama,
+    required int toplam,
+    VoidCallback? onIptal,
+  }) {
+    final dialogKey = GlobalKey<_SenkronizasyonDetayProgressDialogState>();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => SenkronizasyonDetayProgressDialog(
+            key: dialogKey,
+            baslik: baslik,
+            aciklama: aciklama,
+            toplam: toplam,
+            onIptal: onIptal,
+          ),
+    );
+  }
+
+  static void basariliOldu(BuildContext context, String mesaj) {
+    // Dialog içindeki state'i bulup güncelle
+    final dialogContext =
+        context
+            .findAncestorStateOfType<_SenkronizasyonDetayProgressDialogState>();
+    dialogContext?.basariliOldu(mesaj);
+  }
+
+  static void kapat(BuildContext context) {
+    Navigator.of(context).pop();
+  }
+}

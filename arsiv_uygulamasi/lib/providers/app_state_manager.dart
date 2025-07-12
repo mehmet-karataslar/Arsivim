@@ -374,31 +374,242 @@ class AppStateManager extends ChangeNotifier {
 
   /// Filtreleri uygula
   void _applyFilters() {
+    // Minimum karakter kontrolü
+    if (_searchQuery.isNotEmpty && _searchQuery.trim().length < 1) {
+      _filteredBelgeler = List.from(_belgeler);
+      return;
+    }
+
+    final aramaKelimesi = _searchQuery.toLowerCase().trim();
+    final aramaSozcukleri =
+        aramaKelimesi.split(' ').where((s) => s.isNotEmpty).toList();
+
+    if (_searchQuery.isNotEmpty) {
+      // Arama sonuçlarını puanlama sistemi ile sıralama
+      final aramaSonuclari = <Map<String, dynamic>>[];
+
+      for (final belge in _belgeler) {
+        final puan = _belgeAramaPuani(belge, aramaKelimesi, aramaSozcukleri);
+        if (puan > 0) {
+          aramaSonuclari.add({'belge': belge, 'puan': puan});
+        }
+      }
+
+      // Puana göre sıralama (yüksek puan önce)
+      aramaSonuclari.sort((a, b) => b['puan'].compareTo(a['puan']));
+
+      _filteredBelgeler =
+          aramaSonuclari.map((item) => item['belge'] as BelgeModeli).toList();
+    } else {
+      _filteredBelgeler = List.from(_belgeler);
+    }
+
+    // Kategori filtresi
+    if (_selectedKategori != null) {
+      _filteredBelgeler =
+          _filteredBelgeler
+              .where((belge) => belge.kategoriId == _selectedKategori!.id)
+              .toList();
+    }
+
+    // Kişi filtresi
+    if (_selectedKisi != null) {
     _filteredBelgeler =
-        _belgeler.where((belge) {
-          // Search query filter
-          if (_searchQuery.isNotEmpty) {
-            final query = _searchQuery.toLowerCase();
-            if (!belge.dosyaAdi.toLowerCase().contains(query) &&
-                !(belge.baslik?.toLowerCase().contains(query) ?? false) &&
-                !(belge.aciklama?.toLowerCase().contains(query) ?? false)) {
-              return false;
+          _filteredBelgeler
+              .where((belge) => belge.kisiId == _selectedKisi!.id)
+              .toList();
+    }
+  }
+
+  // Gelişmiş arama puanlama sistemi
+  int _belgeAramaPuani(
+    BelgeModeli belge,
+    String aramaKelimesi,
+    List<String> aramaSozcukleri,
+  ) {
+    int puan = 0;
+
+    // Arama metinlerini hazırla
+    final dosyaAdi = belge.dosyaAdi.toLowerCase();
+    final baslik = (belge.baslik ?? '').toLowerCase();
+    final aciklama = (belge.aciklama ?? '').toLowerCase();
+    final etiketler = (belge.etiketler ?? [])
+        .map((e) => e.toLowerCase())
+        .join(' ');
+
+    // 1. TAM METIN EŞLEŞMESİ (en yüksek puan)
+    if (dosyaAdi == aramaKelimesi) puan += 1000;
+    if (baslik == aramaKelimesi) puan += 900;
+    if (aciklama == aramaKelimesi) puan += 800;
+
+    // 2. TAM KELIME EŞLEŞMESİ (yüksek puan)
+    final tamKelimePuani =
+        _tamKelimeAramaPuani(aramaKelimesi, aramaSozcukleri, {
+          'dosyaAdi': dosyaAdi,
+          'baslik': baslik,
+          'aciklama': aciklama,
+          'etiketler': etiketler,
+        });
+    puan += tamKelimePuani;
+
+    // 3. BAŞLANGIC EŞLEŞMESİ (orta puan)
+    if (dosyaAdi.startsWith(aramaKelimesi)) puan += 300;
+    if (baslik.startsWith(aramaKelimesi)) puan += 250;
+    if (aciklama.startsWith(aramaKelimesi)) puan += 200;
+
+    // 4. IÇERIK EŞLEŞMESİ (düşük puan)
+    if (dosyaAdi.contains(aramaKelimesi)) puan += 50;
+    if (baslik.contains(aramaKelimesi)) puan += 40;
+    if (aciklama.contains(aramaKelimesi)) puan += 30;
+    if (etiketler.contains(aramaKelimesi)) puan += 25;
+
+    // 5. FUZZY SEARCH (çok düşük puan)
+    puan += _fuzzySearchPuani(aramaKelimesi, dosyaAdi, 10);
+    puan += _fuzzySearchPuani(aramaKelimesi, baslik, 8);
+    puan += _fuzzySearchPuani(aramaKelimesi, aciklama, 6);
+
+    return puan;
+  }
+
+  // Tam kelime arama puanlama sistemi
+  int _tamKelimeAramaPuani(
+    String aramaKelimesi,
+    List<String> aramaSozcukleri,
+    Map<String, String> alanlar,
+  ) {
+    int puan = 0;
+
+    // Tek kelime tam eşleşme
+    for (final alan in alanlar.entries) {
+      final alanDegeri = alan.value;
+      final kelimeler =
+          alanDegeri
+              .split(RegExp(r'[^a-zA-ZçğıöşüÇĞIİÖŞÜ0-9]+'))
+              .where((s) => s.isNotEmpty)
+              .toList();
+
+      for (final kelime in kelimeler) {
+        if (kelime == aramaKelimesi) {
+          switch (alan.key) {
+            case 'dosyaAdi':
+              puan += 500;
+              break;
+            case 'baslik':
+              puan += 450;
+              break;
+            case 'aciklama':
+              puan += 400;
+              break;
+            case 'etiketler':
+              puan += 350;
+              break;
+          }
+        }
+      }
+    }
+
+    // Çoklu kelime araması (cümle araması)
+    if (aramaSozcukleri.length > 1) {
+      for (final alan in alanlar.entries) {
+        final alanDegeri = alan.value;
+        int eslesen = 0;
+
+        for (final sozcuk in aramaSozcukleri) {
+          if (sozcuk.length >= 1) {
+            // Minimum 1 karakter
+            final alanKelimeler =
+                alanDegeri
+                    .split(RegExp(r'[^a-zA-ZçğıöşüÇĞIİÖŞÜ0-9]+'))
+                    .where((s) => s.isNotEmpty)
+                    .toList();
+
+            // Tam kelime eşleşmesi
+            if (alanKelimeler.any((k) => k == sozcuk)) {
+              eslesen += 3;
+            }
+            // Başlangıç eşleşmesi
+            else if (alanKelimeler.any((k) => k.startsWith(sozcuk))) {
+              eslesen += 2;
+            }
+            // İçerik eşleşmesi
+            else if (alanDegeri.contains(sozcuk)) {
+              eslesen += 1;
             }
           }
+        }
 
-          // Kategori filter
-          if (_selectedKategori != null &&
-              belge.kategoriId != _selectedKategori!.id) {
-            return false;
+        // Eşleşen kelime sayısına göre puan ver
+        if (eslesen > 0) {
+          final cokluKelimeBonusu = (eslesen * 100) ~/ aramaSozcukleri.length;
+          switch (alan.key) {
+            case 'dosyaAdi':
+              puan += cokluKelimeBonusu;
+              break;
+            case 'baslik':
+              puan += (cokluKelimeBonusu * 0.9).round();
+              break;
+            case 'aciklama':
+              puan += (cokluKelimeBonusu * 0.8).round();
+              break;
+            case 'etiketler':
+              puan += (cokluKelimeBonusu * 0.7).round();
+              break;
           }
+        }
+      }
+    }
 
-          // Kişi filter
-          if (_selectedKisi != null && belge.kisiId != _selectedKisi!.id) {
-            return false;
-          }
+    return puan;
+  }
 
-          return true;
-        }).toList();
+  // Fuzzy search algoritması (Levenshtein distance)
+  int _fuzzySearchPuani(String aranan, String hedef, int maxPuan) {
+    if (aranan.isEmpty || hedef.isEmpty) return 0;
+    if (aranan.length < 3)
+      return 0; // Çok kısa kelimeler için fuzzy search yapma
+
+    final mesafe = _levenshteinDistance(aranan, hedef);
+    final maxMesafe = (aranan.length * 0.4).round(); // %40 hata toleransı
+
+    if (mesafe <= maxMesafe) {
+      final benzerlikOrani = 1.0 - (mesafe / aranan.length);
+      return (maxPuan * benzerlikOrani).round();
+    }
+
+    return 0;
+  }
+
+  // Levenshtein distance hesaplama
+  int _levenshteinDistance(String s1, String s2) {
+    if (s1 == s2) return 0;
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+
+    final matrix = List.generate(
+      s1.length + 1,
+      (i) => List.filled(s2.length + 1, 0),
+    );
+
+    for (int i = 0; i <= s1.length; i++) {
+      matrix[i][0] = i;
+    }
+
+    for (int j = 0; j <= s2.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (int i = 1; i <= s1.length; i++) {
+      for (int j = 1; j <= s2.length; j++) {
+        final cost = s1[i - 1] == s2[j - 1] ? 0 : 1;
+        matrix[i][j] = [
+          matrix[i - 1][j] + 1, // silme
+          matrix[i][j - 1] + 1, // ekleme
+          matrix[i - 1][j - 1] + cost, // değiştirme
+        ].reduce((a, b) => a < b ? a : b);
+      }
+    }
+
+    return matrix[s1.length][s2.length];
   }
 
   /// Network durumu güncelle

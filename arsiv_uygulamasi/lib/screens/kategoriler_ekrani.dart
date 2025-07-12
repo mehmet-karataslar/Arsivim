@@ -930,11 +930,13 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
           children: [
             Icon(icon, color: Colors.white, size: 24),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -988,11 +990,13 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                 children: [
                   Icon(icon, color: Colors.white),
                   const SizedBox(width: 12),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -1019,9 +1023,11 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                     children: [
                       Icon(Icons.error_outline, color: colors[1], size: 24),
                       const SizedBox(width: 12),
-                      const Text(
-                        'Bu işlem geri alınamaz!',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      const Flexible(
+                        child: Text(
+                          'Bu işlem geri alınamaz!',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),
@@ -1109,11 +1115,13 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                   children: [
                     Icon(Icons.refresh_rounded, color: Colors.white),
                     SizedBox(width: 12),
-                    Text(
-                      'Veritabanını Sıfırla',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Text(
+                        'Veritabanını Sıfırla',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -1137,9 +1145,11 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
                       children: [
                         Icon(Icons.warning_rounded, color: Colors.red[600]),
                         const SizedBox(width: 12),
-                        const Text(
-                          'Bu işlem geri alınamaz!',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        const Flexible(
+                          child: Text(
+                            'Bu işlem geri alınamaz!',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
@@ -1201,11 +1211,13 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
           children: [
             Icon(Icons.delete_sweep_rounded, color: Colors.white),
             SizedBox(width: 12),
-            Text(
-              'Toplu Silme',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+            Flexible(
+              child: Text(
+                'Toplu Silme',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -1253,9 +1265,11 @@ class _KategorilerEkraniState extends State<KategorilerEkrani>
               children: [
                 Icon(Icons.warning_rounded, color: Colors.red[600]),
                 const SizedBox(width: 12),
-                const Text(
-                  'Bu işlem tüm kategorileri etkiler!',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                const Flexible(
+                  child: Text(
+                    'Bu işlem tüm kategorileri etkiler!',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),

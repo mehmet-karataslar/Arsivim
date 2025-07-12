@@ -111,119 +111,121 @@ class KategoriModeli extends BaseModel {
 
   /// Varsayılan kategoriler
   static List<KategoriModeli> ontanimliKategoriler() {
-    final simdi = DateTime.now();
+    // Mevcut kategorilerin senkronizasyona dahil edilmemesi için eski tarih kullan
+    final eskiTarih = DateTime.now().subtract(const Duration(days: 7));
+
     return [
       KategoriModeli(
         kategoriAdi: 'Belgeler',
         renkKodu: '#2196F3',
         simgeKodu: 'description',
         aciklama: 'Genel belgeler ve dökümanlar',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Resimler',
         renkKodu: '#4CAF50',
         simgeKodu: 'image',
         aciklama: 'Fotoğraflar ve resimler',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Videolar',
         renkKodu: '#FF9800',
         simgeKodu: 'videocam',
         aciklama: 'Video dosyaları',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Müzik',
         renkKodu: '#9C27B0',
         simgeKodu: 'music_note',
         aciklama: 'Ses dosyaları',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Arşiv',
         renkKodu: '#607D8B',
         simgeKodu: 'archive',
         aciklama: 'Sıkıştırılmış dosyalar',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Okul',
         renkKodu: '#3F51B5',
         simgeKodu: 'school',
         aciklama: 'Eğitim ve okul belgeleri',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'İş',
         renkKodu: '#795548',
         simgeKodu: 'work',
         aciklama: 'İş ve meslek belgeleri',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Ev',
         renkKodu: '#E91E63',
         simgeKodu: 'home',
         aciklama: 'Ev ve aile belgeleri',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Hastane',
         renkKodu: '#F44336',
         simgeKodu: 'local_hospital',
         aciklama: 'Sağlık ve tıbbi belgeler',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Resmi',
         renkKodu: '#009688',
         simgeKodu: 'business',
         aciklama: 'Resmi kurum belgeleri',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Mali',
         renkKodu: '#4CAF50',
         simgeKodu: 'account_balance',
         aciklama: 'Mali ve finansal belgeler',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Hukuki',
         renkKodu: '#FF5722',
         simgeKodu: 'gavel',
         aciklama: 'Hukuki ve yasal belgeler',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Sigorta',
         renkKodu: '#00BCD4',
         simgeKodu: 'security',
         aciklama: 'Sigorta belgeleri',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Kişisel',
         renkKodu: '#673AB7',
         simgeKodu: 'person',
         aciklama: 'Kişisel belgeler',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Seyahat',
         renkKodu: '#FF9800',
         simgeKodu: 'flight',
         aciklama: 'Seyahat belgeleri',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
       KategoriModeli(
         kategoriAdi: 'Hobi',
         renkKodu: '#8BC34A',
         simgeKodu: 'sports_esports',
         aciklama: 'Hobi ve ilgi alanları',
-        olusturmaTarihi: simdi,
+        olusturmaTarihi: eskiTarih,
       ),
     ];
   }

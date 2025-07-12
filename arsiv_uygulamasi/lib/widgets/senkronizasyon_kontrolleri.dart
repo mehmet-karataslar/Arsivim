@@ -4,9 +4,13 @@ import '../services/senkronizasyon_yonetici_servisi.dart';
 
 class SenkronizasyonKontrolleri extends StatelessWidget {
   final SenkronizasyonYoneticiServisi yonetici;
+  final VoidCallback? onTumSistemSenkron;
 
-  const SenkronizasyonKontrolleri({Key? key, required this.yonetici})
-    : super(key: key);
+  const SenkronizasyonKontrolleri({
+    Key? key,
+    required this.yonetici,
+    this.onTumSistemSenkron,
+  }) : super(key: key);
 
   bool get _pcPlatform =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -38,7 +42,9 @@ class SenkronizasyonKontrolleri extends StatelessWidget {
   }
 
   Widget _buildPCKontroller(BuildContext context) {
-    return Row(
+    return Column(
+      children: [
+        Row(
       children: [
         Expanded(
           child: _buildKontrolButonu(
@@ -70,6 +76,20 @@ class SenkronizasyonKontrolleri extends StatelessWidget {
             Icons.flash_on,
             Colors.purple,
             yonetici.hizliSenkronizasyon,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: _buildKontrolButonu(
+            context,
+            'Tüm Sistemi Senkron Et',
+            'Başlat',
+            Icons.cloud_sync,
+            Colors.indigo,
+            onTumSistemSenkron ?? () {},
           ),
         ),
       ],
@@ -114,6 +134,18 @@ class SenkronizasyonKontrolleri extends StatelessWidget {
             Icons.flash_on,
             Colors.purple,
             yonetici.hizliSenkronizasyon,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: _buildKontrolButonu(
+            context,
+            'Tüm Sistemi Senkron Et',
+            'Başlat',
+            Icons.cloud_sync,
+            Colors.indigo,
+            onTumSistemSenkron ?? () {},
           ),
         ),
       ],
