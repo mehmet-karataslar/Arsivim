@@ -2,6 +2,7 @@ import '../models/invoice_model.dart';
 import '../models/activity_model.dart';
 import 'veritabani_servisi.dart';
 import 'calendar_activity_service.dart';
+import 'notification_service.dart';
 
 class InvoiceService {
   static final InvoiceService _instance = InvoiceService._internal();
@@ -48,6 +49,13 @@ class InvoiceService {
             'payment_status': invoice.paymentStatus.toString(),
             'operation': 'create',
           },
+        );
+        
+        // Show immediate notification for invoice creation
+        await NotificationService.instance.showNotification(
+          title: '📄 Fatura Oluşturuldu',
+          body: 'Yeni fatura eklendi: ${invoice.invoiceNumber} - ${invoice.supplierName ?? 'Tedarikçi'}',
+          payload: 'invoice_$invoiceId',
         );
       } catch (e) {
         print('Calendar activity tracking hatası: $e');

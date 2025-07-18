@@ -5,6 +5,7 @@ import '../models/activity_model.dart';
 import '../models/reminder_model.dart';
 import '../services/calendar_activity_service.dart';
 import '../services/veritabani_servisi.dart';
+import '../services/notification_service.dart';
 import '../utils/screen_utils.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 
@@ -263,12 +264,26 @@ class _CalendarScreenState extends State<CalendarScreen>
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateReminderDialog(),
-        backgroundColor: Colors.indigo[600],
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_alert_rounded),
-        label: const Text('Hatırlatıcı Ekle'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            onPressed: _testNotification,
+            backgroundColor: Colors.orange[600],
+            foregroundColor: Colors.white,
+            heroTag: "test_notification",
+            child: const Icon(Icons.notifications_active_rounded),
+          ),
+          const SizedBox(height: 16),
+          FloatingActionButton.extended(
+            onPressed: () => _showCreateReminderDialog(),
+            backgroundColor: Colors.indigo[600],
+            foregroundColor: Colors.white,
+            heroTag: "add_reminder",
+            icon: const Icon(Icons.add_alert_rounded),
+            label: const Text('Hatırlatıcı Ekle'),
+          ),
+        ],
       ),
     );
   }
@@ -1018,6 +1033,24 @@ class _CalendarScreenState extends State<CalendarScreen>
       ),
     );
   }
+
+  /// Test notification function
+  void _testNotification() async {
+    try {
+      await NotificationService.instance.showNotification(
+        title: '🧪 Test Bildirimi',
+        body: 'Bildirim sistemi çalışıyor! Bu bildirimi gördüyseniz sistem başarıyla kurulmuş.',
+        payload: 'test_notification',
+      );
+      
+      ScreenUtils.showSuccessSnackBar(
+        context,
+        'Test bildirimi gönderildi! Üstten aşağıya kaydırarak kontrol edin.',
+      );
+    } catch (e) {
+      _showError('Test bildirimi gönderilemedi: $e');
+    }
+  }
 }
 
 /// Dialog for creating new reminders
@@ -1117,8 +1150,11 @@ class _ReminderCreateDialogState extends State<ReminderCreateDialog> {
                             children: [
                               const Icon(Icons.calendar_today_rounded),
                               const SizedBox(width: 8),
-                              Text(
-                                '${_selectedDate.day}.${_selectedDate.month}.${_selectedDate.year}',
+                              Flexible(
+                                child: Text(
+                                  '${_selectedDate.day}.${_selectedDate.month}.${_selectedDate.year}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),
@@ -1139,8 +1175,11 @@ class _ReminderCreateDialogState extends State<ReminderCreateDialog> {
                             children: [
                               const Icon(Icons.access_time_rounded),
                               const SizedBox(width: 8),
-                              Text(
-                                '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}',
+                              Flexible(
+                                child: Text(
+                                  '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),

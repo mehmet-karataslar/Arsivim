@@ -260,12 +260,15 @@ class _InvoiceAddScreenState extends State<InvoiceAddScreen> {
               filled: true,
               fillColor: Colors.grey[50],
             ),
-            items: InvoiceType.values.map((type) {
-              return DropdownMenuItem(
-                value: type,
-                child: Text(_getInvoiceTypeText(type)),
-              );
-            }).toList(),
+                              items: InvoiceType.values.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_getInvoiceTypeText(type)),
+                      ),
+                    );
+                  }).toList(),
             onChanged: (value) {
               if (value != null) {
                 setState(() {
@@ -492,12 +495,15 @@ class _InvoiceAddScreenState extends State<InvoiceAddScreen> {
               filled: true,
               fillColor: Colors.grey[50],
             ),
-            items: TaxRate.values.map((rate) {
-              return DropdownMenuItem(
-                value: rate,
-                child: Text(_getTaxRateText(rate)),
-              );
-            }).toList(),
+                              items: TaxRate.values.map((rate) {
+                    return DropdownMenuItem(
+                      value: rate,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_getTaxRateText(rate)),
+                      ),
+                    );
+                  }).toList(),
             onChanged: (value) {
               if (value != null) {
                 setState(() {
@@ -640,7 +646,7 @@ class _InvoiceAddScreenState extends State<InvoiceAddScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: InkWell(
                   onTap: () => _selectDate(context, false),
@@ -695,12 +701,15 @@ class _InvoiceAddScreenState extends State<InvoiceAddScreen> {
               filled: true,
               fillColor: Colors.grey[50],
             ),
-            items: PaymentStatus.values.map((status) {
-              return DropdownMenuItem(
-                value: status,
-                child: Text(_getPaymentStatusText(status)),
-              );
-            }).toList(),
+                              items: PaymentStatus.values.map((status) {
+                    return DropdownMenuItem(
+                      value: status,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_getPaymentStatusText(status)),
+                      ),
+                    );
+                  }).toList(),
             onChanged: (value) {
               if (value != null) {
                 setState(() {

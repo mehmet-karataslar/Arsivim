@@ -2,6 +2,7 @@ import '../models/tax_model.dart';
 import '../models/activity_model.dart';
 import 'veritabani_servisi.dart';
 import 'calendar_activity_service.dart';
+import 'notification_service.dart';
 
 class TaxService {
   static final TaxService _instance = TaxService._internal();
@@ -52,6 +53,13 @@ class TaxService {
             'tax_status': tax.taxStatus.toString(),
             'operation': 'create',
           },
+        );
+        
+        // Show immediate notification for tax creation
+        await NotificationService.instance.showNotification(
+          title: '💰 Vergi Kaydı Oluşturuldu',
+          body: 'Yeni vergi kaydı eklendi: ${tax.taxNumber} - ${tax.taxYear} yılı',
+          payload: 'tax_$taxId',
         );
       } catch (e) {
         print('Calendar activity tracking hatası: $e');

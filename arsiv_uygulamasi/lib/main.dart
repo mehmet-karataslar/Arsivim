@@ -16,6 +16,7 @@ import 'screens/auth/login_screen.dart';
 
 // Services
 import 'services/http_sunucu_servisi.dart';
+import 'services/notification_service.dart';
 import 'services/veritabani_servisi.dart';
 import 'services/dosya_servisi.dart';
 import 'services/senkronizasyon_yonetici_servisi.dart';
@@ -199,6 +200,13 @@ Future<void> _initializeServices() async {
 
     await httpSunucu.sunucuyuBaslat();
     print('✅ HTTP server started successfully');
+
+    // 8. Notification Service
+    print('🔔 Initializing notification service...');
+    final notificationService = NotificationService.instance;
+    await notificationService.initialize();
+    await notificationService.requestPermissions();
+    print('✅ Notification service initialized');
 
     // 8. Authentication Service
     print('🔐 Initializing authentication service...');

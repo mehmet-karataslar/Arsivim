@@ -1,6 +1,7 @@
 import '../models/activity_model.dart';
 import '../models/reminder_model.dart';
 import 'veritabani_servisi.dart';
+import 'notification_service.dart';
 
 /// Service to manage calendar activities, reminders, and automatic pattern recognition
 class CalendarActivityService {
@@ -9,6 +10,7 @@ class CalendarActivityService {
   CalendarActivityService._internal();
 
   final VeriTabaniServisi _veritabani = VeriTabaniServisi();
+  final NotificationService _notificationService = NotificationService.instance;
 
   /// Track a new activity in the calendar
   Future<int> trackActivity({
@@ -96,6 +98,12 @@ class CalendarActivityService {
     try {
       final reminderData = reminder.toMap();
       final id = await _veritabani.reminderEkle(reminderData);
+
+      // Schedule notification for this reminder
+      final reminderWithId = reminder.copyWith(id: id);
+      await _notificationService.scheduleReminder(reminderWithId);
+      
+      print('✅ Reminder created and notification scheduled: ${reminder.title}');
 
       // If recurring, calculate next occurrence
       if (reminder.recurrenceType != RecurrenceType.NONE) {

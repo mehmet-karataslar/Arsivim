@@ -10,6 +10,7 @@ import '../models/activity_model.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
 import '../services/calendar_activity_service.dart';
+import '../services/notification_service.dart';
 import '../utils/screen_utils.dart';
 
 class YeniBelgeEkleEkrani extends StatefulWidget {
@@ -1913,6 +1914,13 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
                 'person_id': _secilenKisi?.id,
                 'source': 'file_picker',
               },
+            );
+            
+            // Show immediate notification for document upload
+            await NotificationService.instance.showNotification(
+              title: '📁 Belge Başarıyla Eklendi',
+              body: 'Yeni belge sisteme eklendi: ${belge.baslik ?? belge.dosyaAdi}. Takvimde görüntülenebilir.',
+              payload: 'document_${belge.id}',
             );
           } catch (e) {
             print('Calendar activity tracking hatası: $e');

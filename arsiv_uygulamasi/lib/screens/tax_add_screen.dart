@@ -226,6 +226,7 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
                     fillColor: Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   items: List.generate(10, (index) {
                     final year = DateTime.now().year - index;
@@ -243,7 +244,7 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
                   },
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<TaxPeriod>(
                   value: _taxPeriod,
@@ -253,11 +254,15 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
                     fillColor: Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   items: TaxPeriod.values.map((period) {
                     return DropdownMenuItem(
                       value: period,
-                      child: Text(_getTaxPeriodText(period)),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(_getTaxPeriodText(period)),
+                      ),
                     );
                   }).toList(),
                   onChanged: (value) {

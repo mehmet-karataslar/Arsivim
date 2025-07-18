@@ -13,6 +13,7 @@ import '../models/kisi_modeli.dart';
 import '../models/activity_model.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 import '../utils/screen_utils.dart';
+import '../services/notification_service.dart';
 
 class TarayiciEkrani extends StatefulWidget {
   const TarayiciEkrani({Key? key}) : super(key: key);
@@ -279,6 +280,13 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
             'person_id': _secilenKisi?.id,
             'source': 'scanner',
           },
+        );
+        
+        // Show immediate notification for document upload
+        await NotificationService.instance.showNotification(
+          title: '📄 Belge Başarıyla Tarandı',
+          body: 'Yeni belge eklendi: ${belge.baslik ?? belge.dosyaAdi}. Takvimde görüntülenebilir.',
+          payload: 'document_${belge.id}',
         );
       } catch (e) {
         print('Calendar activity tracking hatası: $e');

@@ -432,8 +432,6 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         ),
       ),
       bottomNavigationBar: _buildModernBottomNav(),
-      floatingActionButton: _secilenTab == 0 ? _buildModernFAB() : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -625,34 +623,6 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildModernFAB() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).primaryColor,
-            Theme.of(context).primaryColor.withOpacity(0.8),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).primaryColor.withOpacity(0.3),
-            spreadRadius: 2,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: FloatingActionButton(
-        onPressed: _yeniBelgeEkle,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: const Icon(Icons.add_rounded, size: 28, color: Colors.white),
       ),
     );
   }
