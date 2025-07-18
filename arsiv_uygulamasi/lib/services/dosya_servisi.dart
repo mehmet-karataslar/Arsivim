@@ -4,6 +4,8 @@ import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import '../models/belge_modeli.dart';
 import '../utils/sabitler.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
@@ -230,6 +232,133 @@ class DosyaServisi {
       };
     } catch (e) {
       throw Exception('Dosya bilgileri alınamadı: $e');
+    }
+  }
+
+  // Taranan fotoğrafları PDF'e dönüştür ve kaydet
+  Future<BelgeModeli> tarananFotograflariPdfYap(
+    List<String> fotografYollari,
+    String pdfAdi,
+  ) async {
+    try {
+      // PDF oluştur
+      final pdf = pw.Document();
+
+      for (String fotografYolu in fotografYollari) {
+        File fotografDosyasi = File(fotografYolu);
+        if (await fotografDosyasi.exists()) {
+          final Uint8List fotografBytes = await fotografDosyasi.readAsBytes();
+          
+          // PDF sayfası ekle
+          pdf.addPage(
+            pw.Page(
+              pageFormat: PdfPageFormat.a4,
+              build: (pw.Context context) {
+                return pw.Center(
+                  child: pw.Image(
+                    pw.MemoryImage(fotografBytes),
+                    fit: pw.BoxFit.contain,
+                  ),
+                );
+              },
+            ),
+          );
+        }
+      }
+
+      // Hedef klasörü oluştur
+      Directory belgelerKlasoru = await _belgelerKlasorunu();
+
+      // Benzersiz PDF dosya adı oluştur
+      String temelAd = path.basenameWithoutExtension(pdfAdi);
+      String guvenliTemelAd = YardimciFonksiyonlar.guvenliDosyaAdi(temelAd);
+      String yeniDosyaAdi = YardimciFonksiyonlar.benzersizDosyaAdi(
+        guvenliTemelAd,
+        'pdf',
+      );
+
+      String hedefYol = path.join(belgelerKlasoru.path, yeniDosyaAdi);
+
+      // PDF'i kaydet
+      final Uint8List pdfBytes = await pdf.save();
+      File pdfDosyasi = File(hedefYol);
+      await pdfDosyasi.writeAsBytes(pdfBytes);
+
+      // Hash hesapla
+      String dosyaHash = sha256.convert(pdfBytes).toString();
+
+      // Belge modeli oluştur
+      DateTime simdi = DateTime.now();
+      BelgeModeli belge = BelgeModeli(
+        dosyaAdi: yeniDosyaAdi,
+        orijinalDosyaAdi: pdfAdi,
+        dosyaYolu: hedefYol,
+        dosyaBoyutu: pdfBytes.length,
+        dosyaTipi: 'pdf',
+        dosyaHash: dosyaHash,
+        olusturmaTarihi: simdi,
+        guncellemeTarihi: simdi,
+        senkronDurumu: SenkronDurumu.YEREL_DEGISIM,
+      );
+
+      return belge;
+    } catch (e) {
+      throw Exception('PDF oluşturulurken hata oluştu: $e');
+    }
+  }
+
+  // Taranan fotoğraf dosyasını işle ve kopyala (eskiden kalma - artık kullanmıyoruz)
+  Future<BelgeModeli> tarananFotografiIsle(
+    String dosyaYolu,
+    String orijinalAd,
+  ) async {
+    try {
+      File kaynak = File(dosyaYolu);
+      if (!await kaynak.exists()) {
+        throw Exception('Kaynak dosya bulunamadı');
+      }
+
+      // Hedef klasörü oluştur
+      Directory belgelerKlasoru = await _belgelerKlasorunu();
+
+      // Benzersiz dosya adı oluştur
+      String dosyaUzantisi = path.extension(orijinalAd);
+      String temelAd = path.basenameWithoutExtension(orijinalAd);
+      String guvenliTemelAd = YardimciFonksiyonlar.guvenliDosyaAdi(temelAd);
+      String yeniDosyaAdi = YardimciFonksiyonlar.benzersizDosyaAdi(
+        guvenliTemelAd,
+        dosyaUzantisi.substring(1),
+      );
+
+      String hedefYol = path.join(belgelerKlasoru.path, yeniDosyaAdi);
+
+      // Dosyayı kopyala
+      File hedefDosya = await kaynak.copy(hedefYol);
+
+      // Dosya boyutunu al
+      int dosyaBoyutu = await hedefDosya.length();
+
+      // Hash hesapla
+      Uint8List dosyaBytes = await hedefDosya.readAsBytes();
+      String dosyaHash = sha256.convert(dosyaBytes).toString();
+
+      // Belge modeli oluştur
+      DateTime simdi = DateTime.now();
+      BelgeModeli belge = BelgeModeli(
+        dosyaAdi: yeniDosyaAdi,
+        orijinalDosyaAdi: orijinalAd,
+        dosyaYolu: hedefYol,
+        dosyaBoyutu: dosyaBoyutu,
+        dosyaTipi: dosyaUzantisi.substring(1).toLowerCase(),
+        dosyaHash: dosyaHash,
+        olusturmaTarihi: simdi,
+        guncellemeTarihi: simdi,
+        senkronDurumu: SenkronDurumu.YEREL_DEGISIM,
+      );
+
+      return belge;
+    } catch (e) {
+      throw Exception('Taranan fotoğraf işlenirken hata oluştu: $e');
     }
   }
 

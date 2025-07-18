@@ -24,44 +24,54 @@ dependencies:
   path_provider: ^2.1.4
   file_picker: ^10.2.0
   path: ^1.9.1
-  image_picker: ^1.0.4
-  
+  image_picker: ^1.1.2
+
+  # Kamera ve tarama
+  camera: ^0.11.0+2
+  image: ^4.1.7
+  cunning_document_scanner: ^1.2.3
+
+  # PDF oluşturma
+  pdf: ^3.11.1
+
   # Dosya açma ve paylaşma
   open_filex: ^4.3.4
   share_plus: ^11.0.0
-  
+
   # Güvenlik ve hash
   crypto: ^3.0.6
-  
+
   # Cihaz bilgileri (senkronizasyon için gerekli)
   device_info_plus: ^11.1.0
-  
+
   # Network
   http: ^1.2.2
   connectivity_plus: ^6.1.4
-  
+
   # QR Code (senkronizasyon için)
   qr_flutter: ^4.1.0
-  mobile_scanner: ^5.2.3  # Stable version - QR kod okuma için
-  
+  mobile_scanner: ^5.2.3
+
   # İzinler (Windows tarayıcı için gerekli)
-  permission_handler: ^12.0.1
+  permission_handler: ^11.4.0
+
+    # Calendar widget (temporarily disabled due to pub get issues)
+  # table_calendar: ^3.1.2
   
+  # Voice commands (temporarily disabled due to pub get issues)  
+  # speech_to_text: ^7.0.0
+
   # Ayarlar ve tercihler
-  shared_preferences: ^2.2.2
-  
+  shared_preferences: ^2.3.3
+
   # Internationalization
-  intl: 0.20.2
-  
+  intl: ^0.20.2
+
   # State management
   provider: ^6.1.2
-  
+
   # Logging
   logging: ^1.2.0
-  
-  # HTTP server (dart:io HttpServer kullanıyoruz)
-  # shelf: ^1.4.1
-  # shelf_router: ^1.1.4
 
 dev_dependencies:
   flutter_test:
@@ -75,5 +85,3 @@ flutter:
   # App icon
   assets:
     - assets/icons/
-
-

@@ -199,6 +199,9 @@ class VeriTabaniServisi {
     // İndeksler
     await _createIndexes(db);
 
+    // Yeni tablolar - Invoice ve Tax (v8)
+    await _createInvoiceAndTaxTables(db);
+
     // Varsayılan kategorileri ekle
     await _insertDefaultCategories(db);
   }
@@ -218,7 +221,7 @@ class VeriTabaniServisi {
         "SELECT name FROM sqlite_master WHERE type='table'",
       );
 
-      final requiredTables = ['kisiler', 'kategoriler', 'belgeler'];
+      final requiredTables = ['kisiler', 'kategoriler', 'belgeler', 'invoices', 'taxes', 'activities', 'reminders'];
       final existingTables = tables.map((t) => t['name'] as String).toList();
 
       for (final table in requiredTables) {
@@ -232,6 +235,8 @@ class VeriTabaniServisi {
       await db.rawQuery('SELECT COUNT(*) FROM kisiler');
       await db.rawQuery('SELECT COUNT(*) FROM kategoriler');
       await db.rawQuery('SELECT COUNT(*) FROM belgeler');
+      await db.rawQuery('SELECT COUNT(*) FROM activities');
+      await db.rawQuery('SELECT COUNT(*) FROM reminders');
 
       print('✅ Veritabanı bütünlük kontrolü başarılı');
     } catch (e) {
@@ -442,6 +447,36 @@ class VeriTabaniServisi {
         rethrow;
       }
     }
+
+    if (oldVersion < 8) {
+      // V8 Migration - Invoice ve Tax tablolarını ekle
+      try {
+        print('🔄 V8 Migration başlatılıyor - Invoice ve Tax tabloları ekleniyor...');
+
+        // Invoice ve Tax tablolarını oluştur
+        await _createInvoiceAndTaxTables(db);
+
+        print('✅ Invoice ve Tax tabloları V8 ile eklendi');
+      } catch (e) {
+        print('❌ V8 migration hatası: $e');
+        rethrow;
+      }
+    }
+
+    if (oldVersion < 9) {
+      // V9 Migration - Calendar Activities ve Reminders tablolarını ekle
+      try {
+        print('🔄 V9 Migration başlatılıyor - Calendar Activities ve Reminders tabloları ekleniyor...');
+
+        // Activities ve Reminders tablolarını oluştur
+        await _createCalendarTables(db);
+
+        print('✅ Calendar Activities ve Reminders tabloları V9 ile eklendi');
+      } catch (e) {
+        print('❌ V9 migration hatası: $e');
+        rethrow;
+      }
+    }
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -504,6 +539,161 @@ class VeriTabaniServisi {
     await db.execute(
       'CREATE INDEX idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
     );
+  }
+
+  Future<void> _createInvoiceAndTaxTables(Database db) async {
+    // Invoices tablosu
+    await db.execute('''
+      CREATE TABLE invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kisi_id INTEGER NOT NULL,
+        invoice_number TEXT NOT NULL UNIQUE,
+        issue_date TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        payment_status TEXT NOT NULL DEFAULT 'PENDING',
+        invoice_type TEXT NOT NULL DEFAULT 'INCOMING',
+        supplier_name TEXT,
+        supplier_address TEXT,
+        supplier_tax_number TEXT,
+        supplier_ust_id_nr TEXT,
+        customer_name TEXT,
+        customer_address TEXT,
+        customer_tax_number TEXT,
+        customer_ust_id_nr TEXT,
+        currency TEXT NOT NULL DEFAULT 'EUR',
+        net_amount REAL NOT NULL,
+        tax_amount REAL NOT NULL,
+        tax_rate REAL NOT NULL DEFAULT 19.0,
+        gross_amount REAL NOT NULL,
+        payment_terms TEXT,
+        payment_method TEXT,
+        reference_number TEXT,
+        description TEXT,
+        notes TEXT,
+        finanzamt TEXT,
+        elster_data TEXT,
+        attached_documents TEXT,
+        olusturma_tarihi TEXT NOT NULL,
+        guncelleme_tarihi TEXT NOT NULL,
+        aktif INTEGER DEFAULT 1,
+        FOREIGN KEY (kisi_id) REFERENCES kisiler(id)
+      )
+    ''');
+
+    // Taxes tablosu
+    await db.execute('''
+      CREATE TABLE taxes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kisi_id INTEGER NOT NULL,
+        tax_year INTEGER NOT NULL,
+        tax_period TEXT NOT NULL,
+        tax_period_start TEXT NOT NULL,
+        tax_period_end TEXT NOT NULL,
+        tax_status TEXT NOT NULL DEFAULT 'DRAFT',
+        tax_type TEXT NOT NULL,
+        tax_category TEXT NOT NULL,
+        calculated_amount REAL NOT NULL DEFAULT 0.0,
+        paid_amount REAL NOT NULL DEFAULT 0.0,
+        remaining_amount REAL NOT NULL DEFAULT 0.0,
+        submission_deadline TEXT,
+        submission_date TEXT,
+        payment_deadline TEXT,
+        payment_date TEXT,
+        tax_office TEXT,
+        tax_number TEXT,
+        ust_id_nr TEXT,
+        elster_data TEXT,
+        previous_year_carryover REAL DEFAULT 0.0,
+        deductions_amount REAL DEFAULT 0.0,
+        additional_tax REAL DEFAULT 0.0,
+        notes TEXT,
+        attached_documents TEXT,
+        olusturma_tarihi TEXT NOT NULL,
+        guncelleme_tarihi TEXT NOT NULL,
+        aktif INTEGER DEFAULT 1,
+        FOREIGN KEY (kisi_id) REFERENCES kisiler(id)
+      )
+    ''');
+
+    // Invoice ve Tax tablolarının indekslerini oluştur
+    await _createInvoiceAndTaxIndexes(db);
+  }
+
+  Future<void> _createInvoiceAndTaxIndexes(Database db) async {
+    // Invoice indeksleri
+    await db.execute('CREATE INDEX idx_invoices_kisi ON invoices(kisi_id)');
+    await db.execute('CREATE INDEX idx_invoices_number ON invoices(invoice_number)');
+    await db.execute('CREATE INDEX idx_invoices_status ON invoices(payment_status)');
+    await db.execute('CREATE INDEX idx_invoices_type ON invoices(invoice_type)');
+    await db.execute('CREATE INDEX idx_invoices_due_date ON invoices(due_date)');
+    await db.execute('CREATE INDEX idx_invoices_issue_date ON invoices(issue_date)');
+    await db.execute('CREATE INDEX idx_invoices_aktif ON invoices(aktif)');
+
+    // Tax indeksleri
+    await db.execute('CREATE INDEX idx_taxes_kisi ON taxes(kisi_id)');
+    await db.execute('CREATE INDEX idx_taxes_year ON taxes(tax_year)');
+    await db.execute('CREATE INDEX idx_taxes_period ON taxes(tax_period)');
+    await db.execute('CREATE INDEX idx_taxes_status ON taxes(tax_status)');
+    await db.execute('CREATE INDEX idx_taxes_type ON taxes(tax_type)');
+    await db.execute('CREATE INDEX idx_taxes_category ON taxes(tax_category)');
+    await db.execute('CREATE INDEX idx_taxes_aktif ON taxes(aktif)');
+  }
+
+  Future<void> _createCalendarTables(Database db) async {
+    // Activities tablosu
+    await db.execute('''
+      CREATE TABLE activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        activity_date TEXT NOT NULL,
+        related_item_id TEXT,
+        related_item_type TEXT,
+        metadata TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    // Reminders tablosu
+    await db.execute('''
+      CREATE TABLE reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        reminder_date TEXT NOT NULL,
+        recurrence_type INTEGER NOT NULL DEFAULT 0,
+        recurrence_interval INTEGER,
+        priority INTEGER NOT NULL DEFAULT 1,
+        is_enabled INTEGER NOT NULL DEFAULT 1,
+        is_auto_generated INTEGER NOT NULL DEFAULT 0,
+        related_item_id TEXT,
+        related_item_type TEXT,
+        metadata TEXT,
+        next_occurrence TEXT,
+        last_triggered TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    // Calendar tablolarının indekslerini oluştur
+    await _createCalendarIndexes(db);
+  }
+
+  Future<void> _createCalendarIndexes(Database db) async {
+    // Activities indeksleri
+    await db.execute('CREATE INDEX idx_activities_date ON activities(activity_date)');
+    await db.execute('CREATE INDEX idx_activities_type ON activities(type)');
+    await db.execute('CREATE INDEX idx_activities_related ON activities(related_item_id, related_item_type)');
+
+    // Reminders indeksleri
+    await db.execute('CREATE INDEX idx_reminders_date ON reminders(reminder_date)');
+    await db.execute('CREATE INDEX idx_reminders_next_occurrence ON reminders(next_occurrence)');
+    await db.execute('CREATE INDEX idx_reminders_enabled ON reminders(is_enabled)');
+    await db.execute('CREATE INDEX idx_reminders_auto_generated ON reminders(is_auto_generated)');
+    await db.execute('CREATE INDEX idx_reminders_related ON reminders(related_item_id, related_item_type)');
   }
 
   Future<void> _insertDefaultCategories(Database db) async {
@@ -1838,5 +2028,538 @@ class VeriTabaniServisi {
       where: 'id = ?',
       whereArgs: [belgeId],
     );
+  }
+
+  // ============== INVOICE CRUD İŞLEMLERİ ==============
+
+  // Invoice ekleme
+  Future<int> invoiceEkle(Map<String, dynamic> invoice) async {
+    final db = await database;
+    return await db.insert('invoices', invoice);
+  }
+
+  // Tüm invoice'ları getir
+  Future<List<Map<String, dynamic>>> invoicesGetir({
+    int? kisiId,
+    String? paymentStatus,
+    String? invoiceType,
+  }) async {
+    final db = await database;
+    
+    String whereClause = 'aktif = ?';
+    List<dynamic> whereArgs = [1];
+
+    if (kisiId != null) {
+      whereClause += ' AND kisi_id = ?';
+      whereArgs.add(kisiId);
+    }
+
+    if (paymentStatus != null) {
+      whereClause += ' AND payment_status = ?';
+      whereArgs.add(paymentStatus);
+    }
+
+    if (invoiceType != null) {
+      whereClause += ' AND invoice_type = ?';
+      whereArgs.add(invoiceType);
+    }
+
+    return await db.query(
+      'invoices',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'issue_date DESC',
+    );
+  }
+
+  // Invoice'ları kişi bilgileri ile birlikte getir
+  Future<List<Map<String, dynamic>>> invoicesDetayliGetir({
+    int? kisiId,
+    String? paymentStatus,
+  }) async {
+    final db = await database;
+    
+    String whereClause = 'i.aktif = ?';
+    List<dynamic> whereArgs = [1];
+
+    if (kisiId != null) {
+      whereClause += ' AND i.kisi_id = ?';
+      whereArgs.add(kisiId);
+    }
+
+    if (paymentStatus != null) {
+      whereClause += ' AND i.payment_status = ?';
+      whereArgs.add(paymentStatus);
+    }
+
+    return await db.rawQuery('''
+      SELECT i.*, k.ad, k.soyad
+      FROM invoices i
+      LEFT JOIN kisiler k ON i.kisi_id = k.id
+      WHERE $whereClause
+      ORDER BY i.issue_date DESC
+    ''', whereArgs);
+  }
+
+  // ID'ye göre invoice getir
+  Future<Map<String, dynamic>?> invoiceGetir(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'invoices',
+      where: 'id = ? AND aktif = ?',
+      whereArgs: [id, 1],
+    );
+
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  // Invoice güncelleme
+  Future<int> invoiceGuncelle(int id, Map<String, dynamic> invoice) async {
+    final db = await database;
+    invoice['guncelleme_tarihi'] = DateTime.now().toIso8601String();
+    return await db.update(
+      'invoices',
+      invoice,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Invoice silme (aktif durumunu pasif yapma)
+  Future<int> invoiceSil(int id) async {
+    final db = await database;
+    return await db.update(
+      'invoices',
+      {'aktif': 0, 'guncelleme_tarihi': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Invoice istatistikleri
+  Future<Map<String, dynamic>> invoiceIstatistikleri({int? kisiId}) async {
+    final db = await database;
+    
+    String whereClause = 'aktif = 1';
+    List<dynamic> whereArgs = [];
+
+    if (kisiId != null) {
+      whereClause += ' AND kisi_id = ?';
+      whereArgs.add(kisiId);
+    }
+
+    // Toplam tutar
+    final totalResult = await db.rawQuery('''
+      SELECT 
+        SUM(gross_amount) as total_amount,
+        COUNT(*) as total_count
+      FROM invoices 
+      WHERE $whereClause
+    ''', whereArgs);
+
+    // Ödeme durumuna göre sayılar
+    final statusResult = await db.rawQuery('''
+      SELECT 
+        payment_status,
+        COUNT(*) as count,
+        SUM(gross_amount) as amount
+      FROM invoices 
+      WHERE $whereClause
+      GROUP BY payment_status
+    ''', whereArgs);
+
+    // Vadesi geçen faturalar
+    final overdueResult = await db.rawQuery('''
+      SELECT COUNT(*) as count, SUM(gross_amount) as amount
+      FROM invoices 
+      WHERE $whereClause AND due_date < ? AND payment_status = 'PENDING'
+    ''', [...whereArgs, DateTime.now().toIso8601String()]);
+
+    return {
+      'total_amount': totalResult.first['total_amount'] ?? 0.0,
+      'total_count': totalResult.first['total_count'] ?? 0,
+      'status_breakdown': statusResult,
+      'overdue_count': overdueResult.first['count'] ?? 0,
+      'overdue_amount': overdueResult.first['amount'] ?? 0.0,
+    };
+  }
+
+  // ============== TAX CRUD İŞLEMLERİ ==============
+
+  // Tax ekleme
+  Future<int> taxEkle(Map<String, dynamic> tax) async {
+    final db = await database;
+    return await db.insert('taxes', tax);
+  }
+
+  // Invoice numarasına göre getir
+  Future<Map<String, dynamic>?> invoiceGetirByNumber(String invoiceNumber) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'invoices',
+      where: 'invoice_number = ? AND aktif = ?',
+      whereArgs: [invoiceNumber, 1],
+    );
+
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  // Tüm tax'ları getir
+  Future<List<Map<String, dynamic>>> taxesGetir({
+    int? kisiId,
+    String? taxStatus,
+    int? taxYear,
+  }) async {
+    final db = await database;
+    
+    String whereClause = 'aktif = ?';
+    List<dynamic> whereArgs = [1];
+
+    if (kisiId != null) {
+      whereClause += ' AND kisi_id = ?';
+      whereArgs.add(kisiId);
+    }
+
+    if (taxStatus != null) {
+      whereClause += ' AND tax_status = ?';
+      whereArgs.add(taxStatus);
+    }
+
+    if (taxYear != null) {
+      whereClause += ' AND tax_year = ?';
+      whereArgs.add(taxYear);
+    }
+
+    return await db.query(
+      'taxes',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'tax_year DESC, tax_period DESC',
+    );
+  }
+
+  // Tax'ları kişi bilgileri ile birlikte getir
+  Future<List<Map<String, dynamic>>> taxesDetayliGetir({
+    int? kisiId,
+    String? taxStatus,
+  }) async {
+    final db = await database;
+    
+    String whereClause = 't.aktif = ?';
+    List<dynamic> whereArgs = [1];
+
+    if (kisiId != null) {
+      whereClause += ' AND t.kisi_id = ?';
+      whereArgs.add(kisiId);
+    }
+
+    if (taxStatus != null) {
+      whereClause += ' AND t.tax_status = ?';
+      whereArgs.add(taxStatus);
+    }
+
+    return await db.rawQuery('''
+      SELECT t.*, k.ad, k.soyad
+      FROM taxes t
+      LEFT JOIN kisiler k ON t.kisi_id = k.id
+      WHERE $whereClause
+      ORDER BY t.tax_year DESC, t.tax_period DESC
+    ''', whereArgs);
+  }
+
+  // ID'ye göre tax getir
+  Future<Map<String, dynamic>?> taxGetir(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'taxes',
+      where: 'id = ? AND aktif = ?',
+      whereArgs: [id, 1],
+    );
+
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  // Döneme göre tax getir  
+  Future<Map<String, dynamic>?> taxGetirByPeriod(int kisiId, int taxYear, int taxPeriod) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'taxes',
+      where: 'kisi_id = ? AND tax_year = ? AND tax_period = ? AND aktif = ?',
+      whereArgs: [kisiId, taxYear, taxPeriod, 1],
+    );
+
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  // Tax güncelleme
+  Future<int> taxGuncelle(int id, Map<String, dynamic> tax) async {
+    final db = await database;
+    tax['guncelleme_tarihi'] = DateTime.now().toIso8601String();
+    return await db.update(
+      'taxes',
+      tax,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Tax silme (aktif durumunu pasif yapma)
+  Future<int> taxSil(int id) async {
+    final db = await database;
+    return await db.update(
+      'taxes',
+      {'aktif': 0, 'guncelleme_tarihi': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Tax istatistikleri
+  Future<Map<String, dynamic>> taxIstatistikleri({int? kisiId}) async {
+    final db = await database;
+    
+    String whereClause = 'aktif = 1';
+    List<dynamic> whereArgs = [];
+
+    if (kisiId != null) {
+      whereClause += ' AND kisi_id = ?';
+      whereArgs.add(kisiId);
+    }
+
+    // Toplam hesaplanan vergi
+    final totalResult = await db.rawQuery('''
+      SELECT 
+        SUM(calculated_amount) as total_calculated,
+        SUM(paid_amount) as total_paid,
+        COUNT(*) as total_count
+      FROM taxes 
+      WHERE $whereClause
+    ''', whereArgs);
+
+    // Durum'a göre sayılar
+    final statusResult = await db.rawQuery('''
+      SELECT 
+        tax_status,
+        COUNT(*) as count,
+        SUM(calculated_amount) as calculated_amount,
+        SUM(paid_amount) as paid_amount
+      FROM taxes 
+      WHERE $whereClause
+      GROUP BY tax_status
+    ''', whereArgs);
+
+    // Bekleyen vergiler
+    final pendingResult = await db.rawQuery('''
+      SELECT COUNT(*) as count, SUM(remaining_amount) as amount
+      FROM taxes 
+      WHERE $whereClause AND tax_status IN ('READY', 'SUBMITTED')
+    ''', [...whereArgs]);
+
+    return {
+      'total_calculated': totalResult.first['total_calculated'] ?? 0.0,
+      'total_paid': totalResult.first['total_paid'] ?? 0.0,
+      'total_count': totalResult.first['total_count'] ?? 0,
+      'status_breakdown': statusResult,
+      'pending_count': pendingResult.first['count'] ?? 0,
+      'pending_amount': pendingResult.first['amount'] ?? 0.0,
+    };
+  }
+
+  // ========================
+  // ACTIVITIES CRUD METHODS
+  // ========================
+
+  // Activity ekleme
+  Future<int> activityEkle(Map<String, dynamic> activity) async {
+    final db = await database;
+    try {
+      return await db.insert('activities', activity);
+    } catch (e) {
+      throw Exception('Activity ekleme hatası: $e');
+    }
+  }
+
+  // Tüm activities'leri getir
+  Future<List<Map<String, dynamic>>> activitiesGetir() async {
+    final db = await database;
+    return await db.query(
+      'activities',
+      orderBy: 'activity_date DESC, created_at DESC',
+    );
+  }
+
+  // Tarih aralığına göre activities getir
+  Future<List<Map<String, dynamic>>> activitiesGetirByDateRange(DateTime startDate, DateTime endDate) async {
+    final db = await database;
+    return await db.query(
+      'activities',
+      where: 'activity_date >= ? AND activity_date <= ?',
+      whereArgs: [startDate.toIso8601String(), endDate.toIso8601String()],
+      orderBy: 'activity_date DESC, created_at DESC',
+    );
+  }
+
+  // Belirli bir tarihteki activities getir
+  Future<List<Map<String, dynamic>>> activitiesGetirByDate(DateTime date) async {
+    final db = await database;
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    
+    return await db.query(
+      'activities',
+      where: 'activity_date >= ? AND activity_date <= ?',
+      whereArgs: [startOfDay.toIso8601String(), endOfDay.toIso8601String()],
+      orderBy: 'activity_date DESC, created_at DESC',
+    );
+  }
+
+  // Related item'a göre activities getir
+  Future<List<Map<String, dynamic>>> activitiesGetirByRelatedItem(String relatedItemId, String relatedItemType) async {
+    final db = await database;
+    return await db.query(
+      'activities',
+      where: 'related_item_id = ? AND related_item_type = ?',
+      whereArgs: [relatedItemId, relatedItemType],
+      orderBy: 'activity_date DESC, created_at DESC',
+    );
+  }
+
+  // Activity güncelleme
+  Future<int> activityGuncelle(int id, Map<String, dynamic> activity) async {
+    final db = await database;
+    activity['updated_at'] = DateTime.now().toIso8601String();
+    return await db.update(
+      'activities',
+      activity,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Activity silme
+  Future<int> activitySil(int id) async {
+    final db = await database;
+    return await db.delete(
+      'activities',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ========================
+  // REMINDERS CRUD METHODS
+  // ========================
+
+  // Reminder ekleme
+  Future<int> reminderEkle(Map<String, dynamic> reminder) async {
+    final db = await database;
+    try {
+      return await db.insert('reminders', reminder);
+    } catch (e) {
+      throw Exception('Reminder ekleme hatası: $e');
+    }
+  }
+
+  // Tüm reminders'ları getir
+  Future<List<Map<String, dynamic>>> remindersGetir() async {
+    final db = await database;
+    return await db.query(
+      'reminders',
+      orderBy: 'reminder_date ASC, created_at DESC',
+    );
+  }
+
+  // Aktif reminders'ları getir
+  Future<List<Map<String, dynamic>>> remindersGetirActive() async {
+    final db = await database;
+    return await db.query(
+      'reminders',
+      where: 'is_enabled = ?',
+      whereArgs: [1],
+      orderBy: 'reminder_date ASC, created_at DESC',
+    );
+  }
+
+  // Belirli bir tarihteki reminders getir
+  Future<List<Map<String, dynamic>>> remindersGetirByDate(DateTime date) async {
+    final db = await database;
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    
+    return await db.query(
+      'reminders',
+      where: '(reminder_date >= ? AND reminder_date <= ?) OR (next_occurrence >= ? AND next_occurrence <= ?)',
+      whereArgs: [
+        startOfDay.toIso8601String(), 
+        endOfDay.toIso8601String(),
+        startOfDay.toIso8601String(), 
+        endOfDay.toIso8601String(),
+      ],
+      orderBy: 'reminder_date ASC, created_at DESC',
+    );
+  }
+
+  // Related item'a göre reminders getir
+  Future<List<Map<String, dynamic>>> remindersGetirByRelatedItem(String relatedItemId, String relatedItemType) async {
+    final db = await database;
+    return await db.query(
+      'reminders',
+      where: 'related_item_id = ? AND related_item_type = ?',
+      whereArgs: [relatedItemId, relatedItemType],
+      orderBy: 'reminder_date ASC, created_at DESC',
+    );
+  }
+
+  // Reminder getir by ID
+  Future<Map<String, dynamic>?> reminderGetir(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'reminders',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  // Reminder güncelleme
+  Future<int> reminderGuncelle(int id, Map<String, dynamic> reminder) async {
+    final db = await database;
+    reminder['updated_at'] = DateTime.now().toIso8601String();
+    return await db.update(
+      'reminders',
+      reminder,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Reminder silme
+  Future<int> reminderSil(int id) async {
+    final db = await database;
+    return await db.delete(
+      'reminders',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Overdue reminders getir
+  Future<List<Map<String, dynamic>>> remindersGetirOverdue() async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    
+    return await db.query(
+      'reminders',
+      where: 'is_enabled = ? AND ((next_occurrence IS NOT NULL AND next_occurrence < ?) OR (next_occurrence IS NULL AND reminder_date < ?))',
+      whereArgs: [1, now, now],
+      orderBy: 'reminder_date ASC',
+    );
+  }
+
+  // Today's reminders getir
+  Future<List<Map<String, dynamic>>> remindersGetirToday() async {
+    final today = DateTime.now();
+    return await remindersGetirByDate(today);
   }
 }

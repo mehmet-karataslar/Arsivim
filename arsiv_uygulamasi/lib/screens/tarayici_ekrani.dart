@@ -6,9 +6,11 @@ import '../services/tarayici_servisi.dart';
 import '../services/belge_islemleri_servisi.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
+import '../services/calendar_activity_service.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
+import '../models/activity_model.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 import '../utils/screen_utils.dart';
 
@@ -24,6 +26,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
   final BelgeIslemleriServisi _belgeIslemleri = BelgeIslemleriServisi();
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final DosyaServisi _dosyaServisi = DosyaServisi();
+  final CalendarActivityService _calendarService = CalendarActivityService();
 
   List<String> _bulunanTarayicilar = [];
   String? _secilenTarayici;
@@ -260,10 +263,32 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
       // Belgeyi kaydet
       await _veriTabani.belgeEkle(belge);
 
+      // Calendar activity tracking - track document upload
+      try {
+        await _calendarService.trackActivity(
+          type: ActivityType.DOCUMENT_UPLOAD,
+          title: 'Belge Tarandı: ${belge.baslik ?? belge.dosyaAdi}',
+          description: 'Tarayıcı ile yeni belge eklendi: ${belge.dosyaAdi}${_secilenKategori != null ? ' (${_secilenKategori!.kategoriAdi})' : ''}',
+          activityDate: DateTime.now(),
+          relatedItemId: belge.id?.toString(),
+          relatedItemType: 'document',
+          metadata: {
+            'file_type': belge.dosyaTipi,
+            'file_size': belge.dosyaBoyutu,
+            'category_id': _secilenKategori?.id,
+            'person_id': _secilenKisi?.id,
+            'source': 'scanner',
+          },
+        );
+      } catch (e) {
+        print('Calendar activity tracking hatası: $e');
+        // Don't show error to user, just log it
+      }
+
       Navigator.of(context).pop(); // Close loading dialog
       ScreenUtils.showSuccessSnackBar(
         context,
-        'Belge başarıyla kaydedildi! Ana ekranda görüntülenecek.',
+        'Belge başarıyla kaydedildi! Ana ekranda ve takvimde görüntülenecek.',
       );
       _formuTemizle();
     } catch (e) {

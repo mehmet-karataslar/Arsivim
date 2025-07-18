@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
+import '../models/activity_model.dart';
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
+import '../services/calendar_activity_service.dart';
 import '../utils/screen_utils.dart';
 
 class YeniBelgeEkleEkrani extends StatefulWidget {
@@ -20,6 +26,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     with TickerProviderStateMixin {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final DosyaServisi _dosyaServisi = DosyaServisi();
+  final CalendarActivityService _calendarService = CalendarActivityService();
 
   final TextEditingController _baslikController = TextEditingController();
   final TextEditingController _aciklamaController = TextEditingController();
@@ -451,54 +458,109 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   }
 
   Widget _buildDosyaSecmeKarti() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue.shade400, Colors.purple.shade400],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+    return Column(
+      children: [
+        // Dosya seçme butonu
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade400, Colors.purple.shade400],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: _dosyaEkle,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _secilenDosyalar.isEmpty
-                      ? Icons.cloud_upload_rounded
-                      : Icons.check_circle_rounded,
-                  color: Colors.white,
-                  size: 18,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _dosyaEkle,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _secilenDosyalar.isEmpty
+                          ? Icons.cloud_upload_rounded
+                          : Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _secilenDosyalar.isEmpty
+                          ? 'Dosya Seçin'
+                          : '${_secilenDosyalar.length} Dosya Seçildi',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  _secilenDosyalar.isEmpty
-                      ? 'Dosya Seçin'
-                      : '${_secilenDosyalar.length} Dosya Seçildi',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        
+        // Fotoğraf çekme butonu (sadece mobil platformlarda)
+        if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.green.shade400, Colors.teal.shade400],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.green.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _fotoCek,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.camera_alt_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Fotoğraf Çek ve Tara',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1514,6 +1576,123 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     }
   }
 
+  Future<void> _fotoCek() async {
+    try {
+      // Document scanner ile fotoğraf çek
+      List<String> pictures = await CunningDocumentScanner.getPictures(
+        isGalleryImportAllowed: true,
+      ) ?? [];
+
+      if (pictures.isNotEmpty) {
+        // Progress dialog göster
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  colors: [Colors.green.shade50, Colors.teal.shade50],
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          height: 60,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 4,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.green.shade400,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.picture_as_pdf_rounded,
+                          size: 28,
+                          color: Colors.green.shade400,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    '${pictures.length} sayfa PDF\'e dönüştürülüyor...',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Taranan belgeler PDF formatında hazırlanıyor',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        // Taranan fotoğrafları PDF'e dönüştür
+        String pdfAdi = 'taranan_belge_${DateTime.now().millisecondsSinceEpoch}.pdf';
+        BelgeModeli pdfBelge = await _dosyaServisi.tarananFotograflariPdfYap(
+          pictures,
+          pdfAdi,
+        );
+
+        // PDF dosyasını fake file olarak ekle
+        final fakePdfFile = _FakePlatformFile(
+          name: pdfBelge.dosyaAdi,
+          path: pdfBelge.dosyaYolu,
+          size: pdfBelge.dosyaBoyutu,
+          isPdf: true, // PDF olduğunu belirtmek için
+          belgeModeli: pdfBelge, // Hazır belge modelini sakla
+        );
+
+        setState(() {
+          _secilenDosyalar.add(fakePdfFile);
+        });
+
+        Navigator.of(context).pop(); // Progress dialog'u kapat
+
+        // Dosya türünü otomatik olarak PDF olarak ayarla
+        setState(() {
+          _secilenDosyaTuru = 'pdf';
+        });
+        
+        _basariMesajiGoster('${pictures.length} sayfalık PDF belge oluşturuldu');
+      }
+    } catch (e) {
+      Navigator.of(context).pop(); // Hata durumunda dialog'u kapat
+      _hataGoster('Fotoğraf çekilirken hata oluştu: $e');
+    }
+  }
+
   Future<void> _belgelerEkle() async {
     if (!_duzenlemeModundaMi && _secilenDosyalar.isEmpty) {
       _hataGoster('En az bir dosya seçmelisiniz');
@@ -1674,11 +1853,23 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     int hataliSayisi = 0;
 
     try {
-      for (var platformFile in _secilenDosyalar) {
+      for (var dosya in _secilenDosyalar) {
         try {
-          BelgeModeli belge = await _dosyaServisi.dosyaKopyalaVeHashHesapla(
-            platformFile,
-          );
+          BelgeModeli belge;
+          
+          // Eğer taranan PDF ise hazır belge modelini kullan
+          if (dosya is _FakePlatformFile && dosya.isPdf && dosya.belgeModeli != null) {
+            belge = dosya.belgeModeli!;
+          } else if (dosya is _FakePlatformFile) {
+            // Normal taranan fotoğraf için eski metot
+            belge = await _dosyaServisi.tarananFotografiIsle(
+              dosya.path,
+              dosya.name,
+            );
+          } else {
+            // Normal PlatformFile için mevcut metodu kullan
+            belge = await _dosyaServisi.dosyaKopyalaVeHashHesapla(dosya);
+          }
 
           BelgeModeli? mevcutBelge = await _veriTabani.belgeGetirByHash(
             belge.dosyaHash,
@@ -1705,6 +1896,29 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
           );
 
           await _veriTabani.belgeEkle(belge);
+          
+          // Calendar activity tracking - track document upload
+          try {
+            await _calendarService.trackActivity(
+              type: ActivityType.DOCUMENT_UPLOAD,
+              title: 'Belge Eklendi: ${belge.baslik ?? belge.dosyaAdi}',
+              description: 'Yeni belge sisteme eklendi: ${belge.dosyaAdi}${_secilenKategori != null ? ' (${_secilenKategori!.kategoriAdi})' : ''}',
+              activityDate: DateTime.now(),
+              relatedItemId: belge.id?.toString(),
+              relatedItemType: 'document',
+              metadata: {
+                'file_type': belge.dosyaTipi,
+                'file_size': belge.dosyaBoyutu,
+                'category_id': _secilenKategori?.id,
+                'person_id': _secilenKisi?.id,
+                'source': 'file_picker',
+              },
+            );
+          } catch (e) {
+            print('Calendar activity tracking hatası: $e');
+            // Don't show error to user, just log it
+          }
+          
           basariliSayisi++;
         } catch (e) {
           hataliSayisi++;
@@ -1746,4 +1960,21 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
   void _basariMesajiGoster(String mesaj) {
     ScreenUtils.showSuccessSnackBar(context, mesaj);
   }
+}
+
+// PlatformFile benzeri sınıf taranan fotoğraflar için
+class _FakePlatformFile {
+  final String name;
+  final String path;
+  final int size;
+  final bool isPdf;
+  final BelgeModeli? belgeModeli;
+
+  _FakePlatformFile({
+    required this.name,
+    required this.path,
+    required this.size,
+    this.isPdf = false,
+    this.belgeModeli,
+  });
 }

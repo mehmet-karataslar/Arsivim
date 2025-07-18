@@ -31,6 +31,9 @@ import 'senkronizasyon_ekrani.dart';
 import 'tarayici_ekrani.dart';
 import 'yedekleme_ekrani.dart';
 import 'yeni_belge_ekle_ekrani.dart';
+import 'calendar_screen.dart';
+import 'invoices_screen.dart';
+import 'taxes_screen.dart';
 import 'package:http/http.dart' as http;
 import '../services/http_sunucu_servisi.dart';
 
@@ -529,56 +532,99 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, -2),
+            color: Colors.grey.withOpacity(0.15),
+            spreadRadius: 0,
+            blurRadius: 20,
+            offset: const Offset(0, -5),
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _secilenTab,
-        onTap: (index) {
-          setState(() {
-            _secilenTab = index;
-          });
-        },
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Colors.grey[500],
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Ana Sayfa',
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          currentIndex: _secilenTab,
+          onTap: (index) {
+            setState(() {
+              _secilenTab = index;
+            });
+          },
+          backgroundColor: Colors.white,
+          elevation: 0,
+          selectedItemColor: Theme.of(context).primaryColor,
+          unselectedItemColor: Colors.grey[600],
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.folder_rounded),
-            label: 'Belgeler',
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 11,
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.category_rounded),
-            label: 'Kategoriler',
-          ),
-          // Tarayıcı sekmesi sadece Windows'da görünür
-          if (Platform.isWindows)
+          iconSize: 24,
+          items: [
             const BottomNavigationBarItem(
-              icon: Icon(Icons.scanner_rounded),
-              label: 'Tarayıcı',
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.home_rounded),
+              ),
+              label: 'Ana Sayfa',
             ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.people_rounded),
-            label: 'Kişiler',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.sync_rounded),
-            label: 'Senkron',
-          ),
-        ],
+            const BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.folder_rounded),
+              ),
+              label: 'Belgeler',
+            ),
+            const BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.category_rounded),
+              ),
+              label: 'Kategoriler',
+            ),
+            const BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.receipt_rounded),
+              ),
+              label: 'Faturalar',
+            ),
+            const BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.account_balance_rounded),
+              ),
+              label: 'Vergiler',
+            ),
+            // Tarayıcı sekmesi sadece Windows'da görünür
+            if (Platform.isWindows)
+              const BottomNavigationBarItem(
+                icon: Padding(
+                  padding: EdgeInsets.only(bottom: 4),
+                  child: Icon(Icons.scanner_rounded),
+                ),
+                label: 'Tarayıcı',
+              ),
+            const BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.people_rounded),
+              ),
+              label: 'Kişiler',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -622,11 +668,13 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         case 2:
           return _buildKategorilerEkrani();
         case 3:
-          return const TarayiciEkrani();
+          return _buildInvoicesEkrani();
         case 4:
-          return _buildKisilerEkrani();
+          return _buildTaxesEkrani();
         case 5:
-          return _buildSenkronizasyonEkrani();
+          return const TarayiciEkrani();
+        case 6:
+          return _buildKisilerEkrani();
         default:
           return _buildAnaEkran();
       }
@@ -640,9 +688,11 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         case 2:
           return _buildKategorilerEkrani();
         case 3:
-          return _buildKisilerEkrani();
+          return _buildInvoicesEkrani();
         case 4:
-          return _buildSenkronizasyonEkrani();
+          return _buildTaxesEkrani();
+        case 5:
+          return _buildKisilerEkrani();
         default:
           return _buildAnaEkran();
       }
@@ -660,15 +710,15 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.all(
-            isDesktop ? 32.0 : 20.0,
-          ), // PC'de daha geniş padding
+            isDesktop ? 32.0 : 16.0,
+          ), // PC'de daha geniş padding, mobilde daha kompakt
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildIstatistikKartlari(),
-              SizedBox(height: isDesktop ? 24 : 32),
+              SizedBox(height: isDesktop ? 24 : 20),
               _buildHizliIslemler(), // Hızlı işlemler üste taşındı
-              SizedBox(height: isDesktop ? 24 : 32),
+              SizedBox(height: isDesktop ? 24 : 20),
               _buildSonBelgeler(), // Son belgeler alta taşındı
               const SizedBox(height: 100), // FAB için boşluk
             ],
@@ -679,6 +729,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   }
 
   Widget _buildIstatistikKartlari() {
+    final bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -687,9 +739,10 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.bold,
             color: Colors.grey[800],
+            fontSize: isDesktop ? null : 18, // Mobilde başlığı küçültme
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: isDesktop ? 16 : 12), // Mobilde daha az boşluk
         Row(
           children: [
             Expanded(
@@ -700,7 +753,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 [Colors.blue, Colors.lightBlue],
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: isDesktop ? 16 : 8), // Mobilde daha az boşluk
             Expanded(
               child: _buildModernIstatistikKarti(
                 'Toplam Boyut',
@@ -709,7 +762,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 [Colors.green, Colors.lightGreen],
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: isDesktop ? 16 : 8), // Mobilde daha az boşluk
             Expanded(child: _buildVeriTabaniKonumKarti()),
           ],
         ),
@@ -718,6 +771,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   }
 
   Widget _buildVeriTabaniKonumKarti() {
+    final bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -733,45 +788,47 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         onTap: _veriTabaniKonumunuGoster,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: EdgeInsets.all(isDesktop ? 20.0 : 12.0), // Mobilde daha az padding
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(isDesktop ? 12 : 8), // Mobilde daha az padding
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(isDesktop ? 12 : 8),
                 ),
                 child: Icon(
                   Icons.folder_open_rounded,
-                  size: 24,
+                  size: isDesktop ? 24 : 18, // Mobilde daha küçük ikon
                   color: Colors.orange[700],
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: isDesktop ? 12 : 8), // Mobilde daha az boşluk
               Text(
                 'Veritabanı',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: isDesktop ? 12 : 10, // Mobilde daha küçük yazı
                   fontWeight: FontWeight.w500,
                   color: Colors.grey[600],
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: isDesktop ? 4 : 2), // Mobilde daha az boşluk
               Text(
-                'Konum Göster',
+                isDesktop ? 'Konum Göster' : 'Konum', // Mobilde kısa metin
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: isDesktop ? 18 : 14, // Mobilde daha küçük yazı
                   fontWeight: FontWeight.bold,
                   color: Colors.grey[800],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Dokun ve gör',
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-              ),
+              if (isDesktop) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Dokun ve gör',
+                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                ),
+              ],
             ],
           ),
         ),
@@ -785,6 +842,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     IconData icon,
     List<Color> gradientColors,
   ) {
+    final bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -794,34 +853,41 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         border: Border.all(color: gradientColors.first.withOpacity(0.2)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(isDesktop ? 20.0 : 12.0), // Mobilde daha az padding
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(isDesktop ? 12 : 8), // Mobilde daha az padding
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: gradientColors),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(isDesktop ? 12 : 8),
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
+              child: Icon(
+                icon, 
+                color: Colors.white, 
+                size: isDesktop ? 24 : 18, // Mobilde daha küçük ikon
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isDesktop ? 16 : 10), // Mobilde daha az boşluk
             Text(
               baslik,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: isDesktop ? 14 : 11, // Mobilde daha küçük yazı
                 fontWeight: FontWeight.w500,
                 color: Colors.grey[600],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              deger,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+            SizedBox(height: isDesktop ? 4 : 2), // Mobilde daha az boşluk
+            FittedBox( // Uzun metinlerin taşmasını önlemek için
+              fit: BoxFit.scaleDown,
+              child: Text(
+                deger,
+                style: TextStyle(
+                  fontSize: isDesktop ? 24 : 16, // Mobilde daha küçük yazı
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
             ),
           ],
@@ -978,15 +1044,21 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 () => setState(() => _secilenTab = 1),
               ),
               _buildKompaktHizliIslemKarti(
+                'Takvim',
+                Icons.calendar_month_rounded,
+                [Colors.indigo, Colors.deepPurple],
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const CalendarScreen(),
+                  ),
+                ),
+              ),
+              _buildKompaktHizliIslemKarti(
                 'Kategoriler',
                 Icons.category_rounded,
                 [Colors.orange, Colors.deepOrange],
                 () => setState(() => _secilenTab = 2),
               ),
-              _buildKompaktHizliIslemKarti('Kişiler', Icons.people_rounded, [
-                Colors.purple,
-                Colors.deepPurple,
-              ], () => setState(() => _secilenTab = 4)),
             ],
           )
         else
@@ -1004,6 +1076,16 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 Colors.lightBlue,
               ], () => _yeniBelgeEkle()),
               _buildHizliIslemKarti(
+                'Takvim',
+                Icons.calendar_month_rounded,
+                [Colors.indigo, Colors.deepPurple],
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const CalendarScreen(),
+                  ),
+                ),
+              ),
+              _buildHizliIslemKarti(
                 'Belgeler',
                 Icons.folder_rounded,
                 [Colors.green, Colors.lightGreen],
@@ -1015,10 +1097,6 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 [Colors.orange, Colors.deepOrange],
                 () => setState(() => _secilenTab = 2),
               ),
-              _buildHizliIslemKarti('Kişiler', Icons.people_rounded, [
-                Colors.purple,
-                Colors.deepPurple,
-              ], () => setState(() => _secilenTab = 4)),
             ],
           ),
 
@@ -1041,7 +1119,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                   'Cihazlar arası veri senkronizasyonu',
                   Icons.sync_rounded,
                   [Colors.teal, Colors.cyan],
-                  () => setState(() => _secilenTab = 5),
+                  () => setState(() => _secilenTab = Platform.isWindows ? 6 : 5),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1243,6 +1321,14 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
 
   Widget _buildKategorilerEkrani() {
     return const KategorilerEkrani();
+  }
+
+  Widget _buildInvoicesEkrani() {
+    return const InvoicesScreen();
+  }
+
+  Widget _buildTaxesEkrani() {
+    return const TaxesScreen();
   }
 
   Widget _buildKisilerEkrani() {
