@@ -6,10 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
-import '../models/activity_model.dart';
+
 import '../services/veritabani_servisi.dart';
 import '../services/dosya_servisi.dart';
-import '../services/calendar_activity_service.dart';
+
 import '../services/notification_service.dart';
 import '../utils/screen_utils.dart';
 
@@ -27,7 +27,7 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
     with TickerProviderStateMixin {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final DosyaServisi _dosyaServisi = DosyaServisi();
-  final CalendarActivityService _calendarService = CalendarActivityService();
+
 
   final TextEditingController _baslikController = TextEditingController();
   final TextEditingController _aciklamaController = TextEditingController();
@@ -1898,28 +1898,12 @@ class _YeniBelgeEkleEkraniState extends State<YeniBelgeEkleEkrani>
 
           await _veriTabani.belgeEkle(belge);
           
-          // Calendar activity tracking - track document upload
+          // Show immediate notification for document upload
           try {
-            await _calendarService.trackActivity(
-              type: ActivityType.DOCUMENT_UPLOAD,
-              title: 'Belge Eklendi: ${belge.baslik ?? belge.dosyaAdi}',
-              description: 'Yeni belge sisteme eklendi: ${belge.dosyaAdi}${_secilenKategori != null ? ' (${_secilenKategori!.kategoriAdi})' : ''}',
-              activityDate: DateTime.now(),
-              relatedItemId: belge.id?.toString(),
-              relatedItemType: 'document',
-              metadata: {
-                'file_type': belge.dosyaTipi,
-                'file_size': belge.dosyaBoyutu,
-                'category_id': _secilenKategori?.id,
-                'person_id': _secilenKisi?.id,
-                'source': 'file_picker',
-              },
-            );
-            
-            // Show immediate notification for document upload
             await NotificationService.instance.showNotification(
+              id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
               title: '📁 Belge Başarıyla Eklendi',
-              body: 'Yeni belge sisteme eklendi: ${belge.baslik ?? belge.dosyaAdi}. Takvimde görüntülenebilir.',
+              body: 'Yeni belge sisteme eklendi: ${belge.baslik ?? belge.dosyaAdi}.',
               payload: 'document_${belge.id}',
             );
           } catch (e) {

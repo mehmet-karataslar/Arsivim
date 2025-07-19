@@ -30,9 +30,7 @@ import 'kisiler_ekrani.dart';
 import 'senkronizasyon_ekrani.dart';
 import 'yedekleme_ekrani.dart';
 import 'yeni_belge_ekle_ekrani.dart';
-import 'calendar_screen.dart';
-import 'invoices_screen.dart';
-import 'taxes_screen.dart';
+
 import 'package:http/http.dart' as http;
 import '../services/http_sunucu_servisi.dart';
 
@@ -590,20 +588,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
               ),
               label: 'Kategoriler',
             ),
-            const BottomNavigationBarItem(
-              icon: Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Icon(Icons.receipt_rounded),
-              ),
-              label: 'Faturalar',
-            ),
-            const BottomNavigationBarItem(
-              icon: Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Icon(Icons.account_balance_rounded),
-              ),
-              label: 'Vergiler',
-            ),
+
             const BottomNavigationBarItem(
               icon: Padding(
                 padding: EdgeInsets.only(bottom: 4),
@@ -634,12 +619,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
       case 2:
         return _buildKategorilerEkrani();
       case 3:
-        return _buildInvoicesEkrani();
-      case 4:
-        return _buildTaxesEkrani();
-      case 5:
         return _buildSenkronizasyonEkrani();
-      case 6:
+      case 4:
         return _buildKisilerEkrani();
       default:
         return _buildAnaEkran();
@@ -990,16 +971,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 [Colors.green, Colors.lightGreen],
                 () => setState(() => _secilenTab = 1),
               ),
-              _buildKompaktHizliIslemKarti(
-                'Takvim',
-                Icons.calendar_month_rounded,
-                [Colors.indigo, Colors.deepPurple],
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const CalendarScreen(),
-                  ),
-                ),
-              ),
+
               _buildKompaktHizliIslemKarti(
                 'Kategoriler',
                 Icons.category_rounded,
@@ -1022,16 +994,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                 Colors.blue,
                 Colors.lightBlue,
               ], () => _yeniBelgeEkle()),
-              _buildHizliIslemKarti(
-                'Takvim',
-                Icons.calendar_month_rounded,
-                [Colors.indigo, Colors.deepPurple],
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const CalendarScreen(),
-                  ),
-                ),
-              ),
+
               _buildHizliIslemKarti(
                 'Belgeler',
                 Icons.folder_rounded,
@@ -1066,7 +1029,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
                   'Cihazlar arası veri senkronizasyonu',
                   Icons.sync_rounded,
                   [Colors.teal, Colors.cyan],
-                  () => setState(() => _secilenTab = Platform.isWindows ? 6 : 5),
+                  () => setState(() => _secilenTab = 3),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1270,13 +1233,7 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
     return const KategorilerEkrani();
   }
 
-  Widget _buildInvoicesEkrani() {
-    return const InvoicesScreen();
-  }
 
-  Widget _buildTaxesEkrani() {
-    return const TaxesScreen();
-  }
 
   Widget _buildKisilerEkrani() {
     return const KisilerEkrani();

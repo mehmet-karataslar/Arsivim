@@ -199,9 +199,6 @@ class VeriTabaniServisi {
     // İndeksler
     await _createIndexes(db);
 
-    // Yeni tablolar - Invoice ve Tax (v8)
-    await _createInvoiceAndTaxTables(db);
-
     // Varsayılan kategorileri ekle
     await _insertDefaultCategories(db);
   }
@@ -235,7 +232,7 @@ class VeriTabaniServisi {
         "SELECT name FROM sqlite_master WHERE type='table'",
       );
 
-      final requiredTables = ['kisiler', 'kategoriler', 'belgeler', 'invoices', 'taxes', 'activities', 'reminders'];
+      final requiredTables = ['kisiler', 'kategoriler', 'belgeler'];
       final existingTables = tables.map((t) => t['name'] as String).toSet();
       
       bool hasCreatedTables = false;
@@ -245,15 +242,7 @@ class VeriTabaniServisi {
           print('⚠️ Eksik tablo tespit edildi: $table - Güvenli oluşturuluyor...');
           
           // Eksik tabloları güvenli şekilde oluştur
-          if (table == 'activities' || table == 'reminders') {
-            await _createCalendarTables(db);
-            print('✅ Calendar tabloları ($table) güvenli şekilde oluşturuldu');
-            hasCreatedTables = true;
-          } else if (table == 'invoices' || table == 'taxes') {
-            await _createInvoiceAndTaxTables(db);
-            print('✅ Invoice ve Tax tabloları ($table) güvenli şekilde oluşturuldu');
-            hasCreatedTables = true;
-          } else if (table == 'kisiler') {
+          if (table == 'kisiler') {
             await _createKisilerTableSafe(db);
             print('✅ Kişiler tablosu güvenli şekilde oluşturuldu');
             hasCreatedTables = true;
@@ -328,7 +317,7 @@ class VeriTabaniServisi {
       
       // Sadece var olan tabloları test et
       for (final tableName in existingTables) {
-        if (['kisiler', 'kategoriler', 'belgeler', 'activities', 'reminders', 'invoices', 'taxes'].contains(tableName)) {
+        if (['kisiler', 'kategoriler', 'belgeler'].contains(tableName)) {
           await db.rawQuery('SELECT COUNT(*) FROM $tableName');
         }
       }
@@ -346,7 +335,7 @@ class VeriTabaniServisi {
       print('📂 Backup oluşturuluyor... (versiyon: $oldVersion)');
       
       // Önemli tabloların verilerini geçici tablolara kaydet
-      final importantTables = ['kisiler', 'kategoriler', 'belgeler', 'invoices', 'taxes'];
+      final importantTables = ['kisiler', 'kategoriler', 'belgeler'];
       
       for (final tableName in importantTables) {
         try {
@@ -411,7 +400,7 @@ class VeriTabaniServisi {
   /// Backup tablolarını temizle  
   Future<void> _cleanupBackupTables(Database db) async {
     try {
-      final backupTables = ['kisiler_backup', 'kategoriler_backup', 'belgeler_backup', 'invoices_backup', 'taxes_backup'];
+      final backupTables = ['kisiler_backup', 'kategoriler_backup', 'belgeler_backup'];
       for (final table in backupTables) {
         await db.execute('DROP TABLE IF EXISTS $table');
       }
@@ -555,17 +544,7 @@ class VeriTabaniServisi {
         }
       }
 
-      if (oldVersion < 8) {
-        print('🔄 V8 Migration: Invoice ve Tax tabloları ekleniyor...');
-        await _createInvoiceAndTaxTables(db);
-        print('✅ V8 Migration tamamlandı');
-      }
 
-      if (oldVersion < 9) {
-        print('🔄 V9 Migration: Calendar tabloları ekleniyor...');
-        await _createCalendarTables(db);
-        print('✅ V9 Migration tamamlandı');
-      }
       
       print('🎉 Tüm migration\'lar güvenli şekilde tamamlandı!');
       
@@ -814,160 +793,7 @@ class VeriTabaniServisi {
     );
   }
 
-  Future<void> _createInvoiceAndTaxTables(Database db) async {
-    // Invoices tablosu
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS invoices (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        kisi_id INTEGER NOT NULL,
-        invoice_number TEXT NOT NULL UNIQUE,
-        issue_date TEXT NOT NULL,
-        due_date TEXT NOT NULL,
-        payment_status TEXT NOT NULL DEFAULT 'PENDING',
-        invoice_type TEXT NOT NULL DEFAULT 'INCOMING',
-        supplier_name TEXT,
-        supplier_address TEXT,
-        supplier_tax_number TEXT,
-        supplier_ust_id_nr TEXT,
-        customer_name TEXT,
-        customer_address TEXT,
-        customer_tax_number TEXT,
-        customer_ust_id_nr TEXT,
-        currency TEXT NOT NULL DEFAULT 'EUR',
-        net_amount REAL NOT NULL,
-        tax_amount REAL NOT NULL,
-        tax_rate REAL NOT NULL DEFAULT 19.0,
-        gross_amount REAL NOT NULL,
-        payment_terms TEXT,
-        payment_method TEXT,
-        reference_number TEXT,
-        description TEXT,
-        notes TEXT,
-        finanzamt TEXT,
-        elster_data TEXT,
-        attached_documents TEXT,
-        olusturma_tarihi TEXT NOT NULL,
-        guncelleme_tarihi TEXT NOT NULL,
-        aktif INTEGER DEFAULT 1,
-        FOREIGN KEY (kisi_id) REFERENCES kisiler(id)
-      )
-    ''');
 
-    // Taxes tablosu
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS taxes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        kisi_id INTEGER NOT NULL,
-        tax_year INTEGER NOT NULL,
-        tax_period TEXT NOT NULL,
-        tax_period_start TEXT NOT NULL,
-        tax_period_end TEXT NOT NULL,
-        tax_status TEXT NOT NULL DEFAULT 'DRAFT',
-        tax_type TEXT NOT NULL,
-        tax_category TEXT NOT NULL,
-        calculated_amount REAL NOT NULL DEFAULT 0.0,
-        paid_amount REAL NOT NULL DEFAULT 0.0,
-        remaining_amount REAL NOT NULL DEFAULT 0.0,
-        submission_deadline TEXT,
-        submission_date TEXT,
-        payment_deadline TEXT,
-        payment_date TEXT,
-        tax_office TEXT,
-        tax_number TEXT,
-        ust_id_nr TEXT,
-        elster_data TEXT,
-        previous_year_carryover REAL DEFAULT 0.0,
-        deductions_amount REAL DEFAULT 0.0,
-        additional_tax REAL DEFAULT 0.0,
-        notes TEXT,
-        attached_documents TEXT,
-        olusturma_tarihi TEXT NOT NULL,
-        guncelleme_tarihi TEXT NOT NULL,
-        aktif INTEGER DEFAULT 1,
-        FOREIGN KEY (kisi_id) REFERENCES kisiler(id)
-      )
-    ''');
-
-    // Invoice ve Tax tablolarının indekslerini oluştur
-    await _createInvoiceAndTaxIndexes(db);
-  }
-
-  Future<void> _createInvoiceAndTaxIndexes(Database db) async {
-    // Invoice indeksleri
-    await db.execute('CREATE INDEX idx_invoices_kisi ON invoices(kisi_id)');
-    await db.execute('CREATE INDEX idx_invoices_number ON invoices(invoice_number)');
-    await db.execute('CREATE INDEX idx_invoices_status ON invoices(payment_status)');
-    await db.execute('CREATE INDEX idx_invoices_type ON invoices(invoice_type)');
-    await db.execute('CREATE INDEX idx_invoices_due_date ON invoices(due_date)');
-    await db.execute('CREATE INDEX idx_invoices_issue_date ON invoices(issue_date)');
-    await db.execute('CREATE INDEX idx_invoices_aktif ON invoices(aktif)');
-
-    // Tax indeksleri
-    await db.execute('CREATE INDEX idx_taxes_kisi ON taxes(kisi_id)');
-    await db.execute('CREATE INDEX idx_taxes_year ON taxes(tax_year)');
-    await db.execute('CREATE INDEX idx_taxes_period ON taxes(tax_period)');
-    await db.execute('CREATE INDEX idx_taxes_status ON taxes(tax_status)');
-    await db.execute('CREATE INDEX idx_taxes_type ON taxes(tax_type)');
-    await db.execute('CREATE INDEX idx_taxes_category ON taxes(tax_category)');
-    await db.execute('CREATE INDEX idx_taxes_aktif ON taxes(aktif)');
-  }
-
-  Future<void> _createCalendarTables(Database db) async {
-    // Activities tablosu
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS activities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        type INTEGER NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        activity_date TEXT NOT NULL,
-        related_item_id TEXT,
-        related_item_type TEXT,
-        metadata TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    ''');
-
-    // Reminders tablosu
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS reminders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        reminder_date TEXT NOT NULL,
-        recurrence_type INTEGER NOT NULL DEFAULT 0,
-        recurrence_interval INTEGER,
-        priority INTEGER NOT NULL DEFAULT 1,
-        is_enabled INTEGER NOT NULL DEFAULT 1,
-        is_auto_generated INTEGER NOT NULL DEFAULT 0,
-        related_item_id TEXT,
-        related_item_type TEXT,
-        metadata TEXT,
-        next_occurrence TEXT,
-        last_triggered TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    ''');
-
-    // Calendar tablolarının indekslerini oluştur
-    await _createCalendarIndexes(db);
-  }
-
-  Future<void> _createCalendarIndexes(Database db) async {
-    // Activities indeksleri
-    await db.execute('CREATE INDEX idx_activities_date ON activities(activity_date)');
-    await db.execute('CREATE INDEX idx_activities_type ON activities(type)');
-    await db.execute('CREATE INDEX idx_activities_related ON activities(related_item_id, related_item_type)');
-
-    // Reminders indeksleri
-    await db.execute('CREATE INDEX idx_reminders_date ON reminders(reminder_date)');
-    await db.execute('CREATE INDEX idx_reminders_next_occurrence ON reminders(next_occurrence)');
-    await db.execute('CREATE INDEX idx_reminders_enabled ON reminders(is_enabled)');
-    await db.execute('CREATE INDEX idx_reminders_auto_generated ON reminders(is_auto_generated)');
-    await db.execute('CREATE INDEX idx_reminders_related ON reminders(related_item_id, related_item_type)');
-  }
 
   Future<void> _insertDefaultCategories(Database db) async {
     List<KategoriModeli> defaultCategories =
