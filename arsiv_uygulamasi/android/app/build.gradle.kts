@@ -37,8 +37,8 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 10           // v2.4.0'dan güncelleme için yüksek değer
-        versionName = "2.5.1"      // Yeni sürüm adı
+        versionCode = 11           // v2.4.0'dan güncelleme için yüksek değer (10'dan artırıldı)
+        versionName = "2.4.10"     // 2.4 serisi devam - kullanıcıya görünen versiyon
     }
 
     signingConfigs {

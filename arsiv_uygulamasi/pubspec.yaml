@@ -3,7 +3,7 @@ description: "Arşivim - Kişisel Belge Arşiv Uygulaması"
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 2.5.1+10
+version: 2.4.10+11
 
 environment:
   sdk: ^3.7.2
