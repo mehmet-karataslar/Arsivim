@@ -28,7 +28,6 @@ import 'kisi_belgeleri_ekrani.dart';
 import 'kisi_ekle_ekrani.dart';
 import 'kisiler_ekrani.dart';
 import 'senkronizasyon_ekrani.dart';
-import 'tarayici_ekrani.dart';
 import 'yedekleme_ekrani.dart';
 import 'yeni_belge_ekle_ekrani.dart';
 import 'calendar_screen.dart';
@@ -612,15 +611,6 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
               ),
               label: 'Senkron',
             ),
-            // Tarayıcı sekmesi sadece Windows'da görünür
-            if (Platform.isWindows)
-              const BottomNavigationBarItem(
-                icon: Padding(
-                  padding: EdgeInsets.only(bottom: 4),
-                  child: Icon(Icons.scanner_rounded),
-                ),
-                label: 'Tarayıcı',
-              ),
             const BottomNavigationBarItem(
               icon: Padding(
                 padding: EdgeInsets.only(bottom: 4),
@@ -635,48 +625,24 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
   }
 
   Widget _buildTabContent() {
-    if (Platform.isWindows) {
-      // Windows'da tarayıcı sekmesi var
-      switch (_secilenTab) {
-        case 0:
-          return _buildAnaEkran();
-        case 1:
-          return _buildBelgelerEkrani();
-        case 2:
-          return _buildKategorilerEkrani();
-        case 3:
-          return _buildInvoicesEkrani();
-        case 4:
-          return _buildTaxesEkrani();
-        case 5:
-          return _buildSenkronizasyonEkrani();
-        case 6:
-          return const TarayiciEkrani();
-        case 7:
-          return _buildKisilerEkrani();
-        default:
-          return _buildAnaEkran();
-      }
-    } else {
-      // Diğer platformlarda tarayıcı sekmesi yok
-      switch (_secilenTab) {
-        case 0:
-          return _buildAnaEkran();
-        case 1:
-          return _buildBelgelerEkrani();
-        case 2:
-          return _buildKategorilerEkrani();
-        case 3:
-          return _buildInvoicesEkrani();
-        case 4:
-          return _buildTaxesEkrani();
-        case 5:
-          return _buildSenkronizasyonEkrani();
-        case 6:
-          return _buildKisilerEkrani();
-        default:
-          return _buildAnaEkran();
-      }
+    // Tüm platformlarda aynı tab yapısı - tarayıcı kaldırıldı
+    switch (_secilenTab) {
+      case 0:
+        return _buildAnaEkran();
+      case 1:
+        return _buildBelgelerEkrani();
+      case 2:
+        return _buildKategorilerEkrani();
+      case 3:
+        return _buildInvoicesEkrani();
+      case 4:
+        return _buildTaxesEkrani();
+      case 5:
+        return _buildSenkronizasyonEkrani();
+      case 6:
+        return _buildKisilerEkrani();
+      default:
+        return _buildAnaEkran();
     }
   }
 
