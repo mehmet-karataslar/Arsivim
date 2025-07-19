@@ -213,7 +213,7 @@ class VeriTabaniServisi {
     await _performMigration(db, oldVersion, newVersion);
   }
 
-  /// Veritabanı bütünlüğünü kontrol et
+  /// Veritabanı bütünlüğünü kontrol et ve eksik tabloları oluştur
   Future<void> _checkDatabaseIntegrity(Database db) async {
     try {
       // Temel tabloların varlığını kontrol et
@@ -223,12 +223,28 @@ class VeriTabaniServisi {
 
       final requiredTables = ['kisiler', 'kategoriler', 'belgeler', 'invoices', 'taxes', 'activities', 'reminders'];
       final existingTables = tables.map((t) => t['name'] as String).toList();
+      
+      bool hasCreatedTables = false;
 
       for (final table in requiredTables) {
         if (!existingTables.contains(table)) {
-          print('⚠️ Eksik tablo tespit edildi: $table');
-          throw Exception('Eksik tablo: $table');
+          print('⚠️ Eksik tablo tespit edildi: $table - Otomatik oluşturuluyor...');
+          
+          // Eksik tabloları oluştur
+          if (table == 'activities' || table == 'reminders') {
+            await _createCalendarTables(db);
+            print('✅ Calendar tabloları (activities, reminders) oluşturuldu');
+            hasCreatedTables = true;
+          } else if (table == 'invoices' || table == 'taxes') {
+            await _createInvoiceAndTaxTables(db);
+            print('✅ Invoice ve Tax tabloları oluşturuldu');
+            hasCreatedTables = true;
+          }
         }
+      }
+      
+      if (hasCreatedTables) {
+        print('✅ Eksik tablolar başarıyla oluşturuldu');
       }
 
       // Basit bir query ile veritabanının çalıştığını kontrol et
@@ -544,7 +560,7 @@ class VeriTabaniServisi {
   Future<void> _createInvoiceAndTaxTables(Database db) async {
     // Invoices tablosu
     await db.execute('''
-      CREATE TABLE invoices (
+      CREATE TABLE IF NOT EXISTS invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         kisi_id INTEGER NOT NULL,
         invoice_number TEXT NOT NULL UNIQUE,
@@ -582,7 +598,7 @@ class VeriTabaniServisi {
 
     // Taxes tablosu
     await db.execute('''
-      CREATE TABLE taxes (
+      CREATE TABLE IF NOT EXISTS taxes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         kisi_id INTEGER NOT NULL,
         tax_year INTEGER NOT NULL,
@@ -642,7 +658,7 @@ class VeriTabaniServisi {
   Future<void> _createCalendarTables(Database db) async {
     // Activities tablosu
     await db.execute('''
-      CREATE TABLE activities (
+      CREATE TABLE IF NOT EXISTS activities (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         type INTEGER NOT NULL,
         title TEXT NOT NULL,
@@ -658,7 +674,7 @@ class VeriTabaniServisi {
 
     // Reminders tablosu
     await db.execute('''
-      CREATE TABLE reminders (
+      CREATE TABLE IF NOT EXISTS reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
