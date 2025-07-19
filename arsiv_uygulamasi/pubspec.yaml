@@ -3,7 +3,7 @@ description: "Arşivim - Kişisel Belge Arşiv Uygulaması"
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 2.4.10+11
+version: 2.5.2+12
 
 environment:
   sdk: ^3.7.2
@@ -50,7 +50,7 @@ dependencies:
 
   # QR Code (senkronizasyon için)
   qr_flutter: ^4.1.0
-  mobile_scanner: ^5.2.3
+  simple_barcode_scanner: ^0.3.0
 
   # İzinler (Windows tarayıcı için gerekli)
   permission_handler: ^11.4.0
@@ -74,14 +74,14 @@ dependencies:
   logging: ^1.2.0
   
   # Notifications
-  flutter_local_notifications: ^17.2.3
-  timezone: ^0.9.4
+  flutter_local_notifications: ^19.3.1
+  timezone: ^0.10.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true

@@ -17,7 +17,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.example.arsiv_uygulamasi"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -35,10 +35,11 @@ android {
         applicationId = "com.example.arsiv_uygulamasi"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = 11           // v2.4.0'dan güncelleme için yüksek değer (10'dan artırıldı)
-        versionName = "2.4.10"     // 2.4 serisi devam - kullanıcıya görünen versiyon
+        minSdk = 23
+        targetSdk = 35
+        versionCode = 12           // v2.5.2 için güncelleme
+        versionName = "2.5.2"      // pubspec.yaml ile eşleşen versiyon
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -61,6 +62,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    packagingOptions {
+        pickFirst("**/libc++_shared.so")
+        pickFirst("**/libjsc.so")
+    }
 }
 
 flutter {
@@ -68,5 +74,6 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("androidx.multidex:multidex:2.0.1")
 }

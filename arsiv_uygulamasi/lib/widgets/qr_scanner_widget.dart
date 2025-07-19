@@ -1,27 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:simple_barcode_scanner/simple_barcode_scanner.dart';
 
 // QR Scanner Screen
 class QRScannerScreen extends StatefulWidget {
   final Function(String) onQRScanned;
 
   const QRScannerScreen({Key? key, required this.onQRScanned})
-    : super(key: key);
+      : super(key: key);
 
   @override
   State<QRScannerScreen> createState() => _QRScannerScreenState();
 }
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
-  MobileScannerController cameraController = MobileScannerController();
-  bool isScanning = true;
   bool hasScannedCode = false;
-
-  @override
-  void dispose() {
-    cameraController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,229 +22,103 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         title: const Text('QR Kod Tara'),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: () => cameraController.toggleTorch(),
-            icon: const Icon(Icons.flash_on),
-          ),
-          IconButton(
-            onPressed: () => cameraController.switchCamera(),
-            icon: const Icon(Icons.flip_camera_android),
-          ),
-        ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Stack(
-              children: [
-                MobileScanner(
-                  controller: cameraController,
-                  onDetect: (capture) {
-                    if (isScanning &&
-                        !hasScannedCode &&
-                        capture.barcodes.isNotEmpty) {
-                      final String? code = capture.barcodes.first.rawValue;
-                      if (code != null) {
-                        hasScannedCode = true;
-                        isScanning = false;
-
-                        // QR kod callback'ini çağır
-                        widget.onQRScanned(code);
-                      }
-                    }
-                  },
-                ),
-                // Custom overlay
-                Container(
-                  decoration: ShapeDecoration(
-                    shape: QRScannerOverlayShape(
-                      borderColor: Colors.green,
-                      borderRadius: 10,
-                      borderLength: 30,
-                      borderWidth: 10,
-                      cutOutSize: 250,
-                    ),
-                  ),
-                ),
-                // Scanning indicator
-                if (hasScannedCode)
-                  Container(
-                    color: Colors.black54,
-                    child: const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.green,
-                            ),
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'QR kod işleniyor...',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.qr_code_scanner,
+              size: 100,
+              color: Colors.green,
             ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+            const SizedBox(height: 32),
+            const Text(
+              'QR Kod Tarayıcı',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Arşivim bağlantı QR kodunu taramak için butona basın',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: hasScannedCode ? null : _scanQRCode,
+              icon: Icon(hasScannedCode ? Icons.hourglass_empty : Icons.qr_code_scanner),
+              label: Text(hasScannedCode ? 'İşleniyor...' : 'QR Kod Tara'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (hasScannedCode)
+              const Column(
                 children: [
-                  Text(
-                    hasScannedCode
-                        ? 'QR kod işleniyor...'
-                        : 'QR kodu kamera ile tarayın',
-                    style: const TextStyle(fontSize: 16),
-                    textAlign: TextAlign.center,
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
-                    hasScannedCode
-                        ? 'Lütfen bekleyin'
-                        : 'Arşivim bağlantı QR kodunu tarayın',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    textAlign: TextAlign.center,
+                    'QR kod işleniyor...',
+                    style: TextStyle(color: Colors.green),
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-}
 
-// Custom QR Scanner Overlay
-class QRScannerOverlayShape extends ShapeBorder {
-  const QRScannerOverlayShape({
-    this.borderColor = Colors.red,
-    this.borderWidth = 3.0,
-    this.overlayColor = const Color.fromRGBO(0, 0, 0, 80),
-    this.borderRadius = 0,
-    this.borderLength = 40,
-    this.cutOutSize = 250,
-  });
+  void _scanQRCode() async {
+    if (hasScannedCode) return;
 
-  final Color borderColor;
-  final double borderWidth;
-  final Color overlayColor;
-  final double borderRadius;
-  final double borderLength;
-  final double cutOutSize;
+    try {
+      setState(() {
+        hasScannedCode = true;
+      });
 
-  @override
-  EdgeInsetsGeometry get dimensions => const EdgeInsets.all(10);
+      String? res = await SimpleBarcodeScanner.scanBarcode(
+        context,
+        barcodeAppBar: const BarcodeAppBar(
+          appBarTitle: 'QR Kod Tara',
+          centerTitle: false,
+          enableBackButton: true,
+        ),
+        isShowFlashIcon: true,
+        delayMillis: 500,
+        cameraFace: CameraFace.back,
+      );
 
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
-    return Path()
-      ..fillType = PathFillType.evenOdd
-      ..addPath(getOuterPath(rect), Offset.zero);
-  }
-
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
-    Path path = Path()..addRect(rect);
-    Path holePath =
-        Path()..addRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: rect.center,
-              width: cutOutSize,
-              height: cutOutSize,
-            ),
-            Radius.circular(borderRadius),
+      if (mounted && res != null && res != '-1' && res.isNotEmpty) {
+        // QR kod başarıyla tarandı
+        widget.onQRScanned(res);
+      } else {
+        // Tarama iptal edildi veya hata oluştu
+        setState(() {
+          hasScannedCode = false;
+        });
+      }
+    } catch (e) {
+      // Hata durumunda state'i sıfırla
+      if (mounted) {
+        setState(() {
+          hasScannedCode = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('QR kod tarama hatası: $e'),
+            backgroundColor: Colors.red,
           ),
         );
-    return Path.combine(PathOperation.difference, path, holePath);
-  }
-
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    final Paint paint =
-        Paint()
-          ..color = overlayColor
-          ..style = PaintingStyle.fill;
-
-    canvas.drawPath(getOuterPath(rect), paint);
-
-    // Draw border
-    final Paint borderPaint =
-        Paint()
-          ..color = borderColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = borderWidth;
-
-    final double centerX = rect.center.dx;
-    final double centerY = rect.center.dy;
-    final double halfSize = cutOutSize / 2;
-
-    // Top-left corner
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY - halfSize),
-      Offset(centerX - halfSize + borderLength, centerY - halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY - halfSize),
-      Offset(centerX - halfSize, centerY - halfSize + borderLength),
-      borderPaint,
-    );
-
-    // Top-right corner
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY - halfSize),
-      Offset(centerX + halfSize - borderLength, centerY - halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY - halfSize),
-      Offset(centerX + halfSize, centerY + halfSize + borderLength),
-      borderPaint,
-    );
-
-    // Bottom-left corner
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY + halfSize),
-      Offset(centerX - halfSize + borderLength, centerY + halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX - halfSize, centerY + halfSize),
-      Offset(centerX - halfSize, centerY + halfSize - borderLength),
-      borderPaint,
-    );
-
-    // Bottom-right corner
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY + halfSize),
-      Offset(centerX + halfSize - borderLength, centerY + halfSize),
-      borderPaint,
-    );
-    canvas.drawLine(
-      Offset(centerX + halfSize, centerY + halfSize),
-      Offset(centerX + halfSize, centerY + halfSize - borderLength),
-      borderPaint,
-    );
-  }
-
-  @override
-  ShapeBorder scale(double t) {
-    return QRScannerOverlayShape(
-      borderColor: borderColor,
-      borderWidth: borderWidth,
-      overlayColor: overlayColor,
-    );
+      }
+    }
   }
 }
