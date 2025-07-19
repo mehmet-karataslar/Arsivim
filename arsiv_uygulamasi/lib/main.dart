@@ -13,6 +13,7 @@ import 'dart:io' show Platform;
 import 'screens/ana_ekran.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/belge_duzenle_ekrani.dart';
 
 // Services
 import 'services/http_sunucu_servisi.dart';
@@ -27,6 +28,9 @@ import 'services/cache_servisi.dart';
 
 // Providers
 import 'providers/app_state_manager.dart';
+
+// Models
+import 'models/belge_modeli.dart';
 
 // Utils
 import 'utils/sabitler.dart';
@@ -285,6 +289,22 @@ class ArsivimApp extends StatelessWidget {
     switch (settings.name) {
       case '/':
         return MaterialPageRoute(builder: (_) => const AnaEkran());
+      case '/belge-duzenle':
+        final belge = settings.arguments as BelgeModeli?;
+        if (belge != null) {
+          return MaterialPageRoute(
+            builder: (_) => BelgeDuzenleEkrani(belge: belge),
+          );
+        } else {
+          return MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('Hata')),
+              body: const Center(
+                child: Text('Belge bilgisi bulunamadı!'),
+              ),
+            ),
+          );
+        }
       default:
         return MaterialPageRoute(
           builder: (_) => Scaffold(

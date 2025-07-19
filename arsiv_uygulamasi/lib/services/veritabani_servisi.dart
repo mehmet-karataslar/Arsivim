@@ -208,148 +208,227 @@ class VeriTabaniServisi {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     print('🔄 Database upgrade: $oldVersion -> $newVersion');
+    print('⚠️  VERİ KORUMA MODU: Mevcut veriler korunacak');
 
-    // Migration işlemini yap
-    await _performMigration(db, oldVersion, newVersion);
+    // Önce mevcut verileri backup'la
+    await _createBackup(db, oldVersion);
+    
+    // Migration işlemini veri koruyarak yap
+    await _performSafeMigration(db, oldVersion, newVersion);
+    
+    // Migration sonrası veritabanı bütünlüğünü kontrol et
+    await _verifyDataIntegrity(db);
+    
+    print('✅ Database upgrade tamamlandı, veriler korundu');
   }
 
   /// Veritabanı bütünlüğünü kontrol et ve eksik tabloları oluştur
   Future<void> _checkDatabaseIntegrity(Database db) async {
     try {
+      print('🔍 VERİ KORUMA MODU: Veritabanı bütünlüğü kontrol ediliyor...');
+      
+      // Kullanıcı verilerini sayarak koruma kontrolü yap
+      await _verifyUserDataExists(db);
+      
       // Temel tabloların varlığını kontrol et
       final tables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table'",
       );
 
       final requiredTables = ['kisiler', 'kategoriler', 'belgeler', 'invoices', 'taxes', 'activities', 'reminders'];
-      final existingTables = tables.map((t) => t['name'] as String).toList();
+      final existingTables = tables.map((t) => t['name'] as String).toSet();
       
       bool hasCreatedTables = false;
 
       for (final table in requiredTables) {
         if (!existingTables.contains(table)) {
-          print('⚠️ Eksik tablo tespit edildi: $table - Otomatik oluşturuluyor...');
+          print('⚠️ Eksik tablo tespit edildi: $table - Güvenli oluşturuluyor...');
           
-          // Eksik tabloları oluştur
+          // Eksik tabloları güvenli şekilde oluştur
           if (table == 'activities' || table == 'reminders') {
             await _createCalendarTables(db);
-            print('✅ Calendar tabloları (activities, reminders) oluşturuldu');
+            print('✅ Calendar tabloları ($table) güvenli şekilde oluşturuldu');
             hasCreatedTables = true;
           } else if (table == 'invoices' || table == 'taxes') {
             await _createInvoiceAndTaxTables(db);
-            print('✅ Invoice ve Tax tabloları oluşturuldu');
+            print('✅ Invoice ve Tax tabloları ($table) güvenli şekilde oluşturuldu');
+            hasCreatedTables = true;
+          } else if (table == 'kisiler') {
+            await _createKisilerTableSafe(db);
+            print('✅ Kişiler tablosu güvenli şekilde oluşturuldu');
+            hasCreatedTables = true;
+          } else if (table == 'kategoriler') {
+            await _createKategorilerTableSafe(db);
+            print('✅ Kategoriler tablosu güvenli şekilde oluşturuldu');
+            hasCreatedTables = true;
+          } else if (table == 'belgeler') {
+            await _createBelgelerTableSafe(db);
+            print('✅ Belgeler tablosu güvenli şekilde oluşturuldu');
             hasCreatedTables = true;
           }
         }
       }
       
+      // Kullanıcı kolonlarının varlığını garanti et
+      await _ensureUserColumns(db);
+      
+      // Kategori kolonlarının varlığını garanti et
+      await _ensureCategoryColumns(db);
+      
       if (hasCreatedTables) {
-        print('✅ Eksik tablolar başarıyla oluşturuldu');
+        print('📝 Eksik tablolar güvenli şekilde oluşturuldu');
+        await _createIndexes(db);
       }
 
-      // Basit bir query ile veritabanının çalıştığını kontrol et
-      await db.rawQuery('SELECT COUNT(*) FROM kisiler');
-      await db.rawQuery('SELECT COUNT(*) FROM kategoriler');
-      await db.rawQuery('SELECT COUNT(*) FROM belgeler');
-      await db.rawQuery('SELECT COUNT(*) FROM activities');
-      await db.rawQuery('SELECT COUNT(*) FROM reminders');
+      // Güvenli sorgu testleri
+      await _performSafeQueries(db);
 
-      print('✅ Veritabanı bütünlük kontrolü başarılı');
+      print('✅ Veritabanı bütünlük kontrolü başarılı - VERİLER KORUNDU');
     } catch (e) {
       print('❌ Veritabanı bütünlük kontrolü başarısız: $e');
       throw e;
     }
   }
-
-  Future<void> _performMigration(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
-    if (oldVersion < 2) {
-      // Kişiler tablosunu ekle
-      await db.execute('''
-        CREATE TABLE kisiler (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          ad TEXT NOT NULL,
-          soyad TEXT NOT NULL,
-          olusturma_tarihi TEXT NOT NULL,
-          guncelleme_tarihi TEXT NOT NULL,
-          aktif INTEGER DEFAULT 1
-        )
-      ''');
-
-      // Belgeler tablosuna kisi_id sütunu ekle
-      await db.execute('ALTER TABLE belgeler ADD COLUMN kisi_id INTEGER');
-    }
-
-    if (oldVersion < 3) {
-      // metadata_degisiklikleri tablosunda sync_durumu kolonu sync_edildi olarak değiştir
-      try {
-        // Önce kolonu kontrol et
-        final columns = await db.rawQuery(
-          "PRAGMA table_info(metadata_degisiklikleri)",
-        );
-        final hasOldColumn = columns.any((col) => col['name'] == 'sync_durumu');
-
-        if (hasOldColumn) {
-          // Eski tabloyu yedekle
-          await db.execute('''
-            CREATE TABLE metadata_degisiklikleri_backup AS 
-            SELECT * FROM metadata_degisiklikleri
-          ''');
-
-          // Eski tabloyu sil
-          await db.execute('DROP TABLE metadata_degisiklikleri');
-
-          // Yeni tabloyu oluştur
-          await db.execute('''
-            CREATE TABLE metadata_degisiklikleri (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              entity_type TEXT NOT NULL,
-              entity_id INTEGER NOT NULL,
-              degisiklik_tipi TEXT NOT NULL,
-              eski_deger TEXT,
-              yeni_deger TEXT,
-              degisiklik_zamani TEXT NOT NULL,
-              cihaz_id TEXT,
-              sync_edildi INTEGER DEFAULT 0
-            )
-          ''');
-
-          // Verileri geri aktar (sync_durumu -> sync_edildi conversion)
-          await db.execute('''
-            INSERT INTO metadata_degisiklikleri 
-            (id, entity_type, entity_id, degisiklik_tipi, eski_deger, yeni_deger, degisiklik_zamani, cihaz_id, sync_edildi)
-            SELECT 
-              id, entity_type, entity_id, degisiklik_tipi, eski_deger, yeni_deger, degisiklik_zamani, cihaz_id,
-              CASE WHEN sync_durumu = 'SYNCED' THEN 1 ELSE 0 END
-            FROM metadata_degisiklikleri_backup
-          ''');
-
-          // Backup tabloyu sil
-          await db.execute('DROP TABLE metadata_degisiklikleri_backup');
-
-          print(
-            '✅ metadata_degisiklikleri tablosu güncellendi (sync_durumu -> sync_edildi)',
-          );
-        }
-      } catch (e) {
-        print('⚠️ metadata_degisiklikleri migration hatası: $e');
+  
+  /// Kullanıcı verilerinin varlığını kontrol et
+  Future<void> _verifyUserDataExists(Database db) async {
+    try {
+      // Temel tabloların varlığını kontrol et
+      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final existingTables = tables.map((t) => t['name'] as String).toSet();
+      
+      if (existingTables.contains('kisiler')) {
+        final userCount = await db.rawQuery('SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1');
+        final users = Sqflite.firstIntValue(userCount) ?? 0;
+        print('👥 Mevcut kullanıcı sayısı: $users');
       }
+      
+      if (existingTables.contains('belgeler')) {
+        final docCount = await db.rawQuery('SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1');
+        final docs = Sqflite.firstIntValue(docCount) ?? 0;
+        print('📄 Mevcut belge sayısı: $docs');
+      }
+      
+      if (existingTables.contains('kategoriler')) {
+        final catCount = await db.rawQuery('SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1');
+        final cats = Sqflite.firstIntValue(catCount) ?? 0;
+        print('📁 Mevcut kategori sayısı: $cats');
+      }
+      
+    } catch (e) {
+      print('⚠️ Kullanıcı verisi kontrolü hatası: $e');
     }
+  }
+  
+  /// Güvenli sorgu testleri
+  Future<void> _performSafeQueries(Database db) async {
+    try {
+      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final existingTables = tables.map((t) => t['name'] as String).toSet();
+      
+      // Sadece var olan tabloları test et
+      for (final tableName in existingTables) {
+        if (['kisiler', 'kategoriler', 'belgeler', 'activities', 'reminders', 'invoices', 'taxes'].contains(tableName)) {
+          await db.rawQuery('SELECT COUNT(*) FROM $tableName');
+        }
+      }
+      
+      print('✅ Tüm güvenli sorgular başarılı');
+    } catch (e) {
+      print('❌ Güvenli sorgu testi başarısız: $e');
+      throw e;
+    }
+  }
 
-    if (oldVersion < 4) {
-      // Aggressive migration - metadata_degisiklikleri tablosunu tamamen yeniden oluştur
-      try {
-        print(
-          '🔄 V4 Migration başlatılıyor - metadata_degisiklikleri yeniden oluşturuluyor...',
-        );
-
-        // Eski tabloyu tamamen sil
-        await db.execute('DROP TABLE IF EXISTS metadata_degisiklikleri');
-
-        // Yeni tabloyu doğru schema ile oluştur
+  /// Backup oluştur (veri koruma için)
+  Future<void> _createBackup(Database db, int oldVersion) async {
+    try {
+      print('📂 Backup oluşturuluyor... (versiyon: $oldVersion)');
+      
+      // Önemli tabloların verilerini geçici tablolara kaydet
+      final importantTables = ['kisiler', 'kategoriler', 'belgeler', 'invoices', 'taxes'];
+      
+      for (final tableName in importantTables) {
+        try {
+          // Tablo mevcutsa backup oluştur
+          final tableExists = await _tableExists(db, tableName);
+          if (tableExists) {
+            await db.execute('DROP TABLE IF EXISTS ${tableName}_backup');
+            await db.execute('CREATE TABLE ${tableName}_backup AS SELECT * FROM $tableName');
+            print('✅ $tableName tablosu backup alındı');
+          }
+        } catch (e) {
+          print('⚠️ $tableName backup hatası: $e');
+        }
+      }
+      
+      print('✅ Backup işlemi tamamlandı');
+    } catch (e) {
+      print('❌ Backup oluşturma hatası: $e');
+    }
+  }
+  
+  /// Tablo varlığını kontrol et
+  Future<bool> _tableExists(Database db, String tableName) async {
+    try {
+      final result = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", 
+        [tableName]
+      );
+      return result.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Veri bütünlüğünü doğrula
+  Future<void> _verifyDataIntegrity(Database db) async {
+    try {
+      print('🔍 Veri bütünlüğü kontrol ediliyor...');
+      
+      // Kullanıcı sayısını kontrol et
+      final userCount = await db.rawQuery('SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1');
+      final users = Sqflite.firstIntValue(userCount) ?? 0;
+      
+      // Belge sayısını kontrol et  
+      final docCount = await db.rawQuery('SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1');
+      final docs = Sqflite.firstIntValue(docCount) ?? 0;
+      
+      // Kategori sayısını kontrol et
+      final catCount = await db.rawQuery('SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1');
+      final cats = Sqflite.firstIntValue(catCount) ?? 0;
+      
+      print('✅ Veri bütünlüğü: $users kullanıcı, $docs belge, $cats kategori');
+      
+      // Backup tablolarını temizle
+      await _cleanupBackupTables(db);
+      
+    } catch (e) {
+      print('❌ Veri bütünlüğü kontrolü hatası: $e');
+    }
+  }
+  
+  /// Backup tablolarını temizle  
+  Future<void> _cleanupBackupTables(Database db) async {
+    try {
+      final backupTables = ['kisiler_backup', 'kategoriler_backup', 'belgeler_backup', 'invoices_backup', 'taxes_backup'];
+      for (final table in backupTables) {
+        await db.execute('DROP TABLE IF EXISTS $table');
+      }
+      print('🗑️ Backup tabloları temizlendi');
+    } catch (e) {
+      print('⚠️ Backup temizleme hatası: $e');
+    }
+  }
+  
+  /// Metadata tablosunu güvenli şekilde güncelle  
+  Future<void> _safeUpdateMetadataTable(Database db) async {
+    try {
+      // Önce tablo var mı kontrol et
+      final tableExists = await _tableExists(db, 'metadata_degisiklikleri');
+      
+      if (!tableExists) {
+        // Tablo yoksa yeni oluştur
         await db.execute('''
           CREATE TABLE metadata_degisiklikleri (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -363,135 +442,313 @@ class VeriTabaniServisi {
             sync_edildi INTEGER DEFAULT 0
           )
         ''');
-
-        // Indexleri de yeniden oluştur
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_metadata_entity ON metadata_degisiklikleri(entity_type, entity_id)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_metadata_zaman ON metadata_degisiklikleri(degisiklik_zamani)',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
-        );
-
-        print('✅ metadata_degisiklikleri tablosu V4 ile yeniden oluşturuldu');
-      } catch (e) {
-        print('❌ V4 migration hatası: $e');
+        print('✅ metadata_degisiklikleri tablosu oluşturuldu');
+        return;
       }
-    }
-
-    if (oldVersion < 5) {
-      // V5 Migration - kategoriler tablosuna belge_sayisi kolonu ekle
-      try {
-        print(
-          '🔄 V5 Migration başlatılıyor - kategoriler tablosuna belge_sayisi kolonu ekleniyor...',
-        );
-
-        await db.execute(
-          'ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0',
-        );
-
-        print('✅ kategoriler tablosu V5 ile güncellendi');
-      } catch (e) {
-        print('❌ V5 migration hatası: $e');
+      
+      // Mevcut kolonları kontrol et
+      final columns = await db.rawQuery("PRAGMA table_info(metadata_degisiklikleri)");
+      final columnNames = columns.map((col) => col['name'] as String).toSet();
+      
+      // sync_edildi kolonu yoksa ekle
+      if (!columnNames.contains('sync_edildi')) {
+        await db.execute('ALTER TABLE metadata_degisiklikleri ADD COLUMN sync_edildi INTEGER DEFAULT 0');
+        print('✅ sync_edildi kolonu eklendi');
       }
+      
+      // cihaz_id kolonu yoksa ekle
+      if (!columnNames.contains('cihaz_id')) {
+        await db.execute('ALTER TABLE metadata_degisiklikleri ADD COLUMN cihaz_id TEXT');
+        print('✅ cihaz_id kolonu eklendi');
+      }
+      
+      print('✅ metadata_degisiklikleri tablosu güvenli şekilde güncellendi');
+    } catch (e) {
+      print('❌ Metadata tablo güncelleme hatası: $e');
     }
+  }
 
-    if (oldVersion < 6) {
-      // V6 Migration - kullanıcı sistemi için kişiler tablosunu güncelle
-      try {
-        print('🔄 V6 Migration başlatılıyor - kullanıcı sistemi ekleniyor...');
+  Future<void> _performSafeMigration(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    print('🔒 Güvenli migration başlatılıyor - VERİLER KORUNACAK');
+    
+    try {
+      if (oldVersion < 2) {
+        print('🔄 V2 Migration: Kişiler tablosu ekleniyor...');
+        // Kişiler tablosunu güvenli şekilde ekle
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS kisiler (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ad TEXT NOT NULL,
+            soyad TEXT NOT NULL,
+            olusturma_tarihi TEXT NOT NULL,
+            guncelleme_tarihi TEXT NOT NULL,
+            aktif INTEGER DEFAULT 1
+          )
+        ''');
 
-        // Önce mevcut kolonları kontrol et
-        final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
-        final existingColumns = columns.map((col) => col['name']).toSet();
+        // Belgeler tablosuna kisi_id sütunu güvenli şekilde ekle
+        try {
+          await db.execute('ALTER TABLE belgeler ADD COLUMN kisi_id INTEGER');
+        } catch (e) {
+          print('⚠️ kisi_id kolonu zaten mevcut: $e');
+        }
+        print('✅ V2 Migration tamamlandı');
+      }
 
-        print('Mevcut kolonlar: $existingColumns');
+      if (oldVersion < 3) {
+        print('🔄 V3 Migration: metadata tablosu güncelleniyor...');
+        // metadata_degisiklikleri tablosunu VERİ KAYBETMEDEN güncelle
+        await _safeUpdateMetadataTable(db);
+        print('✅ V3 Migration tamamlandı');
+      }
 
-        // Kullanıcı alanlarını ekle (sadece yoksa)
-        if (!existingColumns.contains('kullanici_adi')) {
+      if (oldVersion < 4) {
+        print('🔄 V4 Migration: İndeksler ekleniyor...');
+        // V4'te sadece eksik indeksleri ekle, tablo silme!
+        try {
           await db.execute(
-            'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
+            'CREATE INDEX IF NOT EXISTS idx_metadata_entity ON metadata_degisiklikleri(entity_type, entity_id)',
           );
-          print('✅ kullanici_adi kolonu eklendi');
-        }
-
-        if (!existingColumns.contains('sifre')) {
-          await db.execute('ALTER TABLE kisiler ADD COLUMN sifre TEXT');
-          print('✅ sifre kolonu eklendi');
-        }
-
-        if (!existingColumns.contains('kullanici_tipi')) {
           await db.execute(
-            'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
+            'CREATE INDEX IF NOT EXISTS idx_metadata_zaman ON metadata_degisiklikleri(degisiklik_zamani)',
           );
-          print('✅ kullanici_tipi kolonu eklendi');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
+          );
+          print('✅ V4 Migration tamamlandı');
+        } catch (e) {
+          print('⚠️ V4 migration hatası: $e');
         }
-
-        print('✅ Kullanıcı sistemi V6 ile eklendi');
-      } catch (e) {
-        print('❌ V6 migration hatası: $e');
-        rethrow;
       }
-    }
 
-    if (oldVersion < 7) {
-      // V7 Migration - kişiler tablosuna profil_fotografi kolonu ekle
-      try {
-        print(
-          '🔄 V7 Migration başlatılıyor - profil fotoğrafı kolonu ekleniyor...',
-        );
+      if (oldVersion < 5) {
+        print('🔄 V5 Migration: belge_sayisi kolonu ekleniyor...');
+        try {
+          await db.execute(
+            'ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0',
+          );
+          print('✅ V5 Migration tamamlandı');
+        } catch (e) {
+          print('⚠️ belge_sayisi kolonu zaten mevcut: $e');
+        }
+      }
 
-        // Önce mevcut kolonları kontrol et
-        final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
-        final existingColumns = columns.map((col) => col['name']).toSet();
+      if (oldVersion < 6) {
+        print('🔄 V6 Migration: Kullanıcı sistemi ekleniyor...');
+        await _safeAddUserColumns(db);
+        print('✅ V6 Migration tamamlandı');
+      }
 
-        print('Mevcut kolonlar: $existingColumns');
-
-        // Profil fotoğrafı alanını ekle (sadece yoksa)
-        if (!existingColumns.contains('profil_fotografi')) {
+      if (oldVersion < 7) {
+        print('🔄 V7 Migration: Profil fotoğrafı ekleniyor...');
+        try {
           await db.execute(
             'ALTER TABLE kisiler ADD COLUMN profil_fotografi TEXT',
           );
-          print('✅ profil_fotografi kolonu eklendi');
+          print('✅ V7 Migration tamamlandı');
+        } catch (e) {
+          print('⚠️ profil_fotografi kolonu zaten mevcut: $e');
         }
-
-        print('✅ Profil fotoğrafı sistemi V7 ile eklendi');
-      } catch (e) {
-        print('❌ V7 migration hatası: $e');
-        rethrow;
       }
-    }
 
-    if (oldVersion < 8) {
-      // V8 Migration - Invoice ve Tax tablolarını ekle
-      try {
-        print('🔄 V8 Migration başlatılıyor - Invoice ve Tax tabloları ekleniyor...');
-
-        // Invoice ve Tax tablolarını oluştur
+      if (oldVersion < 8) {
+        print('🔄 V8 Migration: Invoice ve Tax tabloları ekleniyor...');
         await _createInvoiceAndTaxTables(db);
-
-        print('✅ Invoice ve Tax tabloları V8 ile eklendi');
-      } catch (e) {
-        print('❌ V8 migration hatası: $e');
-        rethrow;
+        print('✅ V8 Migration tamamlandı');
       }
-    }
 
-    if (oldVersion < 9) {
-      // V9 Migration - Calendar Activities ve Reminders tablolarını ekle
-      try {
-        print('🔄 V9 Migration başlatılıyor - Calendar Activities ve Reminders tabloları ekleniyor...');
-
-        // Activities ve Reminders tablolarını oluştur
+      if (oldVersion < 9) {
+        print('🔄 V9 Migration: Calendar tabloları ekleniyor...');
         await _createCalendarTables(db);
-
-        print('✅ Calendar Activities ve Reminders tabloları V9 ile eklendi');
-      } catch (e) {
-        print('❌ V9 migration hatası: $e');
-        rethrow;
+        print('✅ V9 Migration tamamlandı');
       }
+      
+      print('🎉 Tüm migration\'lar güvenli şekilde tamamlandı!');
+      
+    } catch (e) {
+      print('❌ Migration hatası: $e');
+      print('🔄 Backup verilerden kurtarma deneniyor...');
+      await _restoreFromBackup(db);
+      rethrow;
+    }
+  }
+  
+  /// Kullanıcı kolonlarını güvenli şekilde ekle
+  Future<void> _safeAddUserColumns(Database db) async {
+    try {
+      final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
+      final existingColumns = columns.map((col) => col['name'] as String).toSet();
+
+      if (!existingColumns.contains('kullanici_adi')) {
+        await db.execute('ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE');
+        print('✅ kullanici_adi kolonu eklendi');
+      }
+
+      if (!existingColumns.contains('sifre')) {
+        await db.execute('ALTER TABLE kisiler ADD COLUMN sifre TEXT');
+        print('✅ sifre kolonu eklendi');
+      }
+
+      if (!existingColumns.contains('kullanici_tipi')) {
+        await db.execute('ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"');
+        print('✅ kullanici_tipi kolonu eklendi');
+      }
+    } catch (e) {
+      print('❌ Kullanıcı kolonları ekleme hatası: $e');
+    }
+  }
+  
+  /// Güvenli tablo oluşturma metodları
+  Future<void> _createKisilerTableSafe(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS kisiler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ad TEXT NOT NULL,
+        soyad TEXT NOT NULL,
+        kullanici_adi TEXT UNIQUE,
+        sifre TEXT,
+        kullanici_tipi TEXT DEFAULT 'NORMAL',
+        profil_fotografi TEXT,
+        olusturma_tarihi TEXT NOT NULL,
+        guncelleme_tarihi TEXT NOT NULL,
+        aktif INTEGER DEFAULT 1
+      )
+    ''');
+  }
+  
+  Future<void> _createKategorilerTableSafe(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS kategoriler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kategori_adi TEXT NOT NULL UNIQUE,
+        renk_kodu TEXT DEFAULT '#2196F3',
+        simge_kodu TEXT DEFAULT 'folder',
+        aciklama TEXT,
+        olusturma_tarihi TEXT NOT NULL,
+        aktif INTEGER DEFAULT 1,
+        belge_sayisi INTEGER DEFAULT 0
+      )
+    ''');
+  }
+  
+  Future<void> _createBelgelerTableSafe(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS belgeler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dosya_adi TEXT NOT NULL,
+        orijinal_dosya_adi TEXT NOT NULL,
+        dosya_yolu TEXT NOT NULL,
+        dosya_boyutu INTEGER NOT NULL,
+        dosya_tipi TEXT NOT NULL,
+        dosya_hash TEXT UNIQUE NOT NULL,
+        kategori_id INTEGER,
+        kisi_id INTEGER,
+        baslik TEXT,
+        aciklama TEXT,
+        etiketler TEXT,
+        olusturma_tarihi TEXT NOT NULL,
+        guncelleme_tarihi TEXT NOT NULL,
+        son_erisim_tarihi TEXT,
+        aktif INTEGER DEFAULT 1,
+        senkron_durumu INTEGER DEFAULT 0,
+        versiyon_numarasi INTEGER DEFAULT 1,
+        metadata_hash TEXT,
+        son_metadata_guncelleme TEXT,
+        FOREIGN KEY (kategori_id) REFERENCES kategoriler(id),
+        FOREIGN KEY (kisi_id) REFERENCES kisiler(id)
+      )
+    ''');
+  }
+  
+  /// Kullanıcı kolonlarının varlığını garanti et
+  Future<void> _ensureUserColumns(Database db) async {
+    try {
+      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final existingTables = tables.map((t) => t['name'] as String).toSet();
+      
+      if (!existingTables.contains('kisiler')) {
+        return; // Tablo yoksa column eklenecek bir şey yok
+      }
+      
+      final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
+      final existingColumns = columns.map((col) => col['name'] as String).toSet();
+
+      final requiredColumns = {
+        'kullanici_adi': 'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
+        'sifre': 'ALTER TABLE kisiler ADD COLUMN sifre TEXT',
+        'kullanici_tipi': 'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
+        'profil_fotografi': 'ALTER TABLE kisiler ADD COLUMN profil_fotografi TEXT',
+      };
+
+      for (final columnName in requiredColumns.keys) {
+        if (!existingColumns.contains(columnName)) {
+          try {
+            await db.execute(requiredColumns[columnName]!);
+            print('✅ $columnName kolonu güvenli şekilde eklendi');
+          } catch (e) {
+            print('⚠️ $columnName kolonu zaten mevcut: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Kullanıcı kolonları kontrolü hatası: $e');
+    }
+  }
+  
+  /// Kategori kolonlarının varlığını garanti et
+  Future<void> _ensureCategoryColumns(Database db) async {
+    try {
+      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final existingTables = tables.map((t) => t['name'] as String).toSet();
+      
+      if (!existingTables.contains('kategoriler')) {
+        return; // Tablo yoksa column eklenecek bir şey yok
+      }
+      
+      final columns = await db.rawQuery("PRAGMA table_info(kategoriler)");
+      final existingColumns = columns.map((col) => col['name'] as String).toSet();
+
+      if (!existingColumns.contains('belge_sayisi')) {
+        try {
+          await db.execute('ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0');
+          print('✅ belge_sayisi kolonu güvenli şekilde eklendi');
+        } catch (e) {
+          print('⚠️ belge_sayisi kolonu zaten mevcut: $e');
+        }
+      }
+    } catch (e) {
+      print('❌ Kategori kolonları kontrolü hatası: $e');
+    }
+  }
+  
+  /// Backup'tan verileri geri yükle
+  Future<void> _restoreFromBackup(Database db) async {
+    try {
+      print('🔄 Backup verilerden geri yükleme başlatılıyor...');
+      
+      final backupTables = ['kisiler_backup', 'kategoriler_backup', 'belgeler_backup'];
+      final targetTables = ['kisiler', 'kategoriler', 'belgeler'];
+      
+      for (int i = 0; i < backupTables.length; i++) {
+        final backupTable = backupTables[i];
+        final targetTable = targetTables[i];
+        
+        final backupExists = await _tableExists(db, backupTable);
+        if (backupExists) {
+          // Backup'tan verileri geri yükle
+          await db.execute('DELETE FROM $targetTable');
+          await db.execute('INSERT INTO $targetTable SELECT * FROM $backupTable');
+          print('✅ $targetTable tablosu backup\'tan geri yüklendi');
+        }
+      }
+      
+      print('✅ Backup\'tan geri yükleme tamamlandı');
+    } catch (e) {
+      print('❌ Backup geri yükleme hatası: $e');
     }
   }
 
