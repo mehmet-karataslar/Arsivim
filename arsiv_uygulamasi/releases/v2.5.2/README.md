@@ -1,96 +1,106 @@
-# Arşivim v2.5.2 Release Notes
+# Arşivim v2.5.2 - Güncelleme Sürümü
 
-## 📅 Release Date
-July 19, 2025
+## 📅 Yayın Tarihi
+19 Temmuz 2025
 
-## 🚀 What's New in v2.5.2
+## 🎯 **GÜNCELLEME NOTU**
+Bu sürüm **mevcut uygulamanızı günceller** ve **eski verilerinizi korur**.
 
-### Major Updates
-- **Updated Dependencies**: All Flutter packages updated to latest compatible versions
-- **Enhanced Compatibility**: Resolved package conflicts and improved stability
-- **Android API 35**: Updated to support the latest Android version
-- **Modern Build System**: Updated Gradle and build configurations
+## 📦 **İndirme Dosyaları**
 
-### 🔧 Technical Improvements
-- **Updated Android Target SDK**: Now targeting Android API 35
-- **Updated Compile SDK**: Compile SDK updated to 35
-- **Package Compatibility**: Fixed compatibility issues between packages
-- **QR Scanner**: Switched to `simple_barcode_scanner` for better stability
-- **Notifications**: Updated to `flutter_local_notifications` v19.3.1
-- **Timezone Support**: Updated timezone package for better cross-platform support
+| Platform | Dosya | Boyut | Açıklama |
+|----------|-------|-------|----------|
+| 🤖 **Android (Güncelleme)** | `Arsivcim-v2.5.2-UPDATE.apk` | 29.9 MB | **ESKİ VERİLERİNİZİ KORUR** |
+| 🤖 **Android (Yeni Kurulum)** | `Arsivcim-v2.5.2-android.apk` | 86.2 MB | Sıfırdan kurulum |
+| 🖥️ **Windows ZIP** | `Arsivcim-v2.5.2-windows-x64.zip` | 15.0 MB | Taşınabilir sürüm |
+| 🖥️ **Windows EXE** | `windows/arsiv_uygulamasi.exe` | - | Direkt çalıştırılabilir |
 
-### 📱 Build Information
-- **Version Code**: 12
-- **Version Name**: 2.5.2
-- **Min SDK**: 23 (Android 6.0+)
-- **Target SDK**: 35 (Android 15)
-- **Flutter Version**: 3.32.5
-- **Dart Version**: 3.8.1
+## 🚀 **v2.5.2 Yenilikleri**
 
-### 🛠️ Development Improvements
-- **Flutter Lints**: Updated to v6.0.0 for better code quality
-- **MultiDex**: Enabled for large app support
-- **Core Library Desugaring**: Updated to v2.1.4
-- **Build Optimization**: Enhanced build configurations
+### ✅ **Çözülen Sorunlar**
+- **Paket Çakışması**: APK güncelleme sorunu çözüldü
+- **QR Scanner**: `simple_barcode_scanner` ile değiştirildi
+- **Android Uyumluluğu**: API 35 desteği eklendi
+- **Bağımlılık Güncellemeleri**: Tüm paketler güncellendi
 
-### 📦 Available Downloads
+### 🔧 **Teknik İyileştirmeler**
+- **Version Code**: 20 (yüksek version code ile güncelleme garantisi)
+- **Application ID**: `com.example.arsiv_uygulamasi` (eski verilerle uyumlu)
+- **İmza Sistemi**: Aynı keystore ile imzalandı
+- **Build Optimizasyonu**: ARM64 optimize
 
-| Platform | File | Description |
-|----------|------|-------------|
-| Android | `Arsivcim-v2.5.2-android.apk` | Android APK (86.2 MB) |
-| Windows | `Arsivcim-v2.5.2-windows-x64.zip` | Windows x64 package |
-| Windows | `windows/arsiv_uygulamasi.exe` | Direct Windows executable |
-
-### 🔍 Package Updates
-- `flutter_local_notifications`: 17.2.4 → 19.3.1
-- `mobile_scanner`: Replaced with `simple_barcode_scanner` v0.3.0
-- `timezone`: 0.9.4 → 0.10.1
-- `flutter_lints`: 5.0.0 → 6.0.0
-- `permission_handler`: Compatible with v11.4.0
-
-### 🐛 Bug Fixes
-- Fixed Kotlin compilation errors in QR scanner
-- Resolved package namespace conflicts
-- Fixed Android build compatibility issues
-- Improved null safety handling
-
-### 💻 System Requirements
+### 📱 **Sistem Gereksinimleri**
 
 #### Android
-- Android 6.0 (API level 23) or higher
-- ARM64 or x86_64 architecture
-- ~100 MB free storage space
+- **Minimum**: Android 6.0 (API 23)
+- **Hedef**: Android 15 (API 35)
+- **Mimari**: ARM64 (modern telefonlar)
+- **Depolama**: ~50 MB boş alan
 
 #### Windows
-- Windows 10 64-bit or later
-- .NET Framework 4.7.2 or later
-- ~150 MB free storage space
+- **Minimum**: Windows 10 64-bit
+- **Mimari**: x64
+- **Depolama**: ~150 MB boş alan
 
-### 📋 Installation Instructions
+## 📋 **Kurulum Talimatları**
 
-#### Android
-1. Download `Arsivcim-v2.5.2-android.apk`
-2. Enable "Install from Unknown Sources" if needed
-3. Install the APK file
-4. Grant required permissions when prompted
+### 🤖 **Android - GÜNCELLEME (Önerilen)**
 
-#### Windows
-1. Download `Arsivcim-v2.5.2-windows-x64.zip`
-2. Extract to your desired location
-3. Run `arsiv_uygulamasi.exe`
-4. Windows Defender may show a warning (allow the app)
+**Eski verilerinizi korumak için:**
 
-### 🔐 Security Notes
-- All builds are compiled from verified source code
-- No external dependencies with security vulnerabilities
-- Permissions are minimal and necessary for functionality
+1. **İndir**: `Arsivcim-v2.5.2-UPDATE.apk` dosyasını indirin
+2. **Güvenlik**: Gerekirse "Bilinmeyen kaynaklardan yükleme"yi etkinleştirin
+3. **Kur**: APK'ye dokunup **"Güncelle"** seçeneğini seçin
+4. **Sonuç**: ✅ Eski verileriniz korunur, uygulama güncellenir
 
-### 🎯 Known Issues
-- Some antivirus software may flag the Windows executable (false positive)
-- First-time camera permission may require app restart on some devices
+### 🤖 **Android - YENİ KURULUM**
 
-### 📞 Support
-If you encounter any issues, please check the documentation or report them on our GitHub repository.
+**Tamamen yeni kurulum için:**
+
+1. **Kaldır**: Eski uygulamayı telefonunuzdan silin
+2. **İndir**: `Arsivcim-v2.5.2-android.apk` dosyasını indirin
+3. **Kur**: APK'yi kurun
+4. **Sonuç**: ❌ Veriler sıfırlanır, temiz başlangıç
+
+### 🖥️ **Windows**
+
+**Taşınabilir Sürüm:**
+1. **İndir**: `Arsivcim-v2.5.2-windows-x64.zip`
+2. **Çıkar**: İstediğiniz klasöre çıkarın
+3. **Çalıştır**: `arsiv_uygulamasi.exe` dosyasını çalıştırın
+
+## ⚠️ **Önemli Uyarılar**
+
+### ✅ **Başarılı Güncelleme İçin**
+- **MUTLAKA** `UPDATE.apk` dosyasını kullanın
+- Eski uygulamayı **silmeyin**
+- Güncelleme sırasında **"Güncelle"** seçeneğini seçin
+
+### ❌ **Kaçınılması Gerekenler**
+- Eski uygulamayı silmek (veri kaybı)
+- Yeni kurulum APK'sını kullanmak (çakışma)
+- Farklı keystore ile imzalanmış APK'lar
+
+## 🔧 **Versiyon Bilgileri**
+
+```yaml
+Uygulama ID: com.example.arsiv_uygulamasi
+Version Code: 20
+Version Name: 2.5.2
+Min SDK: 23 (Android 6.0)
+Target SDK: 35 (Android 15)
+Flutter: 3.32.5
+Dart: 3.8.1
+Keystore: arsivim-release-key.keystore
+```
+
+## 📞 **Destek**
+
+Sorun yaşarsanız:
+1. **UPDATE APK**'yi kullandığınızdan emin olun
+2. Telefonu yeniden başlatın
+3. GitHub Issues'a rapor edin
 
 ---
-**Full Changelog**: [v2.4.10...v2.5.2](https://github.com/user/arsiv_uygulamasi/compare/v2.4.10...v2.5.2) 
+
+**🎉 Güncelleme başarılı olursa, eski verileriniz aynen korunacak ve yeni özelliklere sahip olacaksınız!** 

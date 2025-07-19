@@ -31,14 +31,11 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.arsiv_uygulamasi"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.example.arsiv_uygulamasi"  // ESKİ ID - veri korunur
         minSdk = 23
         targetSdk = 35
-        versionCode = 12           // v2.5.2 için güncelleme
-        versionName = "2.5.2"      // pubspec.yaml ile eşleşen versiyon
+        versionCode = 20                               // Yüksek version code - güncelleme için
+        versionName = "2.5.2"      
         multiDexEnabled = true
     }
 
@@ -53,19 +50,12 @@ android {
 
     buildTypes {
         release {
-            // Use proper release signing
             signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Basit release - hiç optimizasyon yok
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
-    }
-
-    packagingOptions {
-        pickFirst("**/libc++_shared.so")
-        pickFirst("**/libjsc.so")
     }
 }
 
