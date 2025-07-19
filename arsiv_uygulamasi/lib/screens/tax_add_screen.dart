@@ -259,9 +259,14 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
                   items: TaxPeriod.values.map((period) {
                     return DropdownMenuItem(
                       value: period,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(_getTaxPeriodText(period)),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 150),
+                        child: Text(
+                          _getTaxPeriodText(period),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                     );
                   }).toList(),
@@ -289,12 +294,13 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
             items: TaxType.values.map((type) {
               return DropdownMenuItem(
                 value: type,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
                   child: Text(
                     _getTaxTypeText(type),
                     overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ),
               );
@@ -320,12 +326,13 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
             items: TaxStatus.values.map((status) {
               return DropdownMenuItem(
                 value: status,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
                   child: Text(
                     _getTaxStatusText(status),
                     overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ),
               );
@@ -735,12 +742,13 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
             items: TaxCategory.values.map((category) {
               return DropdownMenuItem(
                 value: category,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
                   child: Text(
                     _getTaxCategoryText(category),
                     overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ),
               );
