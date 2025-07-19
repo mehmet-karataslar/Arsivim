@@ -289,7 +289,14 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
             items: TaxType.values.map((type) {
               return DropdownMenuItem(
                 value: type,
-                child: Text(_getTaxTypeText(type)),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _getTaxTypeText(type),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               );
             }).toList(),
             onChanged: (value) {
@@ -313,7 +320,14 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
             items: TaxStatus.values.map((status) {
               return DropdownMenuItem(
                 value: status,
-                child: Text(_getTaxStatusText(status)),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _getTaxStatusText(status),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               );
             }).toList(),
             onChanged: (value) {
@@ -444,22 +458,31 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Verbleibendes Steuer:',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[800],
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Verbleibendes Steuer:',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[800],
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text(
-                  '${_remainingTax.toStringAsFixed(2)} EUR',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: _remainingTax > 0 ? Colors.orange[700] : Colors.green[700],
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 1,
+                  child: Text(
+                    '${_remainingTax.toStringAsFixed(2)} EUR',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _remainingTax > 0 ? Colors.orange[700] : Colors.green[700],
+                    ),
+                    textAlign: TextAlign.end,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -712,7 +735,14 @@ class _TaxAddScreenState extends State<TaxAddScreen> {
             items: TaxCategory.values.map((category) {
               return DropdownMenuItem(
                 value: category,
-                child: Text(_getTaxCategoryText(category)),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _getTaxCategoryText(category),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               );
             }).toList(),
             onChanged: (value) {

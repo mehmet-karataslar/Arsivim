@@ -473,6 +473,7 @@ class _InvoicesScreenState extends State<InvoicesScreen>
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,33 +486,41 @@ class _InvoicesScreenState extends State<InvoicesScreen>
                   color: Colors.grey.shade700,
                   fontSize: 14,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
             const SizedBox(height: 6),
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Color(int.parse(invoice.statusColor.replaceFirst('#', '0xFF'))),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    invoice.paymentStatus.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Color(int.parse(invoice.statusColor.replaceFirst('#', '0xFF'))),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      invoice.paymentStatus.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  invoice.formatliGrossAmount,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.black87,
+                Expanded(
+                  child: Text(
+                    invoice.formatliGrossAmount,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.end,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -529,6 +538,7 @@ class _InvoicesScreenState extends State<InvoicesScreen>
                 color: invoice.isOverdue ? Colors.red : Colors.grey.shade600,
                 fontWeight: invoice.isOverdue ? FontWeight.bold : FontWeight.normal,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
             Icon(
