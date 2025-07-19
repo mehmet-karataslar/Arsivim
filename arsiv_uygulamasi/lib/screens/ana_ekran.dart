@@ -605,6 +605,13 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
               ),
               label: 'Vergiler',
             ),
+            const BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.sync_rounded),
+              ),
+              label: 'Senkron',
+            ),
             // Tarayıcı sekmesi sadece Windows'da görünür
             if (Platform.isWindows)
               const BottomNavigationBarItem(
@@ -642,8 +649,10 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         case 4:
           return _buildTaxesEkrani();
         case 5:
-          return const TarayiciEkrani();
+          return _buildSenkronizasyonEkrani();
         case 6:
+          return const TarayiciEkrani();
+        case 7:
           return _buildKisilerEkrani();
         default:
           return _buildAnaEkran();
@@ -662,6 +671,8 @@ class _AnaEkranState extends State<AnaEkran> with TickerProviderStateMixin {
         case 4:
           return _buildTaxesEkrani();
         case 5:
+          return _buildSenkronizasyonEkrani();
+        case 6:
           return _buildKisilerEkrani();
         default:
           return _buildAnaEkran();
