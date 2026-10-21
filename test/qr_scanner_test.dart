@@ -55,10 +55,11 @@ class CameraPlatform extends MobileScannerPlatform {
   Future<MobileScannerViewAttributes> start(StartOptions options) async {
     starts++;
     expect(options.formats, [BarcodeFormat.qrCode]);
-    if (denied)
+    if (denied) {
       throw const MobileScannerException(
         errorCode: MobileScannerErrorCode.permissionDenied,
       );
+    }
     return const MobileScannerViewAttributes(
       cameraDirection: CameraFacing.back,
       currentTorchMode: TorchState.off,
@@ -184,14 +185,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(platform.flashes, 1);
       expect(find.byTooltip('Feneri kapat'), findsOneWidget);
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.paused,
-      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pumpAndSettle();
       expect(platform.stops, greaterThan(0));
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.resumed,
-      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(platform.starts, 2);
       platform.emit('example');
@@ -221,12 +218,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Kamera izni gerekli'), findsOneWidget);
       expect(find.text('Ayarları aç'), findsOneWidget);
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.inactive,
-      );
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.resumed,
-      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(platform.starts, 1);
       platform.denied = false;

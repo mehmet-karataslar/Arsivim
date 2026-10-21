@@ -89,60 +89,61 @@ class _QrCameraViewState extends State<QrCameraView>
         width: side,
         height: side,
       );
-      return MobileScanner(
-        controller: camera,
-        tapToFocus: true,
-        scanWindow: window,
-        useAppLifecycleState: false,
-        onDetect: (capture) {
-          for (final barcode in capture.barcodes) {
-            final value = barcode.rawValue;
-            if (value != null && value.isNotEmpty) {
-              widget.onDetected(value);
-              break;
-            }
-          }
-        },
-        onDetectError:
-            (_, _) => widget.onError(
-              'Kamera görüntüsü okunamadı. Yeniden taramayı deneyin.',
-            ),
-        placeholderBuilder:
-            (_) => const Center(
-              child: CircularProgressIndicator(
-                semanticsLabel: 'Kamera açılıyor',
-              ),
-            ),
-        errorBuilder: (context, error) {
-          final denied =
-              error.errorCode == MobileScannerErrorCode.permissionDenied;
-          return QrScannerNotice(
-            icon:
-                denied
-                    ? Icons.no_photography_outlined
-                    : Icons.videocam_off_outlined,
-            title: denied ? 'Kamera izni gerekli' : 'Kamera açılamadı',
-            message:
-                denied
-                    ? 'QR kodunu okumak için uygulamanın kamera erişimini açın.'
-                    : 'Kamerayı kullanan diğer uygulamaları kapatıp yeniden deneyin.',
-            actions: [
-              FilledButton(
-                onPressed: _updateCamera,
-                child: const Text('Yeniden dene'),
-              ),
-              if (denied)
-                TextButton(
-                  onPressed: _openSettings,
-                  child: const Text('Ayarları aç'),
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(
+            controller: camera,
+            tapToFocus: true,
+            scanWindow: window,
+            useAppLifecycleState: false,
+            onDetect: (capture) {
+              for (final barcode in capture.barcodes) {
+                final value = barcode.rawValue;
+                if (value != null && value.isNotEmpty) {
+                  widget.onDetected(value);
+                  break;
+                }
+              }
+            },
+            onDetectError:
+                (_, _) => widget.onError(
+                  'Kamera görüntüsü okunamadı. Yeniden taramayı deneyin.',
                 ),
-            ],
-          );
-        },
-        overlayBuilder:
-            (context, _) => Stack(
-              children: [
-                IgnorePointer(
+            placeholderBuilder:
+                (_) => const Center(
+                  child: CircularProgressIndicator(
+                    semanticsLabel: 'Kamera açılıyor',
+                  ),
+                ),
+            errorBuilder: (context, error) {
+              final denied =
+                  error.errorCode == MobileScannerErrorCode.permissionDenied;
+              return QrScannerNotice(
+                icon:
+                    denied
+                        ? Icons.no_photography_outlined
+                        : Icons.videocam_off_outlined,
+                title: denied ? 'Kamera izni gerekli' : 'Kamera açılamadı',
+                message:
+                    denied
+                        ? 'QR kodunu okumak için uygulamanın kamera erişimini açın.'
+                        : 'Kamerayı kullanan diğer uygulamaları kapatıp yeniden deneyin.',
+                actions: [
+                  FilledButton(
+                    onPressed: _updateCamera,
+                    child: const Text('Yeniden dene'),
+                  ),
+                  if (denied)
+                    TextButton(
+                      onPressed: _openSettings,
+                      child: const Text('Ayarları aç'),
+                    ),
+                ],
+              );
+            },
+            overlayBuilder:
+                (context, _) => IgnorePointer(
                   child: Center(
                     child: Container(
                       width: side,
@@ -154,48 +155,46 @@ class _QrCameraViewState extends State<QrCameraView>
                     ),
                   ),
                 ),
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: ValueListenableBuilder(
-                    valueListenable: camera,
-                    builder:
-                        (context, value, _) => IconButton.filledTonal(
-                          tooltip:
-                              value.torchState == TorchState.on
-                                  ? 'Feneri kapat'
-                                  : 'Feneri aç',
-                          onPressed:
-                              value.torchState == TorchState.unavailable ||
-                                      !value.isRunning
-                                  ? null
-                                  : () async {
-                                    try {
-                                      await camera.toggleTorch();
-                                    } catch (_) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Fener bu kamerada kullanılamıyor.',
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
-                          icon: Icon(
-                            value.torchState == TorchState.on
-                                ? Icons.flash_on
-                                : Icons.flash_off,
-                          ),
-                        ),
+          ),
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: ValueListenableBuilder(
+              valueListenable: camera,
+              builder:
+                  (context, value, _) => IconButton.filledTonal(
+                    tooltip:
+                        value.torchState == TorchState.on
+                            ? 'Feneri kapat'
+                            : 'Feneri aç',
+                    onPressed:
+                        value.torchState == TorchState.unavailable ||
+                                !value.isRunning
+                            ? null
+                            : () async {
+                              try {
+                                await camera.toggleTorch();
+                              } catch (_) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Fener bu kamerada kullanılamıyor.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                    icon: Icon(
+                      value.torchState == TorchState.on
+                          ? Icons.flash_on
+                          : Icons.flash_off,
+                    ),
                   ),
-                ),
-              ],
             ),
+          ),
+        ],
       );
     },
   );

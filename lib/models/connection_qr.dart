@@ -28,8 +28,10 @@ class ConnectionQr {
     try {
       if (raw.length > 16384) throw invalid;
       final data = jsonDecode(raw);
-      if (data is! Map<String, dynamic> || data['type'] != 'arsivim_connection')
+      if (data is! Map<String, dynamic> ||
+          data['type'] != 'arsivim_connection') {
         throw invalid;
+      }
       if (data['account_version'] != 1 ||
           data['session_version'] != 1 ||
           data['transfer_version'] != GuvenliAktarimServisi.surum) {
