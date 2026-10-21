@@ -40,10 +40,19 @@ class SenkronizasyonYoneticiServisi {
     _httpSunucuCallbackleriKur();
     _httpSunucu.onUzakGonderim = (ip, ids) async {
       if (transferRunning) throw StateError('Başka bir aktarım devam ediyor.');
-      final success = await seciliBelgeleriGonder(ip, ids, baglantiyiKoru: true);
+      final success = await seciliBelgeleriGonder(
+        ip,
+        ids,
+        baglantiyiKoru: true,
+      );
       final results = List<Map<String, dynamic>>.from(sonAktarimSonuclari);
       return {
-        'status': success ? 'completed' : _stopRequested ? 'cancelled' : 'partial',
+        'status':
+            success
+                ? 'completed'
+                : _stopRequested
+                ? 'cancelled'
+                : 'partial',
         'completed': results.where((r) => r['durum'] != 'hata').length,
         'failed': results.where((r) => r['durum'] == 'hata').length,
         'results': results,
@@ -67,10 +76,13 @@ class SenkronizasyonYoneticiServisi {
       stopVersion++;
       final job = _uzakIs;
       if (job != null) {
-        unawaited(AktarimHttp.jsonIstek(
-          Uri.parse('http://${job.ip}:8080/sync/v2/send-stop'), job.token,
-          body: {'job_id': job.id},
-        ).catchError((Object _) => <String, dynamic>{'success': false}));
+        unawaited(
+          AktarimHttp.jsonIstek(
+            Uri.parse('http://${job.ip}:8080/sync/v2/send-stop'),
+            job.token,
+            body: {'job_id': job.id},
+          ).catchError((Object _) => <String, dynamic>{'success': false}),
+        );
       }
       _changed();
     }
@@ -487,7 +499,9 @@ class SenkronizasyonYoneticiServisi {
         'device_name': _httpSunucu.cihazAdi ?? 'Arsivim',
         'platform': Platform.operatingSystem,
         if (remember) ...{
-          'trust_version': 1, 'trust_id': trustId, 'trust_secret': secret,
+          'trust_version': 1,
+          'trust_id': trustId,
+          'trust_secret': secret,
         },
       },
     );
@@ -510,18 +524,27 @@ class SenkronizasyonYoneticiServisi {
     }
     await _httpSunucu.hesapEslesmesi.karsiCihazaBaglanildi(ip, remote);
     if (remember) {
-      if (result['trust_version'] != 1 || result['trust_id'] != trustId) throw HesapHatasi('Cihaz güveni onaylanmadı.');
+      if (result['trust_version'] != 1 || result['trust_id'] != trustId)
+        throw HesapHatasi('Cihaz güveni onaylanmadı.');
       await (await _httpSunucu.guvenServisi).kaydet(
-        guvenId: trustId, gizliAnahtar: secret, hesap: remote,
+        guvenId: trustId,
+        gizliAnahtar: secret,
+        hesap: remote,
         cihazId: connectionInfo['device_id'] as String,
         cihazAdi: connectionInfo['device_name'] as String,
-        platform: connectionInfo['platform'] as String?, sonIp: ip,
+        platform: connectionInfo['platform'] as String?,
+        sonIp: ip,
       );
-      if (session != AuthServisi.instance.sessionGeneration) throw HesapHatasi('Oturum değişti.');
+      if (session != AuthServisi.instance.sessionGeneration)
+        throw HesapHatasi('Oturum değişti.');
       _httpSunucu.guvenBaglantilari[ip] = trustId;
-      final ready = await AktarimHttp.jsonIstek(Uri.parse('http://$ip:8080/sync/v2/ready'),
-        _httpSunucu.eslesmisAnahtarlar[ip]!, body: {});
-      if (ready['success'] != true) throw HesapHatasi('Cihaz bağlantısı tamamlanamadı.');
+      final ready = await AktarimHttp.jsonIstek(
+        Uri.parse('http://$ip:8080/sync/v2/ready'),
+        _httpSunucu.eslesmisAnahtarlar[ip]!,
+        body: {},
+      );
+      if (ready['success'] != true)
+        throw HesapHatasi('Cihaz bağlantısı tamamlanamadı.');
     }
   }
 
@@ -533,10 +556,16 @@ class SenkronizasyonYoneticiServisi {
   Future<void> cihaziUnut(String trustId) async {
     await AuthServisi.instance.hesapTanitim();
     await (await _httpSunucu.guvenServisi).unut(trustId);
-    final ips = _httpSunucu.guvenBaglantilari.entries.where((e) => e.value == trustId).map((e) => e.key).toList();
+    final ips =
+        _httpSunucu.guvenBaglantilari.entries
+            .where((e) => e.value == trustId)
+            .map((e) => e.key)
+            .toList();
     for (final ip in ips) {
       final devices = _bagliCihazlar.where((d) => d['ip'] == ip).toList();
-      for (final device in devices) { await cihazBaglantiKes(device['device_id'] as String); }
+      for (final device in devices) {
+        await cihazBaglantiKes(device['device_id'] as String);
+      }
       _httpSunucu.hesapEslesmesi.baglantiKes(ip);
       _httpSunucu.eslesmisAnahtarlar.remove(ip);
       _httpSunucu.guvenBaglantilari.remove(ip);
@@ -553,49 +582,92 @@ class SenkronizasyonYoneticiServisi {
       await AuthServisi.instance.hesapTanitim();
       final service = await _httpSunucu.guvenServisi;
       final trust = await service.bul(trustId);
-      if (trust == null) throw HesapHatasi('Cihaz güveni bulunamadı. QR ile yeniden eşleştirin.');
+      if (trust == null)
+        throw HesapHatasi(
+          'Cihaz güveni bulunamadı. QR ile yeniden eşleştirin.',
+        );
       ip = adres?.trim() ?? trust.sonIp;
-      if (ip == null || InternetAddress.tryParse(ip)?.type != InternetAddressType.IPv4) {
+      if (ip == null ||
+          InternetAddress.tryParse(ip)?.type != InternetAddressType.IPv4) {
         throw HesapHatasi('Karşı cihazın güncel yerel IP adresini girin.');
       }
-      if (_bagliCihazlar.any((d) => d['device_id'] == trust.cihazId)) return true;
+      if (_bagliCihazlar.any((d) => d['device_id'] == trust.cihazId))
+        return true;
       if (!_httpSunucu.calisiyorMu) await _httpSunucu.sunucuyuBaslat();
       final identity = {
-        'trust_version': 1, 'device_id': await service.cihazKimligi(),
-        'archive_id': trust.arsivId, 'owner_id': trust.yoneticiId,
+        'trust_version': 1,
+        'device_id': await service.cihazKimligi(),
+        'archive_id': trust.arsivId,
+        'owner_id': trust.yoneticiId,
       };
       final challenge = await AktarimHttp.jsonIstek(
-        Uri.parse('http://$ip:8080/sync/v2/trust-challenge'), trust.gizliAnahtar,
-        guvenId: trustId, body: identity);
-      if (challenge['success'] != true || challenge['trust_version'] != 1 ||
-          challenge['device_id'] != trust.cihazId || challenge['archive_id'] != trust.arsivId ||
-          challenge['owner_id'] != trust.yoneticiId || challenge['challenge'] is! String) {
+        Uri.parse('http://$ip:8080/sync/v2/trust-challenge'),
+        trust.gizliAnahtar,
+        guvenId: trustId,
+        body: identity,
+      );
+      if (challenge['success'] != true ||
+          challenge['trust_version'] != 1 ||
+          challenge['device_id'] != trust.cihazId ||
+          challenge['archive_id'] != trust.arsivId ||
+          challenge['owner_id'] != trust.yoneticiId ||
+          challenge['challenge'] is! String) {
         throw HesapHatasi('Karşı cihazın kimliği doğrulanamadı.');
       }
       final result = await AktarimHttp.jsonIstek(
-        Uri.parse('http://$ip:8080/sync/v2/trust-resume'), trust.gizliAnahtar,
-        guvenId: trustId, body: {...identity, 'challenge': challenge['challenge'],
-          'reverse_token': _httpSunucu.aktarimAnahtari});
+        Uri.parse('http://$ip:8080/sync/v2/trust-resume'),
+        trust.gizliAnahtar,
+        guvenId: trustId,
+        body: {
+          ...identity,
+          'challenge': challenge['challenge'],
+          'reverse_token': _httpSunucu.aktarimAnahtari,
+        },
+      );
       final token = result['transfer_token'];
-      if (result['success'] != true || result['trust_version'] != 1 ||
-          result['device_id'] != trust.cihazId || result['surum'] != GuvenliAktarimServisi.surum ||
-          token is! String || !RegExp(r'^[a-f0-9]{48}$').hasMatch(token) ||
-          session != AuthServisi.instance.sessionGeneration || await service.bul(trustId) == null) {
+      if (result['success'] != true ||
+          result['trust_version'] != 1 ||
+          result['device_id'] != trust.cihazId ||
+          result['surum'] != GuvenliAktarimServisi.surum ||
+          token is! String ||
+          !RegExp(r'^[a-f0-9]{48}$').hasMatch(token) ||
+          session != AuthServisi.instance.sessionGeneration ||
+          await service.bul(trustId) == null) {
         throw HesapHatasi('Tanınan cihaz bağlantısı doğrulanamadı.');
       }
       final remote = Map<String, dynamic>.from(result['account'] as Map);
       await _httpSunucu.hesapEslesmesi.guvenilirBaglanti(ip, remote);
-      await service.kaydet(guvenId: trustId, gizliAnahtar: trust.gizliAnahtar,
-        hesap: remote, cihazId: trust.cihazId, cihazAdi: trust.cihazAdi,
-        platform: trust.platform, sonIp: ip);
-      if (session != AuthServisi.instance.sessionGeneration) throw HesapHatasi('Oturum değişti.');
+      await service.kaydet(
+        guvenId: trustId,
+        gizliAnahtar: trust.gizliAnahtar,
+        hesap: remote,
+        cihazId: trust.cihazId,
+        cihazAdi: trust.cihazAdi,
+        platform: trust.platform,
+        sonIp: ip,
+      );
+      if (session != AuthServisi.instance.sessionGeneration)
+        throw HesapHatasi('Oturum değişti.');
       _httpSunucu.eslesmisAnahtarlar[ip] = token;
       _httpSunucu.guvenBaglantilari[ip] = trustId;
-      final ready = await AktarimHttp.jsonIstek(Uri.parse('http://$ip:8080/sync/v2/ready'), token, body: {});
-      if (ready['success'] != true) throw HesapHatasi('Cihaz bağlantısı tamamlanamadı.');
-      final device = <String, dynamic>{...trust.toMap(), 'name': trust.cihazAdi,
-        'ip': ip, 'connected_at': DateTime.now(), 'status': 'connected', 'online': true};
-      _bagliCihazlar.removeWhere((d) => d['ip'] == ip || d['device_id'] == trust.cihazId);
+      final ready = await AktarimHttp.jsonIstek(
+        Uri.parse('http://$ip:8080/sync/v2/ready'),
+        token,
+        body: {},
+      );
+      if (ready['success'] != true)
+        throw HesapHatasi('Cihaz bağlantısı tamamlanamadı.');
+      final device = <String, dynamic>{
+        ...trust.toMap(),
+        'name': trust.cihazAdi,
+        'ip': ip,
+        'connected_at': DateTime.now(),
+        'status': 'connected',
+        'online': true,
+      };
+      _bagliCihazlar.removeWhere(
+        (d) => d['ip'] == ip || d['device_id'] == trust.cihazId,
+      );
       _bagliCihazlar.add(device);
       _changed();
       onDeviceListChanged?.call();
@@ -772,9 +844,15 @@ class SenkronizasyonYoneticiServisi {
     final connection = _httpSunucu.hesapEslesmesi.baglantiKimligi(ip);
     final token = await _aktarimAnahtari(ip);
     final capability = await AktarimHttp.jsonIstek(
-      Uri.parse('http://$ip:8080/sync/v2/capabilities'), token);
-    if (capability['inventory_version'] != 1 || capability['direction_version'] != 1) {
-      throw AktarimHatasi('SURUM', 'Yön seçimi için iki cihazı da güncelleyin.');
+      Uri.parse('http://$ip:8080/sync/v2/capabilities'),
+      token,
+    );
+    if (capability['inventory_version'] != 1 ||
+        capability['direction_version'] != 1) {
+      throw AktarimHatasi(
+        'SURUM',
+        'Yön seçimi için iki cihazı da güncelleyin.',
+      );
     }
     final engine = GuvenliAktarimServisi(
       await _veriTabani.database,
@@ -787,20 +865,33 @@ class SenkronizasyonYoneticiServisi {
       do {
         await _httpSunucu.hesapEslesmesi.yetkiKontrol(ip);
         if (_httpSunucu.hesapEslesmesi.baglantiKimligi(ip) != connection) {
-          throw AktarimHatasi('OTURUM', 'Bağlantı değişti; karşılaştırmayı yenileyin.');
+          throw AktarimHatasi(
+            'OTURUM',
+            'Bağlantı değişti; karşılaştırmayı yenileyin.',
+          );
         }
-        final page = remote
-            ? await AktarimHttp.jsonIstek(
-                Uri.parse('http://$ip:8080/sync/v2/inventory'), token,
-                body: {'after': cursor})
-            : await inventory.page(afterId: cursor);
-        if (page['success'] != true || page['inventoryVersion'] != 1 ||
+        final page =
+            remote
+                ? await AktarimHttp.jsonIstek(
+                  Uri.parse('http://$ip:8080/sync/v2/inventory'),
+                  token,
+                  body: {'after': cursor},
+                )
+                : await inventory.page(afterId: cursor);
+        if (page['success'] != true ||
+            page['inventoryVersion'] != 1 ||
             page['protocolVersion'] != GuvenliAktarimServisi.surum ||
-            page['items'] is! List || (page['items'] as List).length > 200) {
-          throw AktarimHatasi('ENVANTER', page['error'] as String? ?? 'Belge listesi doğrulanamadı.');
+            page['items'] is! List ||
+            (page['items'] as List).length > 200) {
+          throw AktarimHatasi(
+            'ENVANTER',
+            page['error'] as String? ?? 'Belge listesi doğrulanamadı.',
+          );
         }
-        final entries = (page['items'] as List)
-            .map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        final entries =
+            (page['items'] as List)
+                .map((item) => Map<String, dynamic>.from(item as Map))
+                .toList();
         var previous = cursor ?? 0;
         for (final item in entries) {
           if (item['id'] is! int || (item['id'] as int) <= previous) {
@@ -810,33 +901,53 @@ class SenkronizasyonYoneticiServisi {
         }
         items.addAll(entries);
         final next = page['next'];
-        if (items.length > 100000 || (next != null &&
-            (next is! int || entries.isEmpty || next != previous))) {
-          throw AktarimHatasi('ENVANTER', 'Belge listesi sınırı veya devam bilgisi geçersiz.');
+        if (items.length > 100000 ||
+            (next != null &&
+                (next is! int || entries.isEmpty || next != previous))) {
+          throw AktarimHatasi(
+            'ENVANTER',
+            'Belge listesi sınırı veya devam bilgisi geçersiz.',
+          );
         }
         cursor = next as int?;
       } while (cursor != null);
       return items;
     }
+
     final local = await read(false);
     final remote = await read(true);
     final compared = AktarimEnvanterServisi.compare(local, remote);
-    final titles = {for (final item in local) item['id']: item['title'] ?? item['fileName']};
-    final remoteTitles = {for (final item in remote) item['id']: item['title'] ?? item['fileName']};
+    final titles = {
+      for (final item in local) item['id']: item['title'] ?? item['fileName'],
+    };
+    final remoteTitles = {
+      for (final item in remote) item['id']: item['title'] ?? item['fileName'],
+    };
     return SyncComparison(
       sendIds: List<int>.from(compared['localNewIds'] as List),
       receiveIds: List<int>.from(compared['remoteNewIds'] as List),
       same: compared['same'] as int,
-      conflicts: [for (final conflict in compared['conflicts'] as List)
-        {...(conflict['localIds'] as List).map((id) => titles[id]),
-         ...(conflict['remoteIds'] as List).map((id) => remoteTitles[id])}
-          .whereType<String>().join(', ')],
+      conflicts: [
+        for (final conflict in compared['conflicts'] as List)
+          {
+            ...(conflict['localIds'] as List).map((id) => titles[id]),
+            ...(conflict['remoteIds'] as List).map((id) => remoteTitles[id]),
+          }.whereType<String>().join(', '),
+      ],
     );
   }
 
-  Future<bool> seciliBelgeleriGonder(String ip, List<int> ids, {bool baglantiyiKoru = false}) async {
+  Future<bool> seciliBelgeleriGonder(
+    String ip,
+    List<int> ids, {
+    bool baglantiyiKoru = false,
+  }) async {
     if (ids.isEmpty) return true;
-    return belgeleriSenkronEt(ip, belgeIds: ids, baglantiyiKoru: baglantiyiKoru);
+    return belgeleriSenkronEt(
+      ip,
+      belgeIds: ids,
+      baglantiyiKoru: baglantiyiKoru,
+    );
   }
 
   Future<bool> karsiCihazdanAl(String ip, List<int> ids) async {
@@ -855,57 +966,100 @@ class SenkronizasyonYoneticiServisi {
       for (var offset = 0; offset < selected.length; offset += 200) {
         if (_stopRequested) break;
         await _httpSunucu.hesapEslesmesi.yetkiKontrol(ip);
-        if (_httpSunucu.hesapEslesmesi.baglantiKimligi(ip) != connection) throw HesapHatasi('Bağlantı değişti.');
+        if (_httpSunucu.hesapEslesmesi.baglantiKimligi(ip) != connection)
+          throw HesapHatasi('Bağlantı değişti.');
         final batch = selected.skip(offset).take(200).toList();
-        _sendProgress(SenkronizasyonIlerleme(
-          asama: SenkronizasyonAsamasi.belgelerGonderiliyor,
-          aciklama: 'Karşı cihazdan belgeler alınıyor', toplamIslem: selected.length,
-          tamamlananIslem: completed,
-        ));
-        var job = await AktarimHttp.jsonIstek(Uri.parse('http://$ip:8080/sync/v2/send-request'),
-          token, body: {'request_id': GuvenliAktarimServisi.kimlik(), 'ids': batch});
+        _sendProgress(
+          SenkronizasyonIlerleme(
+            asama: SenkronizasyonAsamasi.belgelerGonderiliyor,
+            aciklama: 'Karşı cihazdan belgeler alınıyor',
+            toplamIslem: selected.length,
+            tamamlananIslem: completed,
+          ),
+        );
+        var job = await AktarimHttp.jsonIstek(
+          Uri.parse('http://$ip:8080/sync/v2/send-request'),
+          token,
+          body: {'request_id': GuvenliAktarimServisi.kimlik(), 'ids': batch},
+        );
         if (job['success'] != true || job['job_id'] is! String) {
-          throw AktarimHatasi('ISTEK', 'Karşı cihaz aktarımı başlatamadı: ${job['error'] ?? ''}');
+          throw AktarimHatasi(
+            'ISTEK',
+            'Karşı cihaz aktarımı başlatamadı: ${job['error'] ?? ''}',
+          );
         }
         final id = job['job_id'] as String;
         _uzakIs = (ip: ip, id: id, token: token);
         var stopSent = false;
         while (['queued', 'running', 'stopping'].contains(job['status'])) {
           if (_stopRequested && !stopSent) {
-            await AktarimHttp.jsonIstek(Uri.parse('http://$ip:8080/sync/v2/send-stop'), token, body: {'job_id': id});
+            await AktarimHttp.jsonIstek(
+              Uri.parse('http://$ip:8080/sync/v2/send-stop'),
+              token,
+              body: {'job_id': id},
+            );
             stopSent = true;
           }
           await Future<void>.delayed(const Duration(milliseconds: 750));
           await _httpSunucu.hesapEslesmesi.yetkiKontrol(ip);
-          if (_httpSunucu.hesapEslesmesi.baglantiKimligi(ip) != connection) throw HesapHatasi('Bağlantı değişti.');
-          job = await AktarimHttp.jsonIstek(Uri.parse('http://$ip:8080/sync/v2/send-status'), token, body: {'job_id': id});
-          if (job['success'] != true) throw AktarimHatasi('ONAY', 'Karşı cihazın aktarım sonucu alınamadı.');
+          if (_httpSunucu.hesapEslesmesi.baglantiKimligi(ip) != connection)
+            throw HesapHatasi('Bağlantı değişti.');
+          job = await AktarimHttp.jsonIstek(
+            Uri.parse('http://$ip:8080/sync/v2/send-status'),
+            token,
+            body: {'job_id': id},
+          );
+          if (job['success'] != true)
+            throw AktarimHatasi(
+              'ONAY',
+              'Karşı cihazın aktarım sonucu alınamadı.',
+            );
         }
         _uzakIs = null;
         final result = job['result'];
         if (result is Map && result['results'] is List) {
-          sonAktarimSonuclari.addAll((result['results'] as List)
-            .map((r) => Map<String, dynamic>.from(r as Map)));
+          sonAktarimSonuclari.addAll(
+            (result['results'] as List).map(
+              (r) => Map<String, dynamic>.from(r as Map),
+            ),
+          );
           completed += (result['completed'] as int?) ?? 0;
         }
-        if (job['status'] != 'completed' || result is! Map || result['completed'] != batch.length) {
+        if (job['status'] != 'completed' ||
+            result is! Map ||
+            result['completed'] != batch.length) {
           allSucceeded = false;
           break;
         }
       }
-      final success = allSucceeded && !_stopRequested && completed == ids.toSet().length;
-      _sendProgress(SenkronizasyonIlerleme(
-        asama: success ? SenkronizasyonAsamasi.tamamlandi : SenkronizasyonAsamasi.hata,
-        aciklama: '$completed belge alındı ve doğrulandı.',
-        toplamIslem: ids.length, tamamlananIslem: completed,
-        hataMesaji: success ? null : 'Kalan belgeler tamamlanmadı; yeniden karşılaştırın.',
-      ));
+      final success =
+          allSucceeded && !_stopRequested && completed == ids.toSet().length;
+      _sendProgress(
+        SenkronizasyonIlerleme(
+          asama:
+              success
+                  ? SenkronizasyonAsamasi.tamamlandi
+                  : SenkronizasyonAsamasi.hata,
+          aciklama: '$completed belge alındı ve doğrulandı.',
+          toplamIslem: ids.length,
+          tamamlananIslem: completed,
+          hataMesaji:
+              success
+                  ? null
+                  : 'Kalan belgeler tamamlanmadı; yeniden karşılaştırın.',
+        ),
+      );
       if (success && _otomatikBaglantiKes) await _otomatikBaglantiKes_Func(ip);
       return success;
     } catch (error) {
       onError?.call('Alma işlemi tamamlanamadı: $error');
-      _sendProgress(SenkronizasyonIlerleme(asama: SenkronizasyonAsamasi.hata,
-        aciklama: '$completed belge doğrulandı; kalanların durumu belirsiz.', hataMesaji: error.toString()));
+      _sendProgress(
+        SenkronizasyonIlerleme(
+          asama: SenkronizasyonAsamasi.hata,
+          aciklama: '$completed belge doğrulandı; kalanların durumu belirsiz.',
+          hataMesaji: error.toString(),
+        ),
+      );
       return false;
     } finally {
       _uzakIs = null;
@@ -1000,7 +1154,11 @@ class SenkronizasyonYoneticiServisi {
         belgeler = [];
         for (final id in belgeIds.toSet()) {
           final document = await _veriTabani.belgeGetir(id);
-          if (document == null) throw AktarimHatasi('KAYNAK_DEGISTI', 'Belge listesi değişti; yeniden karşılaştırın.');
+          if (document == null)
+            throw AktarimHatasi(
+              'KAYNAK_DEGISTI',
+              'Belge listesi değişti; yeniden karşılaştırın.',
+            );
           belgeler.add(document);
         }
       }

@@ -54,7 +54,13 @@ class SyncDevices extends StatelessWidget {
             if (onTrusted != null)
               TextButton.icon(
                 key: const ValueKey('sync-trusted-devices'),
-                onPressed: pairing || controller.busy || controller.transferring || controller.gateway.transferring ? null : onTrusted,
+                onPressed:
+                    pairing ||
+                            controller.busy ||
+                            controller.transferring ||
+                            controller.gateway.transferring
+                        ? null
+                        : onTrusted,
                 icon: const Icon(Icons.verified_user_outlined, size: 18),
                 label: const Text('Tanınan cihazlar'),
               ),
@@ -127,9 +133,16 @@ class SyncDevices extends StatelessWidget {
                               ),
                               if (onCompare != null)
                                 TextButton.icon(
-                                  onPressed: controller.transferring || controller.gateway.transferring || controller.busy
-                                      ? null : () => onCompare!(device),
-                                  icon: const Icon(Icons.compare_arrows, size: 18),
+                                  onPressed:
+                                      controller.transferring ||
+                                              controller.gateway.transferring ||
+                                              controller.busy
+                                          ? null
+                                          : () => onCompare!(device),
+                                  icon: const Icon(
+                                    Icons.compare_arrows,
+                                    size: 18,
+                                  ),
                                   label: const Text('Karşılaştır ve aktar'),
                                 ),
                             ],

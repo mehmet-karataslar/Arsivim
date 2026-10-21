@@ -41,13 +41,18 @@ class SyncGateway {
 
   Future<bool> connect(String qr) => manager.qrKoduTarandi(qr);
   Future<List<Map<String, dynamic>>> trustedDevices() async =>
-      (await manager.taninanCihazlar()).map((device) => device.toMap()).toList();
+      (await manager.taninanCihazlar())
+          .map((device) => device.toMap())
+          .toList();
   Future<bool> reconnect(String trustId, String address) =>
       manager.taninanCihazaBaglan(trustId, adres: address);
   Future<void> forget(String trustId) => manager.cihaziUnut(trustId);
-  Future<SyncComparison> compare(SyncDevice device) => manager.cihazlaKarsilastir(device.ip);
-  Future<bool> sendIds(SyncDevice device, List<int> ids) => manager.seciliBelgeleriGonder(device.ip, ids);
-  Future<bool> receive(SyncDevice device, List<int> ids) => manager.karsiCihazdanAl(device.ip, ids);
+  Future<SyncComparison> compare(SyncDevice device) =>
+      manager.cihazlaKarsilastir(device.ip);
+  Future<bool> sendIds(SyncDevice device, List<int> ids) =>
+      manager.seciliBelgeleriGonder(device.ip, ids);
+  Future<bool> receive(SyncDevice device, List<int> ids) =>
+      manager.karsiCihazdanAl(device.ip, ids);
   Stream<SenkronizasyonIlerleme> progress() => manager.createProgressStream();
   Future<bool> send(SyncDevice device, {List<BelgeModeli>? documents}) =>
       manager.belgeleriSenkronEt(device.ip, belgeler: documents);

@@ -12,7 +12,8 @@ class HesapEslesmeServisi {
   int? _oturum;
   bool _mesgul = false;
   Future<void> Function(String ip)? ekYetkiKontrol;
-  final Map<String, ({int oturum, String arsiv, String baglanti})> _cihazlar = {};
+  final Map<String, ({int oturum, String arsiv, String baglanti})> _cihazlar =
+      {};
 
   String baglantiKimligi(String ip) {
     final device = _cihazlar[ip];

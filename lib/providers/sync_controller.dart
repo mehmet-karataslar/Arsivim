@@ -174,7 +174,10 @@ class SyncController extends ChangeNotifier {
     _notify();
   }
 
-  Future<void> transferDirection(SyncDevice device, SyncDirectionChoice choice) async {
+  Future<void> transferDirection(
+    SyncDevice device,
+    SyncDirectionChoice choice,
+  ) async {
     if (busy || transferring || gateway.transferring) {
       actionMessage = 'Başka bir aktarım devam ediyor.';
       _notify();
@@ -190,15 +193,19 @@ class SyncController extends ChangeNotifier {
         progress = value;
         _notify();
       });
-      final success = choice.direction == SyncDirection.send
-          ? await gateway.sendIds(device, choice.comparison.sendIds)
-          : await gateway.receive(device, choice.comparison.receiveIds);
-      actionMessage = stopping
-          ? 'Aktarım durduruldu. Tamamlanan belgeler korundu.'
-          : success ? 'Seçilen yöndeki yeni belgeler aktarıldı ve doğrulandı.'
-          : 'Aktarım tam olarak tamamlanamadı. Sonuçları kontrol edip yeniden karşılaştırın.';
+      final success =
+          choice.direction == SyncDirection.send
+              ? await gateway.sendIds(device, choice.comparison.sendIds)
+              : await gateway.receive(device, choice.comparison.receiveIds);
+      actionMessage =
+          stopping
+              ? 'Aktarım durduruldu. Tamamlanan belgeler korundu.'
+              : success
+              ? 'Seçilen yöndeki yeni belgeler aktarıldı ve doğrulandı.'
+              : 'Aktarım tam olarak tamamlanamadı. Sonuçları kontrol edip yeniden karşılaştırın.';
     } catch (_) {
-      actionMessage = 'Aktarım tamamlanamadı. Mevcut belgeler korundu; yeniden karşılaştırın.';
+      actionMessage =
+          'Aktarım tamamlanamadı. Mevcut belgeler korundu; yeniden karşılaştırın.';
     } finally {
       await _progressSubscription?.cancel();
       _progressSubscription = null;

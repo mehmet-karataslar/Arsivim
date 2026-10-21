@@ -48,13 +48,15 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   final _seenConnections = <String>{};
   final _pendingConnections = <String>[];
   BuildContext? _qrDialogContext;
-  String _connectionKey(SyncDevice device) => '${device.id}:${device.ip}:${device.connectedAt}';
+  String _connectionKey(SyncDevice device) =>
+      '${device.id}:${device.ip}:${device.connectedAt}';
 
   void _connectionsChanged() {
     final current = _data.devices.map(_connectionKey).toSet();
     _seenConnections.removeWhere((key) => !current.contains(key));
     for (final device in _data.devices) {
-      if (_seenConnections.add(_connectionKey(device))) _pendingConnections.add(device.id);
+      if (_seenConnections.add(_connectionKey(device)))
+        _pendingConnections.add(device.id);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -67,8 +69,14 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _offerNextConnection() async {
-    if (!mounted || _pairing || _qrOpen || _directionOpen || _trustedOpen ||
-        _data.transferring || _data.gateway.transferring) return;
+    if (!mounted ||
+        _pairing ||
+        _qrOpen ||
+        _directionOpen ||
+        _trustedOpen ||
+        _data.transferring ||
+        _data.gateway.transferring)
+      return;
     while (_pendingConnections.isNotEmpty) {
       final id = _pendingConnections.removeAt(0);
       final matches = _data.devices.where((d) => d.id == id);
@@ -80,16 +88,23 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _compare(SyncDevice device) async {
-    if (_directionOpen || _data.transferring || _data.gateway.transferring) return;
+    if (_directionOpen || _data.transferring || _data.gateway.transferring)
+      return;
     _directionOpen = true;
     try {
-      final localName = Platform.isAndroid || Platform.isIOS ? 'Bu telefon' : 'Bu bilgisayar';
+      final localName =
+          Platform.isAndroid || Platform.isIOS ? 'Bu telefon' : 'Bu bilgisayar';
       final choice = await showDialog<SyncDirectionChoice>(
         context: context,
-        builder: (_) => SyncDirectionDialog(localName: localName, remoteName: device.name,
-          compare: () => _data.gateway.compare(device)),
+        builder:
+            (_) => SyncDirectionDialog(
+              localName: localName,
+              remoteName: device.name,
+              compare: () => _data.gateway.compare(device),
+            ),
       );
-      if (choice != null && mounted) await _data.transferDirection(device, choice);
+      if (choice != null && mounted)
+        await _data.transferDirection(device, choice);
     } finally {
       _directionOpen = false;
       if (mounted) _offerNextConnection();
@@ -100,13 +115,16 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     if (_trustedOpen || _directionOpen) return;
     _trustedOpen = true;
     try {
-      await showDialog<void>(context: context,
-        builder: (_) => TrustedDevicesDialog(gateway: _data.gateway));
+      await showDialog<void>(
+        context: context,
+        builder: (_) => TrustedDevicesDialog(gateway: _data.gateway),
+      );
     } finally {
       _trustedOpen = false;
       if (mounted) _offerNextConnection();
     }
   }
+
   late final Future<int?> Function(String, List<Map<String, dynamic>>)
   _choosePerson;
   @override
@@ -179,33 +197,33 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
           builder: (ctx) {
             _qrDialogContext = ctx;
             return AlertDialog(
-                title: const Text('Cihaz bağlantı QR kodu'),
-                content: SizedBox(
-                  width: (MediaQuery.sizeOf(ctx).width - 112).clamp(160, 360),
-                  child: SingleChildScrollView(
-                    child: AnimatedBuilder(
-                      animation: _data.gateway.changes,
-                      builder:
-                          (context, _) =>
-                              _data.gateway.isQrValid(qrCode)
-                                  ? SyncPairingCode(
-                                    data: qrCode,
-                                    size: (MediaQuery.sizeOf(ctx).width - 112)
-                                        .clamp(160, 360),
-                                  )
-                                  : const Text(
-                                    'Bu QR kod artık geçerli değil. Pencereyi kapatıp yeni kod oluşturun.',
-                                  ),
-                    ),
+              title: const Text('Cihaz bağlantı QR kodu'),
+              content: SizedBox(
+                width: (MediaQuery.sizeOf(ctx).width - 112).clamp(160, 360),
+                child: SingleChildScrollView(
+                  child: AnimatedBuilder(
+                    animation: _data.gateway.changes,
+                    builder:
+                        (context, _) =>
+                            _data.gateway.isQrValid(qrCode)
+                                ? SyncPairingCode(
+                                  data: qrCode,
+                                  size: (MediaQuery.sizeOf(ctx).width - 112)
+                                      .clamp(160, 360),
+                                )
+                                : const Text(
+                                  'Bu QR kod artık geçerli değil. Pencereyi kapatıp yeni kod oluşturun.',
+                                ),
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Kapat'),
-                  ),
-                ],
-              );
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Kapat'),
+                ),
+              ],
+            );
           },
         );
       }
@@ -507,10 +525,15 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                       ),
                     if ((overview?.pending ?? 0) > 0)
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                        child: Text(Platform.isAndroid || Platform.isIOS
-                          ? 'Telefonda yeni veya değişen ${overview!.pending} belge var. Bilgisayarla karşılaştırabilirsiniz.'
-                          : 'Bilgisayarda yeni veya değişen ${overview!.pending} belge var. Telefonla karşılaştırabilirsiniz.'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 12,
+                        ),
+                        child: Text(
+                          Platform.isAndroid || Platform.isIOS
+                              ? 'Telefonda yeni veya değişen ${overview!.pending} belge var. Bilgisayarla karşılaştırabilirsiniz.'
+                              : 'Bilgisayarda yeni veya değişen ${overview!.pending} belge var. Telefonla karşılaştırabilirsiniz.',
+                        ),
                       ),
                     if (!compact) ...[summary, const SizedBox(height: 16)],
                     SyncOptions(controller: _data, compact: compact),

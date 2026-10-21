@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:arsiv_uygulamasi/services/arsiv_hesap_servisi.dart';
+import 'package:arsiv_uygulamasi/services/aktarim_http.dart';
 import 'package:arsiv_uygulamasi/services/guvenilir_cihaz_servisi.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -119,10 +120,7 @@ void main() {
         List.generate(20, (_) => restart().cihazKimligi()),
       );
       expect(ids.toSet(), hasLength(1));
-      expect(
-        ids.singleWhere((_) => false, orElse: () => ids.first),
-        matches(r'^[a-f0-9]{48}$'),
-      );
+      expect(ids.first, matches(r'^[a-f0-9]{48}$'));
       expect(depo.writes, 1);
       expect(await restart().cihazKimligi(), ids.first);
       final other = GuvenilirCihazServisi(db, depo: BellekDeposu());
@@ -494,6 +492,130 @@ void main() {
       },
     );
   }
+
+  test(
+    'encrypted transport authenticates both peers and binds response context',
+    () async {
+      await enroll();
+      final clientDepot = BellekDeposu();
+      final client = GuvenilirCihazServisi(
+        db,
+        depo: clientDepot,
+        saat: () => now,
+      );
+      final clientId = await client.cihazKimligi();
+      final serverId = await service.cihazKimligi();
+      final id = GuvenilirCihazServisi.yeniGuvenId();
+      final key = GuvenilirCihazServisi.yeniGuvenAnahtari();
+      await service.kaydet(
+        guvenId: id,
+        gizliAnahtar: key,
+        hesap: account,
+        cihazId: clientId,
+        cihazAdi: 'Client',
+      );
+      await client.kaydet(
+        guvenId: id,
+        gizliAnahtar: key,
+        hesap: account,
+        cihazId: serverId,
+        cihazAdi: 'Server',
+      );
+      final clientKey = (await client.bul(id))!.gizliAnahtar;
+      final serverKey = (await service.bul(id))!.gizliAnahtar;
+
+      Future<List<int>> encode(
+        Map<String, dynamic> body,
+        String key,
+        String context,
+      ) =>
+          AktarimHttp.sifrele(
+            Stream.value(utf8.encode(jsonEncode(body))),
+            key,
+            context,
+          ).expand((chunk) => chunk).toList();
+      Future<Map<String, dynamic>> decode(
+        List<int> wire,
+        String key,
+        String context,
+      ) => AktarimHttp.jsonOku(
+        AktarimHttp.coz(Stream.value(wire), key, context),
+      );
+
+      final requestId = GuvenilirCihazServisi.yeniGuvenId();
+      final challenge = await service.challengeOlustur(id);
+      final response = await encode(
+        {'challenge': challenge},
+        serverKey,
+        '$requestId:response',
+      );
+      final accepted = await decode(response, clientKey, '$requestId:response');
+      expect(accepted['challenge'], challenge);
+      await expectLater(
+        decode(
+          response,
+          GuvenilirCihazServisi.yeniGuvenAnahtari(),
+          '$requestId:response',
+        ),
+        throwsA(anything),
+      );
+      await expectLater(
+        decode(response, clientKey, 'different-request:response'),
+        throwsA(anything),
+      );
+      final tampered = List<int>.from(response)..[12] ^= 1;
+      await expectLater(
+        decode(tampered, clientKey, '$requestId:response'),
+        throwsA(anything),
+      );
+
+      final resumeId = GuvenilirCihazServisi.yeniGuvenId();
+      final freshToken = GuvenilirCihazServisi.yeniGuvenId();
+      final resume = await encode(
+        {
+          'challenge': accepted['challenge'],
+          'device_id': clientId,
+          'reverse_token': freshToken,
+        },
+        clientKey,
+        '$resumeId:request',
+      );
+      final payload = await decode(resume, serverKey, '$resumeId:request');
+      final trusted = await service.challengeTuket(
+        guvenId: id,
+        challenge: payload['challenge'] as String,
+        cihazId: payload['device_id'] as String,
+      );
+      expect(trusted.cihazId, clientId);
+      expect(payload['reverse_token'], freshToken);
+      final completion = await encode(
+        {'success': true, 'server_token': GuvenilirCihazServisi.yeniGuvenId()},
+        serverKey,
+        '$resumeId:response',
+      );
+      expect(
+        (await decode(completion, clientKey, '$resumeId:response'))['success'],
+        true,
+      );
+      await expectLater(
+        service.challengeTuket(
+          guvenId: id,
+          challenge: challenge,
+          cihazId: clientId,
+        ),
+        denied,
+      );
+      final restarted = restart();
+      await expectLater(
+        restarted.challengeTuket(
+          guvenId: id,
+          challenge: challenge,
+          cihazId: clientId,
+        ),
+        denied,
+      );
+    },
+  );
 
   test('account changes during a protected lookup fail closed', () async {
     await enroll();
