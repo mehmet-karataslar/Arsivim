@@ -128,12 +128,12 @@ ana sekmelere uygulanır.
 | Giriş | `lib/screens/auth/login_screen.dart` | Bekliyor |
 | Kayıt | `lib/screens/auth/register_screen.dart` | Bekliyor |
 | QR bağlantı | `lib/widgets/qr_generator_widget.dart` (`QRConnectionScreen`) | Çağıran ekran kalmadı; Senkronizasyon kendi süre kontrollü QR panelini ve büyütme penceresini kullanıyor. Eski kod korunuyor |
-| QR tarayıcı | `lib/widgets/qr_scanner_widget.dart` (`QRScannerScreen`) | Bekliyor |
+| QR tarayıcı | `lib/widgets/qr_scanner_widget.dart` (`QRScannerScreen`) | Sayfa içi kamera, cihaz bilgisi, yeniden tarama ve izin durumları güncellendi |
 | Belge tarayıcı | `lib/screens/tarayici_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
 | Senkron belgeler | `lib/screens/senkron_belgeler_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
 
-Güncel ayrım: 7 ana sayfa, 2 belge formu, kişi formu, açılış ve 2 tarama ekranı
-güncellendi. Giriş, Kayıt ve QR tarayıcı olmak üzere 3 ekranın ayrıntılı tasarımı bekliyor. Kalan 4 eski ekran sınıfını açan bir çağrı bulunmuyor; bunlar aktif
+Güncel ayrım: 7 ana sayfa, 2 belge formu, kişi formu, açılış, 2 belge tarama ekranı ve QR tarayıcı
+güncellendi. Giriş ve Kayıt olmak üzere 2 ekranın ayrıntılı tasarımı bekliyor. Kalan 4 eski ekran sınıfını açan bir çağrı bulunmuyor; bunlar aktif
 ekranlarla aynı iş listesinde değerlendirilmemeli. Yeni ekran eklenmeden veya
 eski kod kaldırılmadan önce kullanım kararı verilmelidir.
 
@@ -854,3 +854,16 @@ açar. Sahte yükleme aşamaları, sürekli parçacık animasyonu ve her açıl�
 bu uygulama içi karşılamadan ayrıdır. Uygulama verisi temizlenirse ilk kullanım
 tercihi de sıfırlanır.
 Kontrol: `flutter test test/app_launch_test.dart test/tek_hesap_test.dart`.
+
+### QR tarayıcı
+
+Mobilde kamera sayfanın içinde açılır. `QrCameraView` kamera/izin/yaşam döngüsünü,
+`QrScanController` okuma ve onay durumunu, `ConnectionQr` bağlantı kodunun ön
+kontrolünü yönetir. Okunan kodun biçimi, protokol sürümü ve süresi kontrol edilir;
+cihaz bilgisi gösterilirken kamera kapatılır. Yeniden tarama ve fener kontrolü
+bulunur; arka plana geçildiğinde kamera durur. Bağlantıya devam etmek mevcut
+hesap doğrulamasını açar; sunucu tarafındaki bilet ve hesap doğrulaması korunur.
+Windows mevcut kamera eklentisini kullanır. Kamera izni reddedildiğinde yeniden
+deneme ve uygulama ayarlarına geçiş sunulur. Testler sahte kamera ile çalışır;
+fiziksel telefon kamerası ve fener ayrıca cihaz üzerinde doğrulanmalıdır.
+Kontrol: `flutter test test/qr_scanner_test.dart test/sync_test.dart test/tek_hesap_test.dart`.
