@@ -13,6 +13,7 @@ import '../screens/senkron_belgeler_ekrani.dart';
 import '../utils/screen_utils.dart';
 import '../models/kisi_modeli.dart';
 import '../models/kategori_modeli.dart';
+import '../widgets/aktarim_kisi_secimi.dart';
 
 class SenkronizasyonEkrani extends StatefulWidget {
   const SenkronizasyonEkrani({Key? key}) : super(key: key);
@@ -90,6 +91,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   void _initServiceCallbacks() {
+    _yonetici.onKisiSecimi =
+        (mesaj, adaylar) async =>
+            mounted ? aktarimKisiSecimi(context, mesaj, adaylar) : null;
     _yonetici.onStatusChanged = (status) {
       if (mounted) setState(() {});
     };
@@ -337,6 +341,11 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                 ],
               ),
             ),
+            IconButton(
+              icon: const Icon(Icons.fact_check_outlined),
+              tooltip: 'Son aktarım sonuçları',
+              onPressed: _aktarimSonuclariniGoster,
+            ),
             // Durum indicator
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -408,6 +417,50 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     );
   }
 
+  void _aktarimSonuclariniGoster() {
+    final rows = _yonetici.sonAktarimSonuclari;
+    showDialog<void>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Son aktarım sonuçları'),
+            content: SizedBox(
+              width: 520,
+              height: 380,
+              child:
+                  rows.isEmpty
+                      ? const Text('Henüz dosya aktarımı yapılmadı.')
+                      : ListView.builder(
+                        itemCount: rows.length,
+                        itemBuilder: (_, i) {
+                          final row = rows[i];
+                          return ListTile(
+                            leading: Icon(
+                              row['durum'] == 'hata'
+                                  ? Icons.error_outline
+                                  : Icons.check_circle_outline,
+                            ),
+                            title: Text(row['dosya'] as String),
+                            subtitle: Text(
+                              row['mesaj'] as String? ??
+                                  (row['durum'] == 'zaten_var'
+                                      ? 'Hedefteki kopya doğrulandı'
+                                      : 'Kaydedildi ve doğrulandı'),
+                            ),
+                          );
+                        },
+                      ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Kapat'),
+              ),
+            ],
+          ),
+    );
+  }
+
   // QR kod işlemleri
   void _qrKodGoster() async {
     final connectionData = await _yonetici.connectionDataOlustur();
@@ -449,8 +502,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         builder:
             (context) => QRScannerScreen(
               onQRScanned: (qrData) {
-                print('📷 QR kod tarandı: $qrData');
-
                 // QR kod tarandığında hemen kapansın
                 Navigator.of(context).pop();
                 print('🔄 QR scanner hemen kapatıldı');
@@ -465,8 +516,6 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
 
   void _processQRCode(String qrData) async {
     try {
-      print('🔄 QR kod işleniyor: $qrData');
-
       // QR kod işlemini başlat
       final baglantiBasarili = await _yonetici.qrKoduTarandi(qrData);
       print('🔄 Bağlantı sonucu: $baglantiBasarili');

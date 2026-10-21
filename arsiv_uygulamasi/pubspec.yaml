@@ -22,7 +22,7 @@ dependencies:
   
   # Dosya işlemleri
   path_provider: ^2.1.4
-  file_picker: ^10.2.0
+  file_picker: ^10.3.6
   path: ^1.9.1
   image_picker: ^1.1.2
 
@@ -40,6 +40,7 @@ dependencies:
 
   # Güvenlik ve hash
   crypto: ^3.0.6
+  cryptography: ^2.7.0
 
   # Cihaz bilgileri (senkronizasyon için gerekli)
   device_info_plus: ^11.1.0
@@ -50,10 +51,10 @@ dependencies:
 
   # QR Code (senkronizasyon için)
   qr_flutter: ^4.1.0
-  simple_barcode_scanner: ^0.3.0
+  simple_barcode_scanner: ^0.6.0
 
   # İzinler (Windows tarayıcı için gerekli)
-  permission_handler: ^11.4.0
+  permission_handler: ^12.0.3
 
     # Calendar widget (temporarily disabled due to pub get issues)
   # table_calendar: ^3.1.2

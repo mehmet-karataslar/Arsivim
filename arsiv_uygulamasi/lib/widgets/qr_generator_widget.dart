@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'qr_scanner_widget.dart';
+import '../services/senkronizasyon_yonetici_servisi.dart';
 
 class QRGeneratorWidget extends StatefulWidget {
   final String connectionData;
@@ -240,6 +241,7 @@ class _QRGeneratorWidgetState extends State<QRGeneratorWidget>
           ),
           const SizedBox(height: 12),
           ...connectionInfo.entries
+              .where((entry) => entry.key != 'transfer_token')
               .map((entry) => _buildInfoRow(entry.key, entry.value.toString()))
               .toList(),
         ],
@@ -409,22 +411,17 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
     super.dispose();
   }
 
-  void _connectionDataOlustur() {
-    final connectionInfo = {
-      'type': 'arsivim_connection',
-      'version': '1.0',
-      'device_id': 'device_123456789',
-      'device_name':
-          _pcPlatform ? 'PC-${Platform.operatingSystem}' : 'Mobile-Android',
-      'ip': '192.168.1.100',
-      'port': 8080,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'platform': Platform.operatingSystem,
-    };
-
-    setState(() {
-      _connectionData = json.encode(connectionInfo);
-    });
+  void _connectionDataOlustur() async {
+    try {
+      final data =
+          await SenkronizasyonYoneticiServisi.instance.connectionDataOlustur();
+      if (mounted) setState(() => _connectionData = data);
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   @override
@@ -760,8 +757,6 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
         builder:
             (context) => QRScannerScreen(
               onQRScanned: (qrData) {
-                print('📷 QR kod tarandı (QR Connection): $qrData');
-
                 // QR kod tarandığında hemen kapansın
                 Navigator.of(context).pop();
                 print('🔄 QR scanner hemen kapatıldı (QR Connection)');
@@ -776,18 +771,13 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
 
   void _processQRCodeConnection(String qrData) async {
     try {
-      print('🔄 QR kod işleniyor (QR Connection): $qrData');
       final connectionInfo = json.decode(qrData);
 
       if (connectionInfo['type'] == 'arsivim_connection') {
-        print('✅ Geçerli Arşivim QR kodu, bağlantı simüle ediliyor...');
-
-        // Gerçek bağlantı işlemini burada yapın
-        // Şimdilik simüle ediyoruz
-        await Future.delayed(const Duration(seconds: 1));
-
         // Cihazı bağla
-        _cihazBagla(connectionInfo);
+        final connected = await SenkronizasyonYoneticiServisi.instance
+            .qrKoduTarandi(qrData);
+        if (connected && mounted) _cihazBagla(connectionInfo);
       } else {
         print('❌ Geçersiz QR kod formatı');
         _hataGoster('Geçersiz QR kod');

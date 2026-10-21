@@ -2,16 +2,17 @@ import 'dart:async';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
+import 'depolama_konumu_servisi.dart';
 
 import '../utils/sabitler.dart';
 
 // SQLite veritabanı operasyonları
 class VeriTabaniServisi {
   static Database? _database;
+  static Future<Database>? _aciliyor;
   static final VeriTabaniServisi _instance = VeriTabaniServisi._internal();
 
   factory VeriTabaniServisi() => _instance;
@@ -22,6 +23,7 @@ class VeriTabaniServisi {
     try {
       print('🚀 Veritabanı servisi başlatılıyor...');
       await database; // Bu, veritabanını otomatik olarak başlatır
+      await acikKlasoreBelgeTasimasiniTamamla();
       print('✅ Veritabanı servisi başarıyla başlatıldı!');
     } catch (e) {
       print('❌ Veritabanı servisi başlatma hatası: $e');
@@ -32,13 +34,16 @@ class VeriTabaniServisi {
   // Veritabanı bağlantısı ve tablo oluşturma
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    try {
+      _database = await (_aciliyor ??= _initDatabase());
+      return _database!;
+    } finally {
+      _aciliyor = null;
+    }
   }
 
   Future<Database> _initDatabase() async {
-    Directory documentsDirectory = await getApplicationDocumentsDirectory();
-    String path = join(documentsDirectory.path, Sabitler.VERITABANI_ADI);
+    String path = await DepolamaKonumuServisi.instance.veritabaniYoluHazirla();
 
     // Veritabanı dosyasının varlığını kontrol et
     bool databaseExists = await File(path).exists();
@@ -209,13 +214,13 @@ class VeriTabaniServisi {
 
     // Önce mevcut verileri backup'la
     await _createBackup(db, oldVersion);
-    
+
     // Migration işlemini veri koruyarak yap
     await _performSafeMigration(db, oldVersion, newVersion);
-    
+
     // Migration sonrası veritabanı bütünlüğünü kontrol et
     await _verifyDataIntegrity(db);
-    
+
     print('✅ Database upgrade tamamlandı, veriler korundu');
   }
 
@@ -223,10 +228,10 @@ class VeriTabaniServisi {
   Future<void> _checkDatabaseIntegrity(Database db) async {
     try {
       print('🔍 VERİ KORUMA MODU: Veritabanı bütünlüğü kontrol ediliyor...');
-      
+
       // Kullanıcı verilerini sayarak koruma kontrolü yap
       await _verifyUserDataExists(db);
-      
+
       // Temel tabloların varlığını kontrol et
       final tables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table'",
@@ -234,13 +239,15 @@ class VeriTabaniServisi {
 
       final requiredTables = ['kisiler', 'kategoriler', 'belgeler'];
       final existingTables = tables.map((t) => t['name'] as String).toSet();
-      
+
       bool hasCreatedTables = false;
 
       for (final table in requiredTables) {
         if (!existingTables.contains(table)) {
-          print('⚠️ Eksik tablo tespit edildi: $table - Güvenli oluşturuluyor...');
-          
+          print(
+            '⚠️ Eksik tablo tespit edildi: $table - Güvenli oluşturuluyor...',
+          );
+
           // Eksik tabloları güvenli şekilde oluştur
           if (table == 'kisiler') {
             await _createKisilerTableSafe(db);
@@ -257,13 +264,13 @@ class VeriTabaniServisi {
           }
         }
       }
-      
+
       // Kullanıcı kolonlarının varlığını garanti et
       await _ensureUserColumns(db);
-      
+
       // Kategori kolonlarının varlığını garanti et
       await _ensureCategoryColumns(db);
-      
+
       if (hasCreatedTables) {
         print('📝 Eksik tablolar güvenli şekilde oluşturuldu');
         await _createIndexes(db);
@@ -278,50 +285,59 @@ class VeriTabaniServisi {
       throw e;
     }
   }
-  
+
   /// Kullanıcı verilerinin varlığını kontrol et
   Future<void> _verifyUserDataExists(Database db) async {
     try {
       // Temel tabloların varlığını kontrol et
-      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
       final existingTables = tables.map((t) => t['name'] as String).toSet();
-      
+
       if (existingTables.contains('kisiler')) {
-        final userCount = await db.rawQuery('SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1');
+        final userCount = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1',
+        );
         final users = Sqflite.firstIntValue(userCount) ?? 0;
         print('👥 Mevcut kullanıcı sayısı: $users');
       }
-      
+
       if (existingTables.contains('belgeler')) {
-        final docCount = await db.rawQuery('SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1');
+        final docCount = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1',
+        );
         final docs = Sqflite.firstIntValue(docCount) ?? 0;
         print('📄 Mevcut belge sayısı: $docs');
       }
-      
+
       if (existingTables.contains('kategoriler')) {
-        final catCount = await db.rawQuery('SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1');
+        final catCount = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1',
+        );
         final cats = Sqflite.firstIntValue(catCount) ?? 0;
         print('📁 Mevcut kategori sayısı: $cats');
       }
-      
     } catch (e) {
       print('⚠️ Kullanıcı verisi kontrolü hatası: $e');
     }
   }
-  
+
   /// Güvenli sorgu testleri
   Future<void> _performSafeQueries(Database db) async {
     try {
-      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
       final existingTables = tables.map((t) => t['name'] as String).toSet();
-      
+
       // Sadece var olan tabloları test et
       for (final tableName in existingTables) {
         if (['kisiler', 'kategoriler', 'belgeler'].contains(tableName)) {
           await db.rawQuery('SELECT COUNT(*) FROM $tableName');
         }
       }
-      
+
       print('✅ Tüm güvenli sorgular başarılı');
     } catch (e) {
       print('❌ Güvenli sorgu testi başarısız: $e');
@@ -333,74 +349,85 @@ class VeriTabaniServisi {
   Future<void> _createBackup(Database db, int oldVersion) async {
     try {
       print('📂 Backup oluşturuluyor... (versiyon: $oldVersion)');
-      
+
       // Önemli tabloların verilerini geçici tablolara kaydet
       final importantTables = ['kisiler', 'kategoriler', 'belgeler'];
-      
+
       for (final tableName in importantTables) {
         try {
           // Tablo mevcutsa backup oluştur
           final tableExists = await _tableExists(db, tableName);
           if (tableExists) {
             await db.execute('DROP TABLE IF EXISTS ${tableName}_backup');
-            await db.execute('CREATE TABLE ${tableName}_backup AS SELECT * FROM $tableName');
+            await db.execute(
+              'CREATE TABLE ${tableName}_backup AS SELECT * FROM $tableName',
+            );
             print('✅ $tableName tablosu backup alındı');
           }
         } catch (e) {
           print('⚠️ $tableName backup hatası: $e');
         }
       }
-      
+
       print('✅ Backup işlemi tamamlandı');
     } catch (e) {
       print('❌ Backup oluşturma hatası: $e');
     }
   }
-  
+
   /// Tablo varlığını kontrol et
   Future<bool> _tableExists(Database db, String tableName) async {
     try {
       final result = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", 
-        [tableName]
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [tableName],
       );
       return result.isNotEmpty;
     } catch (e) {
       return false;
     }
   }
-  
+
   /// Veri bütünlüğünü doğrula
   Future<void> _verifyDataIntegrity(Database db) async {
     try {
       print('🔍 Veri bütünlüğü kontrol ediliyor...');
-      
+
       // Kullanıcı sayısını kontrol et
-      final userCount = await db.rawQuery('SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1');
+      final userCount = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1',
+      );
       final users = Sqflite.firstIntValue(userCount) ?? 0;
-      
-      // Belge sayısını kontrol et  
-      final docCount = await db.rawQuery('SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1');
+
+      // Belge sayısını kontrol et
+      final docCount = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1',
+      );
       final docs = Sqflite.firstIntValue(docCount) ?? 0;
-      
+
       // Kategori sayısını kontrol et
-      final catCount = await db.rawQuery('SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1');
+      final catCount = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1',
+      );
       final cats = Sqflite.firstIntValue(catCount) ?? 0;
-      
+
       print('✅ Veri bütünlüğü: $users kullanıcı, $docs belge, $cats kategori');
-      
+
       // Backup tablolarını temizle
       await _cleanupBackupTables(db);
-      
     } catch (e) {
       print('❌ Veri bütünlüğü kontrolü hatası: $e');
     }
   }
-  
-  /// Backup tablolarını temizle  
+
+  /// Backup tablolarını temizle
   Future<void> _cleanupBackupTables(Database db) async {
     try {
-      final backupTables = ['kisiler_backup', 'kategoriler_backup', 'belgeler_backup'];
+      final backupTables = [
+        'kisiler_backup',
+        'kategoriler_backup',
+        'belgeler_backup',
+      ];
       for (final table in backupTables) {
         await db.execute('DROP TABLE IF EXISTS $table');
       }
@@ -409,13 +436,13 @@ class VeriTabaniServisi {
       print('⚠️ Backup temizleme hatası: $e');
     }
   }
-  
-  /// Metadata tablosunu güvenli şekilde güncelle  
+
+  /// Metadata tablosunu güvenli şekilde güncelle
   Future<void> _safeUpdateMetadataTable(Database db) async {
     try {
       // Önce tablo var mı kontrol et
       final tableExists = await _tableExists(db, 'metadata_degisiklikleri');
-      
+
       if (!tableExists) {
         // Tablo yoksa yeni oluştur
         await db.execute('''
@@ -434,23 +461,29 @@ class VeriTabaniServisi {
         print('✅ metadata_degisiklikleri tablosu oluşturuldu');
         return;
       }
-      
+
       // Mevcut kolonları kontrol et
-      final columns = await db.rawQuery("PRAGMA table_info(metadata_degisiklikleri)");
+      final columns = await db.rawQuery(
+        "PRAGMA table_info(metadata_degisiklikleri)",
+      );
       final columnNames = columns.map((col) => col['name'] as String).toSet();
-      
+
       // sync_edildi kolonu yoksa ekle
       if (!columnNames.contains('sync_edildi')) {
-        await db.execute('ALTER TABLE metadata_degisiklikleri ADD COLUMN sync_edildi INTEGER DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE metadata_degisiklikleri ADD COLUMN sync_edildi INTEGER DEFAULT 0',
+        );
         print('✅ sync_edildi kolonu eklendi');
       }
-      
+
       // cihaz_id kolonu yoksa ekle
       if (!columnNames.contains('cihaz_id')) {
-        await db.execute('ALTER TABLE metadata_degisiklikleri ADD COLUMN cihaz_id TEXT');
+        await db.execute(
+          'ALTER TABLE metadata_degisiklikleri ADD COLUMN cihaz_id TEXT',
+        );
         print('✅ cihaz_id kolonu eklendi');
       }
-      
+
       print('✅ metadata_degisiklikleri tablosu güvenli şekilde güncellendi');
     } catch (e) {
       print('❌ Metadata tablo güncelleme hatası: $e');
@@ -463,7 +496,7 @@ class VeriTabaniServisi {
     int newVersion,
   ) async {
     print('🔒 Güvenli migration başlatılıyor - VERİLER KORUNACAK');
-    
+
     try {
       if (oldVersion < 2) {
         print('🔄 V2 Migration: Kişiler tablosu ekleniyor...');
@@ -544,10 +577,7 @@ class VeriTabaniServisi {
         }
       }
 
-
-      
       print('🎉 Tüm migration\'lar güvenli şekilde tamamlandı!');
-      
     } catch (e) {
       print('❌ Migration hatası: $e');
       print('🔄 Backup verilerden kurtarma deneniyor...');
@@ -555,15 +585,18 @@ class VeriTabaniServisi {
       rethrow;
     }
   }
-  
+
   /// Kullanıcı kolonlarını güvenli şekilde ekle
   Future<void> _safeAddUserColumns(Database db) async {
     try {
       final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
-      final existingColumns = columns.map((col) => col['name'] as String).toSet();
+      final existingColumns =
+          columns.map((col) => col['name'] as String).toSet();
 
       if (!existingColumns.contains('kullanici_adi')) {
-        await db.execute('ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE');
+        await db.execute(
+          'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
+        );
         print('✅ kullanici_adi kolonu eklendi');
       }
 
@@ -573,14 +606,16 @@ class VeriTabaniServisi {
       }
 
       if (!existingColumns.contains('kullanici_tipi')) {
-        await db.execute('ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"');
+        await db.execute(
+          'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
+        );
         print('✅ kullanici_tipi kolonu eklendi');
       }
     } catch (e) {
       print('❌ Kullanıcı kolonları ekleme hatası: $e');
     }
   }
-  
+
   /// Güvenli tablo oluşturma metodları
   Future<void> _createKisilerTableSafe(Database db) async {
     await db.execute('''
@@ -598,7 +633,7 @@ class VeriTabaniServisi {
       )
     ''');
   }
-  
+
   Future<void> _createKategorilerTableSafe(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS kategoriler (
@@ -613,7 +648,7 @@ class VeriTabaniServisi {
       )
     ''');
   }
-  
+
   Future<void> _createBelgelerTableSafe(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS belgeler (
@@ -642,25 +677,31 @@ class VeriTabaniServisi {
       )
     ''');
   }
-  
+
   /// Kullanıcı kolonlarının varlığını garanti et
   Future<void> _ensureUserColumns(Database db) async {
     try {
-      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
       final existingTables = tables.map((t) => t['name'] as String).toSet();
-      
+
       if (!existingTables.contains('kisiler')) {
         return; // Tablo yoksa column eklenecek bir şey yok
       }
-      
+
       final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
-      final existingColumns = columns.map((col) => col['name'] as String).toSet();
+      final existingColumns =
+          columns.map((col) => col['name'] as String).toSet();
 
       final requiredColumns = {
-        'kullanici_adi': 'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
+        'kullanici_adi':
+            'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
         'sifre': 'ALTER TABLE kisiler ADD COLUMN sifre TEXT',
-        'kullanici_tipi': 'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
-        'profil_fotografi': 'ALTER TABLE kisiler ADD COLUMN profil_fotografi TEXT',
+        'kullanici_tipi':
+            'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
+        'profil_fotografi':
+            'ALTER TABLE kisiler ADD COLUMN profil_fotografi TEXT',
       };
 
       for (final columnName in requiredColumns.keys) {
@@ -677,23 +718,28 @@ class VeriTabaniServisi {
       print('❌ Kullanıcı kolonları kontrolü hatası: $e');
     }
   }
-  
+
   /// Kategori kolonlarının varlığını garanti et
   Future<void> _ensureCategoryColumns(Database db) async {
     try {
-      final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
       final existingTables = tables.map((t) => t['name'] as String).toSet();
-      
+
       if (!existingTables.contains('kategoriler')) {
         return; // Tablo yoksa column eklenecek bir şey yok
       }
-      
+
       final columns = await db.rawQuery("PRAGMA table_info(kategoriler)");
-      final existingColumns = columns.map((col) => col['name'] as String).toSet();
+      final existingColumns =
+          columns.map((col) => col['name'] as String).toSet();
 
       if (!existingColumns.contains('belge_sayisi')) {
         try {
-          await db.execute('ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0');
+          await db.execute(
+            'ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0',
+          );
           print('✅ belge_sayisi kolonu güvenli şekilde eklendi');
         } catch (e) {
           print('⚠️ belge_sayisi kolonu zaten mevcut: $e');
@@ -703,28 +749,34 @@ class VeriTabaniServisi {
       print('❌ Kategori kolonları kontrolü hatası: $e');
     }
   }
-  
+
   /// Backup'tan verileri geri yükle
   Future<void> _restoreFromBackup(Database db) async {
     try {
       print('🔄 Backup verilerden geri yükleme başlatılıyor...');
-      
-      final backupTables = ['kisiler_backup', 'kategoriler_backup', 'belgeler_backup'];
+
+      final backupTables = [
+        'kisiler_backup',
+        'kategoriler_backup',
+        'belgeler_backup',
+      ];
       final targetTables = ['kisiler', 'kategoriler', 'belgeler'];
-      
+
       for (int i = 0; i < backupTables.length; i++) {
         final backupTable = backupTables[i];
         final targetTable = targetTables[i];
-        
+
         final backupExists = await _tableExists(db, backupTable);
         if (backupExists) {
           // Backup'tan verileri geri yükle
           await db.execute('DELETE FROM $targetTable');
-          await db.execute('INSERT INTO $targetTable SELECT * FROM $backupTable');
+          await db.execute(
+            'INSERT INTO $targetTable SELECT * FROM $backupTable',
+          );
           print('✅ $targetTable tablosu backup\'tan geri yüklendi');
         }
       }
-      
+
       print('✅ Backup\'tan geri yükleme tamamlandı');
     } catch (e) {
       print('❌ Backup geri yükleme hatası: $e');
@@ -793,8 +845,6 @@ class VeriTabaniServisi {
     );
   }
 
-
-
   Future<void> _insertDefaultCategories(Database db) async {
     List<KategoriModeli> defaultCategories =
         KategoriModeli.ontanimliKategoriler();
@@ -840,68 +890,26 @@ class VeriTabaniServisi {
     await db.execute('DROP TABLE IF EXISTS kisiler');
   }
 
-  /// Mevcut kategorilerin tarihlerini güncelle - senkronizasyon optimizasyonu için
-  Future<void> _mevcutKategorilerTarihGuncelle() async {
-    final db = await database;
-
-    // Mevcut kategorilerin sayısını kontrol et
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1',
-    );
-    final mevcutKategoriSayisi = result.first['count'] as int;
-
-    // Eğer kategoriler varsa ve tarihler bugün ise, geriye çek
-    if (mevcutKategoriSayisi > 0) {
-      final bugun = DateTime.now();
-      final bugunBaslangic = DateTime(bugun.year, bugun.month, bugun.day);
-
-      // Bugün oluşturulmuş kategorileri bul
-      final bugunkuKategoriler = await db.query(
-        'kategoriler',
-        where: 'aktif = 1 AND olusturma_tarihi >= ?',
-        whereArgs: [bugunBaslangic.toIso8601String()],
-      );
-
-      if (bugunkuKategoriler.isNotEmpty) {
-        print(
-          '📅 ${bugunkuKategoriler.length} kategori tarihi güncelleniyor (mevcut kategoriler senkronizasyondan çıkarılıyor)',
-        );
-
-        // Mevcut kategorilerin tarihlerini 1 hafta öncesine çek
-        final eskiTarih = DateTime.now().subtract(const Duration(days: 7));
-
-        await db.update(
-          'kategoriler',
-          {'olusturma_tarihi': eskiTarih.toIso8601String()},
-          where: 'aktif = 1 AND olusturma_tarihi >= ?',
-          whereArgs: [bugunBaslangic.toIso8601String()],
-        );
-
-        print('✅ Mevcut kategoriler senkronizasyon listesinden çıkarıldı');
-      }
-    }
-  }
-
   // BELGE CRUD İŞLEMLERİ
 
-  // Belge ekleme - UNIQUE constraint hatası tamamen önlendi
+  // Ayni icerigi farkli kaydin basarisi gibi gostermeden ekle.
   Future<int> belgeEkle(BelgeModeli belge) async {
     final db = await database;
-
-    // Basit ama etkili çözüm: Direkt REPLACE INTO kullan
-    try {
-      print('📝 Belge ekleme/güncelleme: ${belge.dosyaAdi}');
-      print('   • Hash: ${belge.dosyaHash.substring(0, 16)}...');
-
-      return await db.insert(
+    return db.transaction((tx) async {
+      final mevcut = await tx.query(
         'belgeler',
-        belge.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        columns: ['id'],
+        where: 'dosya_hash = ?',
+        whereArgs: [belge.dosyaHash],
       );
-    } catch (e) {
-      print('❌ Belge ekleme hatası: $e');
-      rethrow;
-    }
+      if (mevcut.isNotEmpty) {
+        throw StateError(
+          'Bu dosyanin icerigi arsivde zaten kayitli. Mevcut belge korunuyor.',
+        );
+      }
+      final map = belge.toMap()..remove('id');
+      return tx.insert('belgeler', map);
+    });
   }
 
   // Tüm belgeleri getir - PAGINATED
@@ -1482,8 +1490,7 @@ class VeriTabaniServisi {
   Future<List<KategoriModeli>> kategorileriGetir() async {
     final db = await database;
 
-    // Önce mevcut kategorilerin tarihlerini güncelle
-    await _mevcutKategorilerTarihGuncelle();
+    // Okuma islemi tarihleri veya senkron durumunu degistirmemeli.
 
     final List<Map<String, dynamic>> maps = await db.query(
       'kategoriler',
@@ -1806,6 +1813,142 @@ class VeriTabaniServisi {
 
   // VERİTABANI YÖNETİMİ
 
+  Future<void> acikKlasoreBelgeTasimasiniTamamla() async {
+    final depolama = DepolamaKonumuServisi.instance;
+    if (!depolama.acikKlasorKullaniliyor) return;
+
+    final db = await database;
+    final klasorler = await depolama.eskiVeYeniBelgeKlasorleri();
+    final eskiKlasor = klasorler['eski']!;
+    final yeniKlasor = klasorler['yeni']!;
+
+    if (eskiKlasor == yeniKlasor) return;
+
+    final belgeler = await db.query(
+      'belgeler',
+      columns: ['id', 'dosya_yolu', 'dosya_adi', 'dosya_hash'],
+      where: 'aktif = ?',
+      whereArgs: [1],
+    );
+
+    int tasinan = 0;
+    int duzeltilen = 0;
+    int atlanan = 0;
+
+    for (final belge in belgeler) {
+      final id = belge['id'] as int?;
+      final mevcutYol = belge['dosya_yolu'] as String?;
+      final dosyaAdi = belge['dosya_adi'] as String?;
+      final beklenenHash = belge['dosya_hash'] as String?;
+
+      if (id == null ||
+          mevcutYol == null ||
+          mevcutYol.isEmpty ||
+          dosyaAdi == null ||
+          dosyaAdi.isEmpty ||
+          beklenenHash == null ||
+          beklenenHash.isEmpty) {
+        atlanan++;
+        continue;
+      }
+
+      if (isWithin(yeniKlasor, mevcutYol)) {
+        continue;
+      }
+
+      final kaynak = File(mevcutYol);
+      final hedef = await _benzersizHedefDosya(yeniKlasor, dosyaAdi);
+
+      try {
+        if (await kaynak.exists()) {
+          final kopyalandi = await depolama.dosyaKopyalaVeDogrula(
+            kaynak,
+            hedef,
+          );
+          if (!kopyalandi) {
+            atlanan++;
+            continue;
+          }
+
+          final hedefHash = await depolama.dosyaHashi(hedef);
+          if (hedefHash != beklenenHash) {
+            atlanan++;
+            continue;
+          }
+
+          await db.update(
+            'belgeler',
+            {'dosya_yolu': hedef.path},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+          tasinan++;
+        } else {
+          final mevcutAcikDosya = await _acikKlasordeHashIleDosyaBul(
+            yeniKlasor,
+            beklenenHash,
+          );
+          if (mevcutAcikDosya != null) {
+            await db.update(
+              'belgeler',
+              {'dosya_yolu': mevcutAcikDosya.path},
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+            duzeltilen++;
+          } else {
+            atlanan++;
+          }
+        }
+      } catch (e) {
+        print('Belge acik klasore tasinamadi: $mevcutYol - $e');
+        atlanan++;
+      }
+    }
+
+    print(
+      'Acik klasor belge tasima tamamlandi: tasinan=$tasinan, duzeltilen=$duzeltilen, atlanan=$atlanan',
+    );
+  }
+
+  Future<File> _benzersizHedefDosya(String klasorYolu, String dosyaAdi) async {
+    final temizAd = basename(dosyaAdi);
+    var hedef = File(join(klasorYolu, temizAd));
+    if (!await hedef.exists()) return hedef;
+
+    final uzanti = extension(temizAd);
+    final kok = basenameWithoutExtension(temizAd);
+    var sayac = 1;
+    while (await hedef.exists()) {
+      hedef = File(join(klasorYolu, '${kok}_$sayac$uzanti'));
+      sayac++;
+    }
+    return hedef;
+  }
+
+  Future<File?> _acikKlasordeHashIleDosyaBul(
+    String klasorYolu,
+    String beklenenHash,
+  ) async {
+    final depolama = DepolamaKonumuServisi.instance;
+    final klasor = Directory(klasorYolu);
+    if (!await klasor.exists()) return null;
+
+    await for (final entity in klasor.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      try {
+        final hash = await depolama.dosyaHashi(entity);
+        if (hash == beklenenHash) return entity;
+      } catch (_) {
+        // Bozuk/okunamayan dosyalar yoksayilir.
+      }
+    }
+    return null;
+  }
+
   // Veritabanını kapat
   Future<void> kapat() async {
     final db = _database;
@@ -1817,8 +1960,7 @@ class VeriTabaniServisi {
 
   // Veritabanı yolunu getir
   static Future<String> veritabaniYolu() async {
-    Directory documentsDirectory = await getApplicationDocumentsDirectory();
-    return join(documentsDirectory.path, Sabitler.VERITABANI_ADI);
+    return await DepolamaKonumuServisi.instance.veritabaniYoluHazirla();
   }
 
   // Veritabanını sıfırla
@@ -2144,7 +2286,7 @@ class VeriTabaniServisi {
     String? invoiceType,
   }) async {
     final db = await database;
-    
+
     String whereClause = 'aktif = ?';
     List<dynamic> whereArgs = [1];
 
@@ -2177,7 +2319,7 @@ class VeriTabaniServisi {
     String? paymentStatus,
   }) async {
     final db = await database;
-    
+
     String whereClause = 'i.aktif = ?';
     List<dynamic> whereArgs = [1];
 
@@ -2238,7 +2380,7 @@ class VeriTabaniServisi {
   // Invoice istatistikleri
   Future<Map<String, dynamic>> invoiceIstatistikleri({int? kisiId}) async {
     final db = await database;
-    
+
     String whereClause = 'aktif = 1';
     List<dynamic> whereArgs = [];
 
@@ -2268,11 +2410,14 @@ class VeriTabaniServisi {
     ''', whereArgs);
 
     // Vadesi geçen faturalar
-    final overdueResult = await db.rawQuery('''
+    final overdueResult = await db.rawQuery(
+      '''
       SELECT COUNT(*) as count, SUM(gross_amount) as amount
       FROM invoices 
       WHERE $whereClause AND due_date < ? AND payment_status = 'PENDING'
-    ''', [...whereArgs, DateTime.now().toIso8601String()]);
+    ''',
+      [...whereArgs, DateTime.now().toIso8601String()],
+    );
 
     return {
       'total_amount': totalResult.first['total_amount'] ?? 0.0,
@@ -2292,7 +2437,9 @@ class VeriTabaniServisi {
   }
 
   // Invoice numarasına göre getir
-  Future<Map<String, dynamic>?> invoiceGetirByNumber(String invoiceNumber) async {
+  Future<Map<String, dynamic>?> invoiceGetirByNumber(
+    String invoiceNumber,
+  ) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'invoices',
@@ -2310,7 +2457,7 @@ class VeriTabaniServisi {
     int? taxYear,
   }) async {
     final db = await database;
-    
+
     String whereClause = 'aktif = ?';
     List<dynamic> whereArgs = [1];
 
@@ -2343,7 +2490,7 @@ class VeriTabaniServisi {
     String? taxStatus,
   }) async {
     final db = await database;
-    
+
     String whereClause = 't.aktif = ?';
     List<dynamic> whereArgs = [1];
 
@@ -2378,8 +2525,12 @@ class VeriTabaniServisi {
     return maps.isNotEmpty ? maps.first : null;
   }
 
-  // Döneme göre tax getir  
-  Future<Map<String, dynamic>?> taxGetirByPeriod(int kisiId, int taxYear, int taxPeriod) async {
+  // Döneme göre tax getir
+  Future<Map<String, dynamic>?> taxGetirByPeriod(
+    int kisiId,
+    int taxYear,
+    int taxPeriod,
+  ) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'taxes',
@@ -2394,12 +2545,7 @@ class VeriTabaniServisi {
   Future<int> taxGuncelle(int id, Map<String, dynamic> tax) async {
     final db = await database;
     tax['guncelleme_tarihi'] = DateTime.now().toIso8601String();
-    return await db.update(
-      'taxes',
-      tax,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.update('taxes', tax, where: 'id = ?', whereArgs: [id]);
   }
 
   // Tax silme (aktif durumunu pasif yapma)
@@ -2416,7 +2562,7 @@ class VeriTabaniServisi {
   // Tax istatistikleri
   Future<Map<String, dynamic>> taxIstatistikleri({int? kisiId}) async {
     final db = await database;
-    
+
     String whereClause = 'aktif = 1';
     List<dynamic> whereArgs = [];
 
@@ -2448,11 +2594,14 @@ class VeriTabaniServisi {
     ''', whereArgs);
 
     // Bekleyen vergiler
-    final pendingResult = await db.rawQuery('''
+    final pendingResult = await db.rawQuery(
+      '''
       SELECT COUNT(*) as count, SUM(remaining_amount) as amount
       FROM taxes 
       WHERE $whereClause AND tax_status IN ('READY', 'SUBMITTED')
-    ''', [...whereArgs]);
+    ''',
+      [...whereArgs],
+    );
 
     return {
       'total_calculated': totalResult.first['total_calculated'] ?? 0.0,
@@ -2488,7 +2637,10 @@ class VeriTabaniServisi {
   }
 
   // Tarih aralığına göre activities getir
-  Future<List<Map<String, dynamic>>> activitiesGetirByDateRange(DateTime startDate, DateTime endDate) async {
+  Future<List<Map<String, dynamic>>> activitiesGetirByDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
     final db = await database;
     return await db.query(
       'activities',
@@ -2499,11 +2651,13 @@ class VeriTabaniServisi {
   }
 
   // Belirli bir tarihteki activities getir
-  Future<List<Map<String, dynamic>>> activitiesGetirByDate(DateTime date) async {
+  Future<List<Map<String, dynamic>>> activitiesGetirByDate(
+    DateTime date,
+  ) async {
     final db = await database;
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-    
+
     return await db.query(
       'activities',
       where: 'activity_date >= ? AND activity_date <= ?',
@@ -2513,7 +2667,10 @@ class VeriTabaniServisi {
   }
 
   // Related item'a göre activities getir
-  Future<List<Map<String, dynamic>>> activitiesGetirByRelatedItem(String relatedItemId, String relatedItemType) async {
+  Future<List<Map<String, dynamic>>> activitiesGetirByRelatedItem(
+    String relatedItemId,
+    String relatedItemType,
+  ) async {
     final db = await database;
     return await db.query(
       'activities',
@@ -2538,11 +2695,7 @@ class VeriTabaniServisi {
   // Activity silme
   Future<int> activitySil(int id) async {
     final db = await database;
-    return await db.delete(
-      'activities',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('activities', where: 'id = ?', whereArgs: [id]);
   }
 
   // ========================
@@ -2584,14 +2737,15 @@ class VeriTabaniServisi {
     final db = await database;
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-    
+
     return await db.query(
       'reminders',
-      where: '(reminder_date >= ? AND reminder_date <= ?) OR (next_occurrence >= ? AND next_occurrence <= ?)',
+      where:
+          '(reminder_date >= ? AND reminder_date <= ?) OR (next_occurrence >= ? AND next_occurrence <= ?)',
       whereArgs: [
-        startOfDay.toIso8601String(), 
+        startOfDay.toIso8601String(),
         endOfDay.toIso8601String(),
-        startOfDay.toIso8601String(), 
+        startOfDay.toIso8601String(),
         endOfDay.toIso8601String(),
       ],
       orderBy: 'reminder_date ASC, created_at DESC',
@@ -2599,7 +2753,10 @@ class VeriTabaniServisi {
   }
 
   // Related item'a göre reminders getir
-  Future<List<Map<String, dynamic>>> remindersGetirByRelatedItem(String relatedItemId, String relatedItemType) async {
+  Future<List<Map<String, dynamic>>> remindersGetirByRelatedItem(
+    String relatedItemId,
+    String relatedItemType,
+  ) async {
     final db = await database;
     return await db.query(
       'reminders',
@@ -2636,21 +2793,18 @@ class VeriTabaniServisi {
   // Reminder silme
   Future<int> reminderSil(int id) async {
     final db = await database;
-    return await db.delete(
-      'reminders',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('reminders', where: 'id = ?', whereArgs: [id]);
   }
 
   // Overdue reminders getir
   Future<List<Map<String, dynamic>>> remindersGetirOverdue() async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
-    
+
     return await db.query(
       'reminders',
-      where: 'is_enabled = ? AND ((next_occurrence IS NOT NULL AND next_occurrence < ?) OR (next_occurrence IS NULL AND reminder_date < ?))',
+      where:
+          'is_enabled = ? AND ((next_occurrence IS NOT NULL AND next_occurrence < ?) OR (next_occurrence IS NULL AND reminder_date < ?))',
       whereArgs: [1, now, now],
       orderBy: 'reminder_date ASC',
     );

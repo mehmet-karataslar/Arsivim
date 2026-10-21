@@ -3,13 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'veritabani_servisi.dart';
-import 'dosya_servisi.dart';
-import '../models/belge_modeli.dart';
+import 'depolama_konumu_servisi.dart';
+import 'guvenli_aktarim_servisi.dart';
+import 'aktarim_http.dart';
 import '../models/kisi_modeli.dart';
-import '../models/kategori_modeli.dart';
 
 class HttpSunucuServisi {
   static const int SUNUCU_PORTU = 8080;
@@ -31,7 +29,115 @@ class HttpSunucuServisi {
   HttpSunucuServisi._();
 
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
-  final DosyaServisi _dosyaServisi = DosyaServisi();
+  final String aktarimAnahtari = GuvenliAktarimServisi.kimlik();
+  final Map<String, String> eslesmisAnahtarlar = {};
+
+  Future<GuvenliAktarimServisi> _aktarimServisi() async =>
+      GuvenliAktarimServisi(
+        await _veriTabani.database,
+        await DepolamaKonumuServisi.instance.belgelerKlasoru(),
+      );
+
+  Future<void> _guvenliAktarim(HttpRequest request) async {
+    try {
+      final uzakIP = request.connectionInfo!.remoteAddress.address;
+      if (request.uri.path != '/sync/v2/pair' &&
+          !eslesmisAnahtarlar.containsKey(uzakIP)) {
+        throw AktarimHatasi(
+          'ESLESME',
+          'Bu cihazla etkin eslesme yok. QR kodunu yeniden tarayin.',
+        );
+      }
+      Map<String, dynamic> result;
+      switch (request.uri.path) {
+        case '/sync/v2/capabilities':
+          if (request.method != 'GET')
+            throw AktarimHatasi('METHOD', 'GET gerekli.');
+          result = {'success': true, 'surum': GuvenliAktarimServisi.surum};
+          break;
+        case '/sync/v2/pair':
+          if (request.method != 'POST')
+            throw AktarimHatasi('METHOD', 'POST gerekli.');
+          final data = await AktarimHttp.jsonOku(
+            AktarimHttp.istekOku(request, aktarimAnahtari),
+          );
+          final token = data['reverse_token'];
+          if (token is! String || !RegExp(r'^[a-f0-9]{48}$').hasMatch(token)) {
+            throw AktarimHatasi('ESLESME', 'Karsi cihaz anahtari gecersiz.');
+          }
+          final ip = request.connectionInfo!.remoteAddress.address;
+          eslesmisAnahtarlar[ip] = token;
+          final device = <String, dynamic>{
+            'device_id': data['device_id'],
+            'device_name': data['device_name'],
+            'platform': data['platform'],
+            'ip': ip,
+            'status': 'connected',
+            'connected_at': DateTime.now().toIso8601String(),
+          };
+          _bagliCihazlar.removeWhere((d) => d['ip'] == ip);
+          _bagliCihazlar.add(device);
+          _onDeviceConnected?.call(device);
+          result = {'success': true, 'surum': GuvenliAktarimServisi.surum};
+          break;
+        case '/sync/v2/prepare':
+          if (request.method != 'POST')
+            throw AktarimHatasi('METHOD', 'POST gerekli.');
+          result = await (await _aktarimServisi()).onKontrol(
+            await AktarimHttp.jsonOku(
+              AktarimHttp.istekOku(request, aktarimAnahtari),
+            ),
+          );
+          break;
+        case '/sync/v2/disconnect':
+          if (request.method != 'POST')
+            throw AktarimHatasi('METHOD', 'POST gerekli.');
+          await AktarimHttp.jsonOku(
+            AktarimHttp.istekOku(request, aktarimAnahtari),
+          );
+          eslesmisAnahtarlar.remove(uzakIP);
+          final devices =
+              _bagliCihazlar.where((d) => d['ip'] == uzakIP).toList();
+          _bagliCihazlar.removeWhere((d) => d['ip'] == uzakIP);
+          for (final device in devices) {
+            _onDeviceDisconnected?.call(device);
+          }
+          result = {'success': true};
+          break;
+        case '/sync/v2/file':
+          if (request.method != 'POST')
+            throw AktarimHatasi('METHOD', 'POST gerekli.');
+          result = await AktarimHttp.al(
+            request,
+            await _aktarimServisi(),
+            aktarimAnahtari,
+          );
+          break;
+        case '/sync/v2/entity':
+          if (request.method != 'POST')
+            throw AktarimHatasi('METHOD', 'POST gerekli.');
+          result = await (await _aktarimServisi()).referansAl(
+            await AktarimHttp.jsonOku(
+              AktarimHttp.istekOku(request, aktarimAnahtari),
+              max: GuvenliAktarimServisi.azamiReferans,
+            ),
+          );
+          break;
+        default:
+          throw AktarimHatasi('ENDPOINT', 'Aktarim adresi bulunamadi.');
+      }
+      await AktarimHttp.yanit(request, aktarimAnahtari, result);
+    } on AktarimHatasi catch (e) {
+      await AktarimHttp.yanit(request, aktarimAnahtari, e.toMap(), status: 409);
+    } catch (_) {
+      await AktarimHttp.yanit(request, aktarimAnahtari, {
+        'success': false,
+        'kod': 'AKTARIM_HATASI',
+        'error':
+            'Aktarim tamamlanamadi. Disk, izin ve baglanti durumunu kontrol edin.',
+      }, status: 500);
+    }
+  }
 
   HttpServer? _sunucu;
   String? _cihazId;
@@ -144,6 +250,35 @@ class HttpSunucuServisi {
       // İstekleri dinle
       _sunucu!.listen((HttpRequest request) async {
         try {
+          if (!['/ping', '/info'].contains(request.uri.path)) {
+            if (!AktarimHttp.yetkili(request, aktarimAnahtari) ||
+                request.headers.value('Origin') != null) {
+              await _sendResponse(
+                request.response,
+                jsonEncode({
+                  'success': false,
+                  'error': 'Cihazlari guncel QR koduyla yeniden eslestirin.',
+                }),
+                401,
+              );
+              return;
+            }
+          }
+          if (request.uri.path.startsWith('/sync/v2/')) {
+            await _guvenliAktarim(request);
+            return;
+          }
+          if (request.uri.path.startsWith('/sync/')) {
+            await _sendResponse(
+              request.response,
+              jsonEncode({
+                'success': false,
+                'error': 'Guvenli aktarim icin iki cihaz da guncellenmeli.',
+              }),
+              426,
+            );
+            return;
+          }
           print('📨 HTTP İstek: ${request.method} ${request.uri.path}');
 
           // Request timeout kontrolü (HttpServer kendi timeout yönetimi yapıyor)
@@ -202,73 +337,6 @@ class HttpSunucuServisi {
                 'POST',
                 _handleDeviceDisconnected,
               );
-              break;
-            // Senkronizasyon endpoint'leri
-            case '/sync/belgeler':
-              if (request.method == 'GET') {
-                responseBody = await _handleSyncBelgeler();
-              } else if (request.method == 'POST') {
-                responseBody = await _handleReceiveBelgeler(request);
-              } else {
-                statusCode = 405;
-                responseBody = _createErrorResponse(
-                  'Method not allowed',
-                  'Only GET and POST methods are supported',
-                );
-              }
-              break;
-            case '/sync/belgeler-kapsamli':
-              responseBody = await _handleMethodValidation(
-                request,
-                'POST',
-                _handleReceiveBelgelerKapsamli,
-              );
-              break;
-            case '/sync/kisiler':
-              if (request.method == 'GET') {
-                responseBody = await _handleSyncKisiler();
-              } else if (request.method == 'POST') {
-                responseBody = await _handleReceiveKisiler(request);
-              } else {
-                statusCode = 405;
-                responseBody = _createErrorResponse(
-                  'Method not allowed',
-                  'Only GET and POST methods are supported',
-                );
-              }
-              break;
-            case '/sync/receive_kisiler':
-              responseBody = await _handleMethodValidation(
-                request,
-                'POST',
-                _handleReceiveKisiler,
-              );
-              break;
-            case '/sync/kategoriler':
-              if (request.method == 'GET') {
-                responseBody = await _handleSyncKategoriler();
-              } else if (request.method == 'POST') {
-                responseBody = await _handleReceiveKategoriler(request);
-              } else {
-                statusCode = 405;
-                responseBody = _createErrorResponse(
-                  'Method not allowed',
-                  'Only GET and POST methods are supported',
-                );
-              }
-              break;
-            case '/sync/receive_kategoriler':
-              responseBody = await _handleMethodValidation(
-                request,
-                'POST',
-                _handleReceiveKategoriler,
-              );
-              break;
-            case '/sync/bekleyen':
-              responseBody = await _handleBekleyenSenkronlar();
-              break;
-            case '/sync/status':
-              responseBody = await _handleSyncStatus();
               break;
             case '/auth/qr-login':
               responseBody = await _handleMethodValidation(
@@ -523,7 +591,7 @@ class HttpSunucuServisi {
         'timestamp': DateTime.now().toIso8601String(),
         'server_running': true,
         'connected_devices': _bagliCihazlar.length,
-        'max_file_size': _getMaxFileSize(),
+        'max_file_size': GuvenliAktarimServisi.azamiDosya,
       });
     } catch (e) {
       print('❌ Info endpoint hatası: $e');
@@ -539,13 +607,6 @@ class HttpSunucuServisi {
         'timestamp': DateTime.now().toIso8601String(),
       });
     }
-  }
-
-  // Maksimum dosya boyutunu platform'a göre döndür
-  int _getMaxFileSize() {
-    return Platform.isAndroid || Platform.isIOS
-        ? MAX_FILE_SIZE_MOBILE
-        : MAX_FILE_SIZE_DESKTOP;
   }
 
   // Connection handler methods
@@ -1000,1100 +1061,6 @@ class HttpSunucuServisi {
   // Senkronizasyon Handler Metodları
 
   /// Bekleyen senkronizasyon belgelerini döndür (GET)
-  Future<String> _handleSyncBelgeler() async {
-    try {
-      print('📄 Senkronizasyon bekleyen belgeler istendi');
-
-      final belgeler = await _veriTabani.belgeleriGetir(limit: 50);
-      final bekleyenBelgeler =
-          belgeler
-              .where(
-                (belge) =>
-                    belge.senkronDurumu == SenkronDurumu.BEKLEMEDE ||
-                    belge.senkronDurumu == SenkronDurumu.YEREL_DEGISIM,
-              )
-              .toList();
-
-      print('📊 ${bekleyenBelgeler.length} bekleyen belge bulundu');
-
-      final belgelerJson = <Map<String, dynamic>>[];
-
-      // Batch processing ile belgeleri hazırla
-      for (int i = 0; i < bekleyenBelgeler.length; i += BATCH_SIZE) {
-        final batch = bekleyenBelgeler.skip(i).take(BATCH_SIZE).toList();
-
-        for (final belge in batch) {
-          final belgeMap = belge.toMap();
-
-          // Dosya boyutu kontrolü ve dosya okuma
-          try {
-            final dosyaFile = File(belge.dosyaYolu);
-            if (await dosyaFile.exists()) {
-              final dosyaBytes = await dosyaFile.readAsBytes();
-              final maxFileSize = _getMaxFileSize();
-
-              if (dosyaBytes.length > maxFileSize) {
-                print(
-                  '⚠️ Büyük dosya atlanıyor: ${belge.dosyaAdi} (${dosyaBytes.length} bytes, limit: $maxFileSize)',
-                );
-                belgeMap['dosya_icerigi'] = null;
-                belgeMap['buyuk_dosya'] = true;
-                belgeMap['dosya_boyutu'] = dosyaBytes.length;
-                belgeMap['dosya_hash_kontrol'] = belge.dosyaHash;
-              } else if (dosyaBytes.isNotEmpty) {
-                belgeMap['dosya_icerigi'] = base64Encode(dosyaBytes);
-                belgeMap['buyuk_dosya'] = false;
-                belgeMap['dosya_boyutu'] = dosyaBytes.length;
-                belgeMap['dosya_hash_kontrol'] = belge.dosyaHash;
-                print(
-                  '📄 Belge hazırlandı: ${belge.dosyaAdi} (${dosyaBytes.length} bytes)',
-                );
-              } else {
-                print('⚠️ Dosya boş: ${belge.dosyaAdi}');
-                belgeMap['dosya_icerigi'] = null;
-                belgeMap['buyuk_dosya'] = false;
-                belgeMap['dosya_boyutu'] = 0;
-              }
-            } else {
-              print('❌ Dosya mevcut değil: ${belge.dosyaYolu}');
-              belgeMap['dosya_icerigi'] = null;
-              belgeMap['buyuk_dosya'] = false;
-              belgeMap['dosya_boyutu'] = 0;
-              belgeMap['dosya_mevcut_degil'] = true;
-            }
-          } catch (e) {
-            print('❌ Dosya okuma hatası: ${belge.dosyaAdi} - $e');
-            belgeMap['dosya_icerigi'] = null;
-            belgeMap['buyuk_dosya'] = false;
-            belgeMap['dosya_boyutu'] = 0;
-            belgeMap['dosya_okuma_hatasi'] = e.toString();
-          }
-
-          belgelerJson.add(belgeMap);
-        }
-
-        // Batch aralarında kısa bekleme
-        await Future.delayed(Duration.zero);
-      }
-
-      return json.encode({
-        'success': true,
-        'belgeler': belgelerJson,
-        'toplam': bekleyenBelgeler.length,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Belge senkronizasyonu hatası: $e');
-      return _createErrorResponse('Belgeler alınamadı', e.toString());
-    }
-  }
-
-  /// Gelen belgeleri al ve kaydet (POST)
-  Future<String> _handleReceiveBelgeler(HttpRequest request) async {
-    try {
-      print('📥 Belge senkronizasyonu alınıyor');
-
-      final bodyBytes = await request.fold<List<int>>(
-        <int>[],
-        (previous, element) => previous..addAll(element),
-      );
-      final body = utf8.decode(bodyBytes);
-      final data = json.decode(body);
-
-      final belgelerData = data['belgeler'] as List<dynamic>;
-      int basariliSayisi = 0;
-      int hataliSayisi = 0;
-
-      // Batch processing ile belgeleri kaydet
-      for (int i = 0; i < belgelerData.length; i += BATCH_SIZE) {
-        final batch = belgelerData.skip(i).take(BATCH_SIZE).toList();
-
-        for (final belgeData in batch) {
-          try {
-            // Belge modelini oluştur
-            final belge = BelgeModeli.fromMap(belgeData);
-
-            // Belge zaten mevcut mu kontrol et
-            final mevcutBelge = await _veriTabani.belgeBulHash(belge.dosyaHash);
-            if (mevcutBelge != null) {
-              print('⏭️ Belge zaten mevcut: ${belge.dosyaAdi}');
-              continue;
-            }
-
-            // Dosya içeriğini kaydet
-            if (belgeData['dosya_icerigi'] != null &&
-                belgeData['dosya_icerigi'].toString().isNotEmpty) {
-              try {
-                final dosyaBytes = base64Decode(belgeData['dosya_icerigi']);
-
-                if (dosyaBytes.isNotEmpty) {
-                  // Hash doğrulaması
-                  final hesaplananHash = sha256.convert(dosyaBytes).toString();
-                  final beklenenHash =
-                      belgeData['dosya_hash_kontrol'] ?? belge.dosyaHash;
-
-                  if (hesaplananHash != beklenenHash) {
-                    print(
-                      '❌ Hash uyumsuzluğu: ${belge.dosyaAdi} (beklenen: $beklenenHash, hesaplanan: $hesaplananHash)',
-                    );
-                    hataliSayisi++;
-                    continue;
-                  }
-
-                  final dosyaYolu = await _dosyaServisi.senkronDosyasiKaydet(
-                    belge.dosyaAdi,
-                    dosyaBytes,
-                  );
-
-                  // Dosya yolunu güncelle
-                  final yeniBelge = belge.copyWith(
-                    dosyaYolu: dosyaYolu,
-                    senkronDurumu: SenkronDurumu.SENKRONIZE,
-                  );
-
-                  // Veritabanına kaydet
-                  await _veriTabani.belgeEkle(yeniBelge);
-                  basariliSayisi++;
-                  print(
-                    '✅ Belge kaydedildi: ${belge.dosyaAdi} (${dosyaBytes.length} bytes)',
-                  );
-                } else {
-                  print('⚠️ Belge içeriği boş: ${belge.dosyaAdi}');
-                  hataliSayisi++;
-                }
-              } catch (e) {
-                print('❌ Belge decode/kaydetme hatası: ${belge.dosyaAdi} - $e');
-                hataliSayisi++;
-              }
-            } else if (belgeData['buyuk_dosya'] == true) {
-              print('📋 Büyük dosya metadata kaydediliyor: ${belge.dosyaAdi}');
-
-              // Büyük dosya için kişi ve kategori ID'lerini doğru şekilde eşleştir
-              int? dogruKisiId;
-              if (belgeData['kisi_ad'] != null &&
-                  belgeData['kisi_soyad'] != null) {
-                final kisiAd = belgeData['kisi_ad'] as String;
-                final kisiSoyad = belgeData['kisi_soyad'] as String;
-
-                // Tam ad-soyad eşleştirme yap
-                final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
-                  kisiAd,
-                  kisiSoyad,
-                );
-
-                if (mevcutKisi != null) {
-                  dogruKisiId = mevcutKisi.id;
-                  print(
-                    '✅ Büyük dosya - Kişi eşleştirildi: $kisiAd $kisiSoyad (ID: $dogruKisiId)',
-                  );
-                } else {
-                  // Kişi bulunamadı - otomatik oluştur
-                  print(
-                    '➕ Büyük dosya - Kişi bulunamadı, otomatik oluşturuluyor: $kisiAd $kisiSoyad',
-                  );
-
-                  // Profil fotoğrafı varsa işle
-                  String? profilFotografiYolu;
-                  if (belgeData['kisi_profil_fotografi_icerigi'] != null) {
-                    try {
-                      final profilBytes = base64Decode(
-                        belgeData['kisi_profil_fotografi_icerigi'],
-                      );
-
-                      if (profilBytes.isNotEmpty &&
-                          profilBytes.length <= MAX_PROFILE_PHOTO_SIZE) {
-                        final dosyaAdi = '${kisiAd}_${kisiSoyad}_profil.jpg';
-                        profilFotografiYolu = await _dosyaServisi
-                            .senkronDosyasiKaydet(dosyaAdi, profilBytes);
-                        print(
-                          '📸 Büyük dosya - Profil fotoğrafı kaydedildi: $profilFotografiYolu',
-                        );
-                      }
-                    } catch (e) {
-                      print(
-                        '❌ Büyük dosya - Profil fotoğrafı kaydetme hatası: $e',
-                      );
-                    }
-                  }
-
-                  final yeniKisi = KisiModeli(
-                    ad: kisiAd,
-                    soyad: kisiSoyad,
-                    kullaniciAdi: belgeData['kisi_kullanici_adi'] as String?,
-                    kullaniciTipi: 'otomatik', // Otomatik oluşturulan kişi
-                    profilFotografi:
-                        profilFotografiYolu, // Profil fotoğrafı yolu
-                    olusturmaTarihi: DateTime.now().subtract(
-                      const Duration(days: 1),
-                    ), // Bekleyen listesine düşmemesi için
-                    guncellemeTarihi: DateTime.now(),
-                    aktif: true,
-                  );
-
-                  try {
-                    dogruKisiId = await _veriTabani.kisiEkle(yeniKisi);
-                    print(
-                      '✅ Büyük dosya - Kişi otomatik oluşturuldu: $kisiAd $kisiSoyad (ID: $dogruKisiId)${profilFotografiYolu != null ? ' - Profil fotoğrafı ile' : ''}',
-                    );
-                  } catch (e) {
-                    print('❌ Büyük dosya - Kişi oluşturma hatası: $e');
-                    dogruKisiId = null;
-                  }
-                }
-              } else {
-                dogruKisiId = belge.kisiId; // Orijinal kişi ID'sini koru
-              }
-
-              // Kategori ID'sini doğru şekilde eşleştir
-              int? dogruKategoriId;
-              if (belgeData['kategori_adi'] != null) {
-                final kategoriAdi = belgeData['kategori_adi'] as String;
-
-                // Tam kategori adı eşleştirme yap
-                final mevcutKategori = await _veriTabani.kategoriBulAd(
-                  kategoriAdi,
-                );
-
-                if (mevcutKategori != null) {
-                  dogruKategoriId = mevcutKategori.id;
-                  print(
-                    '✅ Büyük dosya - Kategori eşleştirildi: $kategoriAdi (ID: $dogruKategoriId)',
-                  );
-                } else {
-                  // Kategori bulunamadı - otomatik oluştur
-                  print(
-                    '➕ Büyük dosya - Kategori bulunamadı, otomatik oluşturuluyor: $kategoriAdi',
-                  );
-
-                  final yeniKategori = KategoriModeli(
-                    kategoriAdi: kategoriAdi,
-                    renkKodu:
-                        belgeData['kategori_renk'] as String? ?? '#2196F3',
-                    simgeKodu: 'folder', // Varsayılan simge
-                    aciklama: 'Senkronizasyon sırasında otomatik oluşturuldu',
-                    olusturmaTarihi: DateTime.now().subtract(
-                      const Duration(days: 1),
-                    ), // Bekleyen listesine düşmemesi için
-                    aktif: true,
-                  );
-
-                  try {
-                    dogruKategoriId = await _veriTabani.kategoriEkle(
-                      yeniKategori,
-                    );
-                    print(
-                      '✅ Büyük dosya - Kategori otomatik oluşturuldu: $kategoriAdi (ID: $dogruKategoriId)',
-                    );
-                  } catch (e) {
-                    print('❌ Büyük dosya - Kategori oluşturma hatası: $e');
-                    dogruKategoriId = null;
-                  }
-                }
-              } else {
-                dogruKategoriId =
-                    belge.kategoriId; // Orijinal kategori ID'sini koru
-              }
-
-              // Büyük dosyalar için sadece metadata kaydet
-              final metadataBelge = belge.copyWith(
-                dosyaYolu: '', // Boş dosya yolu
-                kisiId: dogruKisiId, // Doğru kişi ID'si
-                kategoriId: dogruKategoriId, // Doğru kategori ID'si
-                senkronDurumu:
-                    SenkronDurumu.BEKLEMEDE, // Dosya içeriği beklemede
-              );
-              await _veriTabani.belgeEkle(metadataBelge);
-              basariliSayisi++;
-              print(
-                '✅ Büyük dosya metadata kaydedildi: ${belge.dosyaAdi} (Kişi: $dogruKisiId, Kategori: $dogruKategoriId)',
-              );
-            } else {
-              print('⚠️ Belge içeriği bulunamadı: ${belge.dosyaAdi}');
-              hataliSayisi++;
-            }
-          } catch (e) {
-            print('❌ Belge işleme hatası: $e');
-            hataliSayisi++;
-          }
-        }
-
-        // Batch aralarında kısa bekleme
-        await Future.delayed(Duration.zero);
-      }
-
-      return json.encode({
-        'success': true,
-        'message': 'Belge senkronizasyonu tamamlandı',
-        'basarili': basariliSayisi,
-        'hatali': hataliSayisi,
-        'toplam': belgelerData.length,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Belge alma hatası: $e');
-      return _createErrorResponse('Belgeler kaydedilemedi', e.toString());
-    }
-  }
-
-  /// Kapsamlı belge senkronizasyonu (Dependency-Aware)
-  Future<String> _handleReceiveBelgelerKapsamli(HttpRequest request) async {
-    try {
-      print('📥 Kapsamlı belge senkronizasyonu alınıyor');
-
-      final bodyBytes = await request.fold<List<int>>(
-        <int>[],
-        (previous, element) => previous..addAll(element),
-      );
-      final body = utf8.decode(bodyBytes);
-      final data = json.decode(body);
-
-      final belgelerData = data['belgeler'] as List<dynamic>;
-      final kisilerData = data['kisiler'] as List<dynamic>;
-      final kategorilerData = data['kategoriler'] as List<dynamic>;
-
-      int belgelerEklendi = 0;
-      int kisilerEklendi = 0;
-      int kategorilerEklendi = 0;
-      int hatalar = 0;
-
-      // Batch processing ile sıralı işlem
-      try {
-        // 1. Önce kategorileri ekle
-        for (int i = 0; i < kategorilerData.length; i += BATCH_SIZE) {
-          final batch = kategorilerData.skip(i).take(BATCH_SIZE).toList();
-
-          for (final kategoriData in batch) {
-            try {
-              final kategori = KategoriModeli.fromMap(kategoriData);
-
-              // Kategori zaten var mı kontrol et
-              final mevcutKategori = await _veriTabani.kategoriBulAd(
-                kategori.ad,
-              );
-              if (mevcutKategori == null) {
-                // Kategori ID'sini korumak için özel ekleme
-                final eskiTarihliKategori = kategori.copyWith(
-                  olusturmaTarihi: DateTime.now().subtract(
-                    const Duration(days: 2),
-                  ),
-                );
-                await _veriTabani.kategoriEkleIdIle(eskiTarihliKategori);
-                kategorilerEklendi++;
-                print('✅ Kategori eklendi: ${kategori.ad}');
-              } else {
-                print('⏭️ Kategori zaten mevcut: ${kategori.ad}');
-              }
-            } catch (e) {
-              print('❌ Kategori ekleme hatası: $e');
-              hatalar++;
-            }
-          }
-          await Future.delayed(Duration.zero);
-        }
-
-        // 2. Sonra kişileri ekle
-        for (int i = 0; i < kisilerData.length; i += BATCH_SIZE) {
-          final batch = kisilerData.skip(i).take(BATCH_SIZE).toList();
-
-          for (final kisiData in batch) {
-            try {
-              final kisi = KisiModeli.fromMap(kisiData);
-
-              // Kişi zaten var mı kontrol et
-              final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
-                kisi.ad,
-                kisi.soyad,
-              );
-              if (mevcutKisi == null) {
-                // Kişi ID'sini korumak için özel ekleme
-                final eskiTarihliKisi = kisi.copyWith(
-                  olusturmaTarihi: DateTime.now().subtract(
-                    const Duration(days: 2),
-                  ),
-                );
-                await _veriTabani.kisiEkleIdIle(eskiTarihliKisi);
-                kisilerEklendi++;
-                print('✅ Kişi eklendi: ${kisi.ad} ${kisi.soyad}');
-              } else {
-                print('⏭️ Kişi zaten mevcut: ${kisi.ad} ${kisi.soyad}');
-              }
-            } catch (e) {
-              print('❌ Kişi ekleme hatası: $e');
-              hatalar++;
-            }
-          }
-          await Future.delayed(Duration.zero);
-        }
-
-        // 3. Son olarak belgeleri ekle
-        for (int i = 0; i < belgelerData.length; i += BATCH_SIZE) {
-          final batch = belgelerData.skip(i).take(BATCH_SIZE).toList();
-
-          for (final belgeData in batch) {
-            try {
-              final belge = BelgeModeli.fromMap(belgeData);
-
-              // Kişi ID'sini doğru şekilde eşleştir
-              int? dogruKisiId;
-              if (belgeData['kisi_ad'] != null &&
-                  belgeData['kisi_soyad'] != null) {
-                final kisiAd = belgeData['kisi_ad'] as String;
-                final kisiSoyad = belgeData['kisi_soyad'] as String;
-
-                // Tam ad-soyad eşleştirme yap
-                final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
-                  kisiAd,
-                  kisiSoyad,
-                );
-
-                if (mevcutKisi != null) {
-                  dogruKisiId = mevcutKisi.id;
-                  print(
-                    '✅ Kişi eşleştirildi: $kisiAd $kisiSoyad (ID: $dogruKisiId)',
-                  );
-                } else {
-                  // Kişi bulunamadı - otomatik oluştur
-                  print(
-                    '➕ Kişi bulunamadı, otomatik oluşturuluyor: $kisiAd $kisiSoyad',
-                  );
-
-                  // Profil fotoğrafı varsa işle
-                  String? profilFotografiYolu;
-                  if (belgeData['kisi_profil_fotografi_icerigi'] != null) {
-                    try {
-                      final profilBytes = base64Decode(
-                        belgeData['kisi_profil_fotografi_icerigi'],
-                      );
-
-                      if (profilBytes.isNotEmpty &&
-                          profilBytes.length <= MAX_PROFILE_PHOTO_SIZE) {
-                        final dosyaAdi = '${kisiAd}_${kisiSoyad}_profil.jpg';
-                        profilFotografiYolu = await _dosyaServisi
-                            .senkronDosyasiKaydet(dosyaAdi, profilBytes);
-                        print(
-                          '📸 Profil fotoğrafı kaydedildi: $profilFotografiYolu',
-                        );
-                      } else {
-                        print('⚠️ Profil fotoğrafı çok büyük veya boş');
-                      }
-                    } catch (e) {
-                      print('❌ Profil fotoğrafı kaydetme hatası: $e');
-                    }
-                  }
-
-                  final yeniKisi = KisiModeli(
-                    ad: kisiAd,
-                    soyad: kisiSoyad,
-                    kullaniciAdi: belgeData['kisi_kullanici_adi'] as String?,
-                    kullaniciTipi: 'otomatik', // Otomatik oluşturulan kişi
-                    profilFotografi:
-                        profilFotografiYolu, // Profil fotoğrafı yolu
-                    olusturmaTarihi: DateTime.now().subtract(
-                      const Duration(
-                        days: 1,
-                      ), // Bekleyen listesine düşmemesi için
-                    ),
-                    guncellemeTarihi: DateTime.now(),
-                    aktif: true,
-                  );
-
-                  try {
-                    dogruKisiId = await _veriTabani.kisiEkle(yeniKisi);
-                    print(
-                      '✅ Kişi otomatik oluşturuldu: $kisiAd $kisiSoyad (ID: $dogruKisiId)${profilFotografiYolu != null ? ' - Profil fotoğrafı ile' : ''}',
-                    );
-                  } catch (e) {
-                    print('❌ Kişi oluşturma hatası: $e');
-                    dogruKisiId = null; // Kişi oluşturulamazsa null
-                  }
-                }
-              } else {
-                // Kişi bilgisi yoksa null
-                dogruKisiId = null;
-              }
-
-              // Kategori ID'sini doğru şekilde eşleştir
-              int? dogruKategoriId;
-              if (belgeData['kategori_adi'] != null) {
-                final kategoriAdi = belgeData['kategori_adi'] as String;
-
-                // Tam kategori adı eşleştirme yap
-                final mevcutKategori = await _veriTabani.kategoriBulAd(
-                  kategoriAdi,
-                );
-
-                if (mevcutKategori != null) {
-                  dogruKategoriId = mevcutKategori.id;
-                  print(
-                    '✅ Kategori eşleştirildi: $kategoriAdi (ID: $dogruKategoriId)',
-                  );
-                } else {
-                  // Kategori bulunamadı - otomatik oluştur
-                  print(
-                    '➕ Kategori bulunamadı, otomatik oluşturuluyor: $kategoriAdi',
-                  );
-
-                  final yeniKategori = KategoriModeli(
-                    kategoriAdi: kategoriAdi,
-                    renkKodu:
-                        belgeData['kategori_renk'] as String? ?? '#2196F3',
-                    simgeKodu: 'folder', // Varsayılan simge
-                    aciklama: 'Senkronizasyon sırasında otomatik oluşturuldu',
-                    olusturmaTarihi: DateTime.now().subtract(
-                      const Duration(
-                        days: 1,
-                      ), // Bekleyen listesine düşmemesi için
-                    ),
-                    aktif: true,
-                  );
-
-                  try {
-                    dogruKategoriId = await _veriTabani.kategoriEkle(
-                      yeniKategori,
-                    );
-                    print(
-                      '✅ Kategori otomatik oluşturuldu: $kategoriAdi (ID: $dogruKategoriId)',
-                    );
-                  } catch (e) {
-                    print('❌ Kategori oluşturma hatası: $e');
-                    dogruKategoriId = null; // Kategori oluşturulamazsa null
-                  }
-                }
-              } else {
-                // Kategori bilgisi yoksa null
-                dogruKategoriId = null;
-              }
-
-              // Dosya içeriğini kaydet
-              if (belgeData['dosya_icerigi'] != null) {
-                final dosyaBytes = base64Decode(belgeData['dosya_icerigi']);
-                final dosyaYolu = await _dosyaServisi.senkronDosyasiKaydet(
-                  belge.dosyaAdi,
-                  dosyaBytes,
-                );
-
-                // Belgeyi doğru kişi ve kategori ID'leri ile güncelle
-                final yeniBelge = belge.copyWith(
-                  dosyaYolu: dosyaYolu,
-                  kisiId: dogruKisiId,
-                  kategoriId: dogruKategoriId,
-                  senkronDurumu: SenkronDurumu.SENKRONIZE,
-                );
-
-                // Belge zaten var mı kontrol et
-                final mevcutBelge = await _veriTabani.belgeBulHash(
-                  belge.dosyaHash,
-                );
-                if (mevcutBelge == null) {
-                  await _veriTabani.belgeEkle(yeniBelge);
-                  belgelerEklendi++;
-                  print(
-                    '✅ Belge kaydedildi: ${belge.dosyaAdi} (Kişi: $dogruKisiId, Kategori: $dogruKategoriId)',
-                  );
-                } else {
-                  print('⏭️ Belge zaten mevcut: ${belge.dosyaAdi}');
-                  // Mevcut belgenin kişi/kategori bilgilerini güncelle
-                  final guncellenmisBelge = mevcutBelge.copyWith(
-                    kisiId: dogruKisiId,
-                    kategoriId: dogruKategoriId,
-                    baslik: belge.baslik,
-                    aciklama: belge.aciklama,
-                    etiketler: belge.etiketler,
-                    guncellemeTarihi: DateTime.now(),
-                  );
-                  await _veriTabani.belgeGuncelle(guncellenmisBelge);
-                  print('🔄 Belge metadata güncellendi: ${belge.dosyaAdi}');
-                }
-              } else {
-                print('⚠️ Belge içeriği bulunamadı: ${belge.dosyaAdi}');
-                hatalar++;
-              }
-            } catch (e) {
-              print('❌ Belge kaydetme hatası: $e');
-              hatalar++;
-            }
-          }
-          await Future.delayed(Duration.zero);
-        }
-
-        print('📊 Kapsamlı senkronizasyon tamamlandı:');
-        print('   • Kategoriler: $kategorilerEklendi');
-        print('   • Kişiler: $kisilerEklendi');
-        print('   • Belgeler: $belgelerEklendi');
-        print('   • Hatalar: $hatalar');
-      } catch (e) {
-        print('❌ Senkronizasyon hatası: $e');
-        throw e;
-      }
-
-      return json.encode({
-        'success': true,
-        'message': 'Kapsamlı senkronizasyon tamamlandı',
-        'sonuc': {
-          'kategoriler_eklendi': kategorilerEklendi,
-          'kisiler_eklendi': kisilerEklendi,
-          'belgeler_eklendi': belgelerEklendi,
-          'hatalar': hatalar,
-        },
-        'toplam': {
-          'kategoriler': kategorilerData.length,
-          'kisiler': kisilerData.length,
-          'belgeler': belgelerData.length,
-        },
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Kapsamlı senkronizasyon hatası: $e');
-      return _createErrorResponse(
-        'Kapsamlı senkronizasyon başarısız',
-        e.toString(),
-      );
-    }
-  }
-
-  /// Bekleyen senkronizasyon kişilerini döndür (GET)
-  Future<String> _handleSyncKisiler() async {
-    try {
-      print('👤 Senkronizasyon bekleyen kişiler istendi');
-
-      final kisiler = await _veriTabani.kisileriGetir();
-      // Sadece son 6 saatte oluşturulan kişileri bekleyen olarak kabul et
-      final altiSaatOnce = DateTime.now().subtract(const Duration(hours: 6));
-      final bekleyenKisiler =
-          kisiler
-              .where((kisi) => kisi.olusturmaTarihi.isAfter(altiSaatOnce))
-              .toList();
-
-      print('📊 ${bekleyenKisiler.length} bekleyen kişi bulundu');
-
-      final kisilerJson = <Map<String, dynamic>>[];
-
-      // Batch processing ile kişileri hazırla
-      for (int i = 0; i < bekleyenKisiler.length; i += BATCH_SIZE) {
-        final batch = bekleyenKisiler.skip(i).take(BATCH_SIZE).toList();
-
-        for (final kisi in batch) {
-          final kisiMap = kisi.toMap();
-
-          // Profil fotoğrafını dahil et - standardize key naming
-          if (kisi.profilFotografi != null &&
-              kisi.profilFotografi!.isNotEmpty) {
-            try {
-              final profilFile = File(kisi.profilFotografi!);
-              if (await profilFile.exists()) {
-                final dosyaBytes = await profilFile.readAsBytes();
-                if (dosyaBytes.isNotEmpty &&
-                    dosyaBytes.length <= MAX_PROFILE_PHOTO_SIZE) {
-                  kisiMap['profil_fotografi_icerigi'] = base64Encode(
-                    dosyaBytes,
-                  );
-                  kisiMap['profil_fotografi_dosya_adi'] = path.basename(
-                    kisi.profilFotografi!,
-                  );
-                  print(
-                    '📸 Profil fotoğrafı dahil edildi: ${kisi.ad} ${kisi.soyad} (${dosyaBytes.length} bytes)',
-                  );
-                } else {
-                  print(
-                    '⚠️ Profil fotoğrafı çok büyük veya boş: ${kisi.ad} ${kisi.soyad}',
-                  );
-                  kisiMap['profil_fotografi_icerigi'] = null;
-                  kisiMap['profil_fotografi_dosya_adi'] = null;
-                }
-              } else {
-                print(
-                  '⚠️ Profil fotoğrafı dosyası mevcut değil: ${kisi.profilFotografi}',
-                );
-                kisiMap['profil_fotografi_icerigi'] = null;
-                kisiMap['profil_fotografi_dosya_adi'] = null;
-              }
-            } catch (e) {
-              print(
-                '❌ Profil fotoğrafı okuma hatası: ${kisi.ad} ${kisi.soyad} - $e',
-              );
-              kisiMap['profil_fotografi_icerigi'] = null;
-              kisiMap['profil_fotografi_dosya_adi'] = null;
-            }
-          } else {
-            kisiMap['profil_fotografi_icerigi'] = null;
-            kisiMap['profil_fotografi_dosya_adi'] = null;
-          }
-
-          kisilerJson.add(kisiMap);
-        }
-
-        await Future.delayed(Duration.zero);
-      }
-
-      return json.encode({
-        'success': true,
-        'kisiler': kisilerJson,
-        'toplam': bekleyenKisiler.length,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Kişi senkronizasyonu hatası: $e');
-      return _createErrorResponse('Kişiler alınamadı', e.toString());
-    }
-  }
-
-  /// Kişileri al ve karşı tarafa kaydet (POST) - Standardized key naming
-  Future<String> _handleReceiveKisiler(HttpRequest request) async {
-    try {
-      print('👥 Kişi senkronizasyonu alınıyor');
-
-      final bodyBytes = await request.fold<List<int>>(
-        <int>[],
-        (previous, element) => previous..addAll(element),
-      );
-      final body = utf8.decode(bodyBytes);
-      final data = json.decode(body);
-
-      final kisilerData = data['kisiler'] as List<dynamic>;
-      int basariliSayisi = 0;
-      int hataliSayisi = 0;
-      int guncellenmisSayisi = 0;
-
-      print('📦 ${kisilerData.length} kişi verisi alındı');
-
-      // Batch processing ile kişileri kaydet
-      for (int i = 0; i < kisilerData.length; i += BATCH_SIZE) {
-        final batch = kisilerData.skip(i).take(BATCH_SIZE).toList();
-
-        for (final kisiData in batch) {
-          try {
-            final kisi = KisiModeli.fromMap(kisiData);
-
-            // Profil fotoğrafını kaydet - standardized key naming
-            if (kisiData['profil_fotografi_icerigi'] != null) {
-              try {
-                final profilBytes = base64Decode(
-                  kisiData['profil_fotografi_icerigi'],
-                );
-
-                // Dosya boyutu kontrolü
-                if (profilBytes.length > MAX_PROFILE_PHOTO_SIZE) {
-                  print('⚠️ Profil fotoğrafı çok büyük: ${kisi.tamAd}');
-                  await _saveKisiWithoutPhoto(kisi);
-                  basariliSayisi++;
-                  continue;
-                }
-
-                final dosyaAdi = '${kisi.ad}_${kisi.soyad}_profil.jpg';
-                final profilYolu = await _dosyaServisi.senkronDosyasiKaydet(
-                  dosyaAdi,
-                  profilBytes,
-                );
-
-                // Profil fotoğrafı yolunu güncelle
-                final yeniKisi = kisi.copyWith(
-                  profilFotografi: profilYolu,
-                  guncellemeTarihi: DateTime.now(),
-                  // Senkronizasyon sırasında gelen kişileri bekleyen listesinden çıkarmak için
-                  olusturmaTarihi: DateTime.now().subtract(
-                    const Duration(days: 2),
-                  ),
-                );
-
-                // Kişi zaten var mı kontrol et
-                final mevcutKisi = await _veriTabani.kisiBulAdSoyad(
-                  kisi.ad,
-                  kisi.soyad,
-                );
-
-                if (mevcutKisi == null) {
-                  await _veriTabani.kisiEkle(yeniKisi);
-                  basariliSayisi++;
-                  print('✅ Yeni kişi eklendi: ${kisi.tamAd}');
-                } else {
-                  final guncellenmisKisi = yeniKisi.copyWith(id: mevcutKisi.id);
-                  await _veriTabani.kisiGuncelle(guncellenmisKisi);
-                  guncellenmisSayisi++;
-                  print('🔄 Kişi güncellendi: ${kisi.tamAd}');
-                }
-              } catch (e) {
-                print('⚠️ Profil fotoğrafı kaydedilemedi: $e');
-                await _saveKisiWithoutPhoto(kisi);
-                basariliSayisi++;
-              }
-            } else {
-              await _saveKisiWithoutPhoto(kisi);
-              basariliSayisi++;
-            }
-          } catch (e) {
-            print('❌ Kişi kaydedilemedi: $e');
-            hataliSayisi++;
-          }
-        }
-
-        await Future.delayed(Duration.zero);
-      }
-
-      print('📊 Kişi senkronizasyon sonucu:');
-      print('   • Başarılı: $basariliSayisi');
-      print('   • Güncellenen: $guncellenmisSayisi');
-      print('   • Hatalı: $hataliSayisi');
-
-      return json.encode({
-        'success': true,
-        'message': 'Kişi senkronizasyonu tamamlandı',
-        'basarili': basariliSayisi,
-        'guncellenen': guncellenmisSayisi,
-        'hatali': hataliSayisi,
-        'toplam': kisilerData.length,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Kişi senkronizasyon hatası: $e');
-      return _createErrorResponse('Kişiler kaydedilemedi', e.toString());
-    }
-  }
-
-  /// Profil fotoğrafı olmadan kişiyi kaydet
-  Future<void> _saveKisiWithoutPhoto(KisiModeli kisi) async {
-    try {
-      final mevcutKisi = await _veriTabani.kisiBulAdSoyad(kisi.ad, kisi.soyad);
-
-      if (mevcutKisi == null) {
-        final yeniKisi = kisi.copyWith(
-          olusturmaTarihi: DateTime.now().subtract(const Duration(days: 2)),
-          guncellemeTarihi: DateTime.now(),
-        );
-        await _veriTabani.kisiEkle(yeniKisi);
-        print('✅ Yeni kişi eklendi (profil fotoğrafı yok): ${kisi.tamAd}');
-      } else {
-        final guncellenmisKisi = kisi.copyWith(
-          id: mevcutKisi.id,
-          guncellemeTarihi: DateTime.now(),
-        );
-        await _veriTabani.kisiGuncelle(guncellenmisKisi);
-        print('🔄 Kişi güncellendi (profil fotoğrafı yok): ${kisi.tamAd}');
-      }
-    } catch (e) {
-      print('❌ Kişi kaydetme hatası: $e');
-    }
-  }
-
-  /// Bekleyen senkronizasyon kategorilerini döndür (GET)
-  Future<String> _handleSyncKategoriler() async {
-    try {
-      print('📁 Senkronizasyon bekleyen kategoriler istendi');
-
-      final kategoriler = await _veriTabani.kategorileriGetir();
-
-      // Kategori optimizasyonu: Sadece bugünden itibaren eklenen kategorileri bekleyen olarak kabul et
-      // Mevcut 16 kategori her iki sistemde de var, onları senkronize etmeye gerek yok
-      final bugun = DateTime.now();
-      final bugunBaslangic = DateTime(bugun.year, bugun.month, bugun.day);
-
-      final bekleyenKategoriler =
-          kategoriler
-              .where(
-                (kategori) => kategori.olusturmaTarihi.isAfter(bugunBaslangic),
-              )
-              .toList();
-
-      print(
-        '📊 ${bekleyenKategoriler.length} bekleyen kategori bulundu (sadece bugün eklenenler)',
-      );
-      print(
-        '📅 Kategori filtresi: ${bugunBaslangic.toIso8601String()} sonrası',
-      );
-
-      final kategorilerJson =
-          bekleyenKategoriler.map((kategori) => kategori.toMap()).toList();
-
-      return json.encode({
-        'success': true,
-        'kategoriler': kategorilerJson,
-        'toplam': bekleyenKategoriler.length,
-        'filtre_tarihi': bugunBaslangic.toIso8601String(),
-        'aciklama': 'Sadece bugün eklenen kategoriler dahil edildi',
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Kategori senkronizasyonu hatası: $e');
-      return _createErrorResponse('Kategoriler alınamadı', e.toString());
-    }
-  }
-
-  /// Gelen kategorileri al ve kaydet (POST)
-  Future<String> _handleReceiveKategoriler(HttpRequest request) async {
-    try {
-      print('📥 Kategori senkronizasyonu alınıyor');
-
-      final bodyBytes = await request.fold<List<int>>(
-        <int>[],
-        (previous, element) => previous..addAll(element),
-      );
-      final body = utf8.decode(bodyBytes);
-      final data = json.decode(body);
-
-      final kategorilerData = data['kategoriler'] as List<dynamic>;
-      int basariliSayisi = 0;
-      int hataliSayisi = 0;
-      int guncellenmisSayisi = 0;
-
-      // Batch processing ile kategorileri kaydet
-      for (int i = 0; i < kategorilerData.length; i += BATCH_SIZE) {
-        final batch = kategorilerData.skip(i).take(BATCH_SIZE).toList();
-
-        for (final kategoriData in batch) {
-          try {
-            final kategori = KategoriModeli.fromMap(kategoriData);
-
-            // Kategori zaten var mı kontrol et
-            final mevcutKategori = await _veriTabani.kategoriBulAd(kategori.ad);
-
-            if (mevcutKategori == null) {
-              // Yeni kategori ekle - senkronizasyondan gelen kategorileri bekleyen listesinden çıkarmak için
-              final eskiTarihliKategori = kategori.copyWith(
-                olusturmaTarihi: DateTime.now().subtract(
-                  const Duration(days: 2),
-                ),
-              );
-              await _veriTabani.kategoriEkle(eskiTarihliKategori);
-              basariliSayisi++;
-              print('✅ Kategori kaydedildi: ${kategori.ad}');
-            } else {
-              // Mevcut kategoriyi güncelle
-              final guncellenmisKategori = kategori.copyWith(
-                id: mevcutKategori.id,
-                kategoriAdi: kategori.kategoriAdi,
-                renkKodu: kategori.renkKodu,
-                simgeKodu: kategori.simgeKodu,
-                aciklama: kategori.aciklama,
-                // Eski tarih vererek bekleyen listesinden çıkar
-                olusturmaTarihi: DateTime.now().subtract(
-                  const Duration(days: 2),
-                ),
-              );
-              await _veriTabani.kategoriGuncelle(guncellenmisKategori);
-              guncellenmisSayisi++;
-              print('🔄 Kategori güncellendi: ${kategori.ad}');
-            }
-          } catch (e) {
-            print('❌ Kategori kaydetme hatası: $e');
-            hataliSayisi++;
-          }
-        }
-
-        await Future.delayed(Duration.zero);
-      }
-
-      return json.encode({
-        'success': true,
-        'message': 'Kategori senkronizasyonu tamamlandı',
-        'basarili': basariliSayisi,
-        'guncellenen': guncellenmisSayisi,
-        'hatali': hataliSayisi,
-        'toplam': kategorilerData.length,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Kategori alma hatası: $e');
-      return _createErrorResponse('Kategoriler kaydedilemedi', e.toString());
-    }
-  }
-
-  /// Bekleyen senkronizasyonların özet bilgisini döndür
-  Future<String> _handleBekleyenSenkronlar() async {
-    try {
-      print('📋 Bekleyen senkronizasyonlar sorgulandı');
-
-      final belgeler = await _veriTabani.belgeleriGetir();
-      final bekleyenBelgeler =
-          belgeler
-              .where(
-                (belge) =>
-                    belge.senkronDurumu == SenkronDurumu.BEKLEMEDE ||
-                    belge.senkronDurumu == SenkronDurumu.YEREL_DEGISIM,
-              )
-              .length;
-
-      final kisiler = await _veriTabani.kisileriGetir();
-      final altiSaatOnce = DateTime.now().subtract(const Duration(hours: 6));
-      final bekleyenKisiler =
-          kisiler
-              .where((kisi) => kisi.olusturmaTarihi.isAfter(altiSaatOnce))
-              .length;
-
-      final kategoriler = await _veriTabani.kategorileriGetir();
-
-      // Kategori optimizasyonu: Sadece bugünden itibaren eklenen kategorileri bekleyen olarak kabul et
-      // Mevcut 16 kategori her iki sistemde de var, onları senkronize etmeye gerek yok
-      final bugun = DateTime.now();
-      final bugunBaslangic = DateTime(bugun.year, bugun.month, bugun.day);
-
-      final bekleyenKategoriler =
-          kategoriler
-              .where(
-                (kategori) => kategori.olusturmaTarihi.isAfter(bugunBaslangic),
-              )
-              .length;
-
-      return json.encode({
-        'success': true,
-        'bekleyen_belgeler': bekleyenBelgeler,
-        'bekleyen_kisiler': bekleyenKisiler,
-        'bekleyen_kategoriler': bekleyenKategoriler,
-        'toplam_bekleyen':
-            bekleyenBelgeler + bekleyenKisiler + bekleyenKategoriler,
-        'kategori_filtre_aciklama': 'Sadece bugün eklenen kategoriler dahil',
-        'kategori_filtre_tarihi': bugunBaslangic.toIso8601String(),
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Bekleyen senkronizasyon sorgu hatası: $e');
-      return _createErrorResponse(
-        'Bekleyen senkronizasyonlar sorgulanamadı',
-        e.toString(),
-      );
-    }
-  }
-
-  /// Senkronizasyon durumu bilgisini döndür
-  Future<String> _handleSyncStatus() async {
-    try {
-      print('📊 Senkronizasyon durumu sorgulandı');
-
-      final belgeler = await _veriTabani.belgeleriGetir();
-      final senkronizeDurumlari = <String, int>{};
-
-      for (final durum in SenkronDurumu.values) {
-        senkronizeDurumlari[durum.toString()] =
-            belgeler.where((belge) => belge.senkronDurumu == durum).length;
-      }
-
-      final toplamBelgeSayisi = belgeler.length;
-      final senkronizeBelgeSayisi =
-          belgeler
-              .where((belge) => belge.senkronDurumu == SenkronDurumu.SENKRONIZE)
-              .length;
-
-      return json.encode({
-        'success': true,
-        'toplam_belge': toplamBelgeSayisi,
-        'senkronize_belge': senkronizeBelgeSayisi,
-        'senkronizasyon_orani':
-            toplamBelgeSayisi > 0
-                ? (senkronizeBelgeSayisi / toplamBelgeSayisi * 100).round()
-                : 0,
-        'durum_detaylari': senkronizeDurumlari,
-        'bagli_cihaz_sayisi': _bagliCihazlar.length,
-        'sunucu_aktif': _calisiyorMu,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('❌ Senkronizasyon durumu sorgu hatası: $e');
-      return _createErrorResponse(
-        'Senkronizasyon durumu sorgulanamadı',
-        e.toString(),
-      );
-    }
-  }
-
-  /// QR Login endpoint'i
   Future<String> _handleQRLogin(HttpRequest request) async {
     try {
       print('📱 QR Login isteği alındı');

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/belge_modeli.dart';
+import 'depolama_konumu_servisi.dart';
 import '../utils/sabitler.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 
@@ -23,9 +24,8 @@ class DosyaServisi {
   }) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions:
-            izinVerilenUzantilar ?? Sabitler.DESTEKLENEN_DOSYA_TIPLERI,
+        type: izinVerilenUzantilar == null ? FileType.any : FileType.custom,
+        allowedExtensions: izinVerilenUzantilar,
         allowMultiple: cokluSecim,
       );
 
@@ -61,7 +61,7 @@ class DosyaServisi {
       String guvenliTemelAd = YardimciFonksiyonlar.guvenliDosyaAdi(temelAd);
       String yeniDosyaAdi = YardimciFonksiyonlar.benzersizDosyaAdi(
         guvenliTemelAd,
-        dosyaUzantisi.substring(1),
+        dosyaUzantisi.isEmpty ? '' : dosyaUzantisi.substring(1),
       );
 
       String hedefYol = path.join(belgelerKlasoru.path, yeniDosyaAdi);
@@ -70,8 +70,8 @@ class DosyaServisi {
       File hedefDosya = await kaynak.copy(hedefYol);
 
       // Hash hesapla
-      Uint8List dosyaBytes = await hedefDosya.readAsBytes();
-      String dosyaHash = sha256.convert(dosyaBytes).toString();
+      String dosyaHash =
+          (await sha256.bind(hedefDosya.openRead()).first).toString();
 
       // Belge modeli oluştur
       DateTime simdi = DateTime.now();
@@ -79,8 +79,11 @@ class DosyaServisi {
         dosyaAdi: yeniDosyaAdi,
         orijinalDosyaAdi: platformFile.name,
         dosyaYolu: hedefYol,
-        dosyaBoyutu: platformFile.size,
-        dosyaTipi: dosyaUzantisi.substring(1).toLowerCase(),
+        dosyaBoyutu: await hedefDosya.length(),
+        dosyaTipi:
+            dosyaUzantisi.isEmpty
+                ? ''
+                : dosyaUzantisi.substring(1).toLowerCase(),
         dosyaHash: dosyaHash,
         olusturmaTarihi: simdi,
         guncellemeTarihi: simdi,
@@ -95,16 +98,7 @@ class DosyaServisi {
 
   // Belgeler klasörünü al/oluştur
   Future<Directory> _belgelerKlasorunu() async {
-    Directory appDir = await getApplicationDocumentsDirectory();
-    Directory belgelerDir = Directory(
-      path.join(appDir.path, Sabitler.BELGELER_KLASORU),
-    );
-
-    if (!await belgelerDir.exists()) {
-      await belgelerDir.create(recursive: true);
-    }
-
-    return belgelerDir;
+    return await DepolamaKonumuServisi.instance.belgelerKlasoru();
   }
 
   // Dosya var mı kontrolü
@@ -135,8 +129,8 @@ class DosyaServisi {
 
       for (FileSystemEntity entity in dosyalar) {
         if (entity is File) {
-          Uint8List bytes = await entity.readAsBytes();
-          String dosyaHash = sha256.convert(bytes).toString();
+          String dosyaHash =
+              (await sha256.bind(entity.openRead()).first).toString();
           if (dosyaHash == hash) {
             return entity.path;
           }
@@ -209,8 +203,7 @@ class DosyaServisi {
   static Future<String> dosyaHashiHesapla(String dosyaYolu) async {
     try {
       File dosya = File(dosyaYolu);
-      Uint8List bytes = await dosya.readAsBytes();
-      return sha256.convert(bytes).toString();
+      return (await sha256.bind(dosya.openRead()).first).toString();
     } catch (e) {
       throw Exception('Hash hesaplanamadı: $e');
     }
@@ -248,7 +241,7 @@ class DosyaServisi {
         File fotografDosyasi = File(fotografYolu);
         if (await fotografDosyasi.exists()) {
           final Uint8List fotografBytes = await fotografDosyasi.readAsBytes();
-          
+
           // PDF sayfası ekle
           pdf.addPage(
             pw.Page(

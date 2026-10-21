@@ -43,3 +43,22 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local archives, backups, credentials, and generated distributions
+/code_backups/
+/artifacts/
+/releases/
+/android/build/
+/android/.kotlin/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.jks
+*.keystore
+key.properties
+.env
+.env.*
+!.env.example

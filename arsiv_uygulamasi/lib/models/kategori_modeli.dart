@@ -111,8 +111,7 @@ class KategoriModeli extends BaseModel {
 
   /// Varsayılan kategoriler
   static List<KategoriModeli> ontanimliKategoriler() {
-    // Mevcut kategorilerin senkronizasyona dahil edilmemesi için eski tarih kullan
-    final eskiTarih = DateTime.now().subtract(const Duration(days: 7));
+    final eskiTarih = DateTime.now();
 
     return [
       KategoriModeli(

@@ -21,6 +21,53 @@
 
 ## ✨ Özellikler
 
+### Profil ve renk paletleri
+
+Alt gezinmedeki **Profil** sekmesi hesap bilgilerini ve görünüm tercihlerini
+aynı sayfada toplar. Varsayılan orman yeşiline ek olarak arduvaz mavisi, petrol,
+mürdüm ve toprak paletleri bulunur. Seçim cihazda saklanır, yeniden açılışta
+yüklenir ve Profil içinden varsayılan yeşile döndürülebilir.
+
+Tema altyapısı `lib/theme/app_palette.dart`, `lib/theme/app_theme.dart` ve
+`lib/providers/theme_controller.dart` içinde tutulur. Yeni sayfalar ana renk,
+zemin, metin ve çerçeveler için `Theme.of(context).colorScheme` kullanmalıdır:
+`primary/onPrimary`, `primaryContainer/onPrimaryContainer`,
+`surface/onSurface`, `onSurfaceVariant` ve `outlineVariant`.
+Açılış gibi koyu marka yüzeyleri `BrandColors` tema uzantısından alınır.
+Kategori renkleri kullanıcı verisidir; tema seçimi bu verileri değiştirmez.
+
+Bu aşamada açık zeminli renk paletleri desteklenir. Ana sayfa, Profil, ortak tema,
+gezinme ve açılış renkleri entegredir; diğer sayfalardaki sabit renkler,
+sayfa sayfa yapılacak tasarım çalışmasında taşınacaktır. Hesap bölümü mevcut
+oturum bilgilerini gösterir; hesap düzenleme kontrolleri ayrıca eklenebilir.
+
+Doğrulama: `flutter test --no-pub test/theme_test.dart`.
+Windows'ta görsel önizlemeler için
+`flutter test --no-pub --dart-define=CAPTURE_THEME_PREVIEW=true test/theme_test.dart`
+komutu `artifacts/theme/` altında mobil ve masaüstü PNG çıktıları oluşturur.
+
+### Ortak arayüz bileşenleri ve ana sayfa
+
+- `lib/widgets/common/`: `AppCard` ortak kart yüzeyi, `AppStatCard` bilgi kartı,
+  `AppActionCard` işlem kartı, `AppSectionHeader` bölüm başlığı, `AppHeader`
+  üst çubuk ve `AdaptiveCardLayout` genişlik/yazı boyutuna uyumlu kart yerleşimi.
+  Kartlar sabit yükseklik veya platform türüne göre boyutlandırılmaz.
+- `lib/widgets/home/`: özet, hızlı işlemler, son belgeler ve veritabanı bilgi
+  penceresi. Bu bileşenler veri sorgulamaz; veriyi ve işlem callback'lerini alır.
+- `lib/models/ana_sayfa_ozeti.dart`: ana sayfanın veri modeli.
+- `lib/screens/ana_ekran.dart`: veri yükleme ve gezinme. Yenilemeler aynı devam
+  eden isteği paylaşır, yüklenmiş içerik korunur, hata halinde tekrar denenebilir.
+  Son belge sorgusu beş kayıtla sınırlıdır; iç içe kaydırılan listeler ve sürekli
+  animasyonlar kullanılmaz. Tema değişikliği veri sorgusunu yeniden başlatmaz.
+
+Yeni sayfalarda aynı kart bileşenleri ve `ColorScheme` rolleri kullanılmalıdır.
+Profil bölüm kartları da `AppCard` kullanır. Ana sayfa ve ortak bileşen testleri:
+`flutter test --no-pub test/home_test.dart test/theme_test.dart`.
+Windows'ta örnek verili görseller:
+`flutter test --no-pub --dart-define=CAPTURE_HOME_PREVIEW=true test/home_test.dart`.
+Çıktılar `artifacts/home/` klasörüne yazılır. Widget testleri taşma ve etkileşimleri
+doğrular; gerçek cihazda kare süresi ölçümü yerine geçmez.
+
 ### 📋 Belge Yönetimi
 - **Çoklu Dosya Desteği**: PDF, DOC, DOCX, TXT, JPG, PNG, MP4, ZIP vb. 20+ dosya formatı
 - **✨ Belge Düzenleme (YENİ)**: Başlık, açıklama, kategori, kişi ve etiket düzenleme

@@ -2,10 +2,8 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
 import 'package:logging/logging.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
-import 'package:flutter/foundation.dart';
 import '../utils/sabitler.dart';
+import 'depolama_konumu_servisi.dart';
 
 /// Log servisi - uygulama genelinde loglama için
 class LogServisi {
@@ -46,21 +44,10 @@ class LogServisi {
   /// Log dosyası ayarla
   Future<void> _setupLogFile() async {
     try {
-      // Mobilde external storage directory kullan, PC'de documents directory
-      final Directory documentsDir;
-      if (Platform.isAndroid || Platform.isIOS) {
-        documentsDir = await getApplicationDocumentsDirectory();
-      } else {
-        documentsDir = await getApplicationDocumentsDirectory();
-      }
-
-      final logDir = Directory(path.join(documentsDir.path, 'logs'));
-
-      if (!await logDir.exists()) {
-        await logDir.create(recursive: true);
-      }
-
-      _logFile = File(path.join(logDir.path, Sabitler.LOG_DOSYASI));
+      final logDir = await DepolamaKonumuServisi.instance.logKlasoru();
+      _logFile = File(
+        '${logDir.path}${Platform.pathSeparator}${Sabitler.LOG_DOSYASI}',
+      );
 
       // Check file size and rotate if necessary
       if (_logFile != null && await _logFile!.exists()) {

@@ -1,12 +1,17 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 import '../models/kategori_modeli.dart';
 import '../models/belge_modeli.dart';
 import '../services/veritabani_servisi.dart';
+import 'home_preferences.dart';
 
 class YedeklemeServisi {
-  final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
+  final VeriTabaniServisi _veriTabani;
+  YedeklemeServisi({VeriTabaniServisi? veriTabani})
+    : _veriTabani = veriTabani ?? VeriTabaniServisi();
 
   /// Kişi ve kategori bazında yedekleme yapar
   /// [kisiIds] - Yedeklenecek kişi ID'leri
@@ -20,6 +25,12 @@ class YedeklemeServisi {
     Function(double progress, String operation)? onProgress,
   }) async {
     try {
+      final output = await Directory(
+        hedefKlasorYolu,
+      ).createTemp('Arsiv-Yedek-');
+      hedefKlasorYolu = output.path;
+      final hatalar = <String>[];
+      final manifest = <Map<String, dynamic>>[];
       // Kişi ve kategori verilerini getir
       final kisiler = await _veriTabani.kisileriGetir();
       final kategoriler = await _veriTabani.kategorileriGetir();
@@ -44,12 +55,12 @@ class YedeklemeServisi {
       // Her kişi için işlem yap
       for (final kisi in yedeklenecekKisiler) {
         onProgress?.call(
-          islenenBelgeSayisi / toplamBelgeSayisi,
+          toplamBelgeSayisi == 0 ? 0 : islenenBelgeSayisi / toplamBelgeSayisi,
           'Kişi hazırlanıyor: ${kisi.tamAd}',
         );
 
         // Kişi klasörünü oluştur
-        final kisiKlasoruAdi = _temizleKlasorAdi(kisi.tamAd);
+        final kisiKlasoruAdi = '${kisi.id}_${_temizleKlasorAdi(kisi.tamAd)}';
         final kisiKlasoruYolu = path.join(hedefKlasorYolu, kisiKlasoruAdi);
 
         await Directory(kisiKlasoruYolu).create(recursive: true);
@@ -92,7 +103,8 @@ class YedeklemeServisi {
                   )
                   .kategoriAdi;
 
-          final kategoriKlasoruAdi = _temizleKlasorAdi(kategoriAdi);
+          final kategoriKlasoruAdi =
+              '${kategoriId}_${_temizleKlasorAdi(kategoriAdi)}';
           final kategoriKlasoruYolu = path.join(
             kisiKlasoruYolu,
             kategoriKlasoruAdi,
@@ -109,10 +121,15 @@ class YedeklemeServisi {
                 'Kopyalanıyor: ${belge.baslik}',
               );
 
-              await _belgeyiKopyala(belge, kategoriKlasoruYolu);
+              final copied = await _belgeyiKopyala(belge, kategoriKlasoruYolu);
+              manifest.add({
+                ...belge.toMap(),
+                'dosya_yolu': path.relative(copied, from: hedefKlasorYolu),
+              });
               islenenBelgeSayisi++;
             } catch (e) {
               print('Belge kopyalanırken hata: ${belge.baslik} - $e');
+              hatalar.add('${belge.orijinalDosyaAdi}: $e');
               // Hata durumunda da sayacı artır
               islenenBelgeSayisi++;
             }
@@ -120,7 +137,31 @@ class YedeklemeServisi {
         }
       }
 
+      await File(path.join(hedefKlasorYolu, 'manifest.json')).writeAsString(
+        jsonEncode({
+          'surum': 1,
+          'tamamlandi': hatalar.isEmpty,
+          'belgeler': manifest,
+          'hatalar': hatalar,
+          'kisiler': [
+            for (final k in yedeklenecekKisiler)
+              {
+                'id': k.id,
+                'ad': k.ad,
+                'soyad': k.soyad,
+                'kullanici_adi': k.kullaniciAdi,
+              },
+          ],
+          'kategoriler': kategoriler.map((k) => k.toMap()).toList(),
+        }),
+        flush: true,
+      );
+      if (hatalar.isNotEmpty)
+        throw Exception(
+          '${hatalar.length} dosya yedeklenemedi. Ayrintilar: $hedefKlasorYolu/manifest.json',
+        );
       // Yedekleme tamamlandı
+      await HomePreferences.recordBackup(DateTime.now());
       onProgress?.call(1.0, 'Yedekleme başarıyla tamamlandı!');
     } catch (e) {
       throw Exception('Yedekleme sırasında hata oluştu: $e');
@@ -128,7 +169,7 @@ class YedeklemeServisi {
   }
 
   /// Belgeyi hedef klasöre kopyalar
-  Future<void> _belgeyiKopyala(
+  Future<String> _belgeyiKopyala(
     BelgeModeli belge,
     String hedefKlasorYolu,
   ) async {
@@ -162,7 +203,18 @@ class YedeklemeServisi {
     }
 
     // Dosyayı kopyala
-    await kaynakDosya.copy(finalHedefYolu);
+    if (await kaynakDosya.length() != belge.dosyaBoyutu ||
+        (await sha256.bind(kaynakDosya.openRead()).first).toString() !=
+            belge.dosyaHash) {
+      throw Exception('Kaynak dosya boyutu veya hash kayitla uyusmuyor.');
+    }
+    final copy = await kaynakDosya.copy(finalHedefYolu);
+    if (await copy.length() != belge.dosyaBoyutu ||
+        (await sha256.bind(copy.openRead()).first).toString() !=
+            belge.dosyaHash) {
+      throw Exception('Yedek kopyasi dogrulanamadi.');
+    }
+    return copy.path;
   }
 
   /// Klasör adını temizler (geçersiz karakterleri kaldırır)

@@ -1,0 +1,187 @@
+ARSIV UYGULAMASI - AKTARIM VE DEPOLAMA INCELEMESI
+Tarih: 21 Ekim 2026
+
+KAPSAM
+PC/telefon arasindaki gonderici, HTTP alicisi, kisi/kategori/belge modelleri,
+dosya yazma, aktarim onayi, secili dosya disari aktarma ve Android acik
+klasore gecis kodlari incelendi ve duzeltildi. Testler gecici veritabanlari
+ve dosyalarla yapildi. Kullanicinin canli arsivi tasinmadi veya silinmedi.
+Bu calismada cihaza APK kurulmadi. Kod yedegi:
+code_backups/transfer-20261021-193202
+
+BULGULAR VE UYGULANAN DUZELTMELER
+
+1. Kritik: Cihazlarin yerel sayisal kimlikleri ayni kisiyi temsil etmiyordu.
+   Kisi/kategori/belge icin kalici evrensel kimlik eslemeleri eklendi.
+   Kaynak kisi ID'si hedef kisi ID'si olarak kullanilmiyor. Kisi adi,
+   soyadi ve kullanici adi denetleniyor. Bilinmeyen kisi baglantisi icin
+   kullanici secimi gerekiyor. Sadece isim benzerligi otomatik onay degil.
+   Ayni kullanici adini baskasina atayan yeni kayit reddediliyor.
+
+2. Kritik: Ayni dosya hash'i farkli sahip veya belge bilgileriyle
+   karsilastirildiginda ilgisiz mevcut kayit basarili sayilabiliyordu.
+   Kisi, kategori, baslik, aciklama, etiket, olusturma tarihi ve diger
+   belge alanlari karsilastiriliyor. Celiski varsa mevcut kayit korunuyor,
+   dosya bazinda hata donuyor. Evrensel belge kimligi farkli icerige
+   baglanamiyor. Son erisim/guncelleme zamani farklari tek basina
+   kopya belge olusturmuyor; hedefteki mevcut zamanlar korunuyor.
+
+3. Kritik: Genel success yaniti gercek dosya teslimini kanitlamiyordu.
+   Alici boyutu ve SHA-256'yi dogruluyor, dosyayi ve DB kaydini tamamliyor,
+   aktarim kimligi + metadata hash'i + dosya hash'i ile onay veriyor.
+   Gonderici bu alanlar uyusmadan senkronize isaretlemiyor. Gonderim
+   sirasinda kaynak metadata degisirse de senkronize isaretlemiyor.
+
+4. Yuksek: Buyuk dosyalarin tumunu bellekte/base64 olarak tasimak video
+   aktarimlarini sinirliyordu. Dosyalar akisla ve sifreli parcalar halinde
+   aktariliyor. Dosya limiti 16 GiB; profil resmi limiti 5 MiB.
+   Bu limitler azami kabul siniridir; 16 GiB fiziksel cihazda denenmedi.
+
+5. Yuksek: Yarim aktarimlar ve tekrar denemeler tutarsiz kayit uretebiliyordu.
+   Her istek kendine ait gecici klasore yaziyor. Kisi, kategori, belge,
+   evrensel kimlik ve teslim kaydi tek DB islemiyle tamamlaniyor.
+   DB hatasinda yeni kayitlar geri aliniyor. Basarisiz islemin kendi
+   gecici dosyasi temizleniyor. Tekrar gonderim ikinci belge uretmiyor.
+   Isletim sistemi sureci aniden oldururse sahipsiz gecici kopya kalabilir;
+   bu durum icin tum klasorleri tarayan otomatik silme eklenmedi.
+
+6. Yuksek: Aktarim erisimi ve ag uzerindeki veri korunmasi yetersizdi.
+   QR eslesme sirri, HMAC istek dogrulamasi, zaman/tekrar kontrolu ve
+   cryptography kutuphanesinin AES-256-GCM sifrelemesi eklendi.
+   Siralama, parca butunlugu ve bitis cercevesi dogrulaniyor.
+   Dosya/metadata/yanit govdeleri sifreli; IP, adres, boyut ve trafik
+   zamanlamasi gizlenmez. QR gizli anahtar icerir; paylasilmamalidir.
+   Kisi parolalari ve yonetici yetkisi transfer edilmiyor.
+   Baglanti kesilince ag yaniti beklenmeden yerel eslesme kaldiriliyor.
+   Bu, bagimsiz kriptografik guvenlik denetimi yerine gecmez.
+
+7. Yuksek: Varsayilan sayfalama binlerce kaydin yalnizca ilk kismini
+   aktarabiliyordu. Aktarim sorgularindaki sayfalama siniri kaldirildi.
+   Tek global senkronize bayragi her hedef cihazi temsil etmedigi icin
+   aktif kayitlar hedefte yeniden denetleniyor; var olanlar cogaltilmiyor.
+   Bunun maliyeti buyuk arsivlerde yeniden hash okuma ve ag trafigidir.
+
+8. Yuksek: Bazi ekran islemleri gercek aktarim yapmadan basari gosteriyordu.
+   Bu aktarim dugmeleri gercek eslesmis cihaz secimine ve ortak servise
+   baglandi. Her dosyanin sonucu goruntuleniyor; JSON raporu Logs'a
+   yaziliyor. Eksik/kismi sonuc tum aktarim basarili diye sunulmuyor.
+   QR ekrandaki sabit deneme IP/kimligi gercek cihaz bilgisiyle degisti.
+
+9. Orta: CSV etiketleri virgul iceren etiketleri parcaliyordu.
+   Yeni etiket yazimi JSON listesi; eski CSV/list/JSON okuma korunuyor.
+   Gecmiste virgul yuzunden kaybolmus etiket sinirlari otomatik
+   yeniden kurulamaz. Bilinmeyen senkron durum degeri cokmeye yol acmiyor.
+   copyWith ile kisi/kategori gibi nullable alanlar acikca temizlenebiliyor.
+   Kisi esitligi ayni ad-soyadi degil kayit kimligini esas aliyor.
+
+10. Orta: Tarihleri geriye cekerek kayit secme davranisi is verisini
+    degistiriyordu. Okuma sirasindaki kategori tarih degisikligi ve
+    aktarim icin yapay yaslandirma kaldirildi. Paket tarihleri dogrulaniyor.
+
+11. Yuksek: Kaynak dosya adi/yolu hedefte guvenli kabul ediliyordu.
+    Gelen cihaz yolu hedef yol olarak kullanilmiyor. Windows/Android
+    yol ayraclari, ust klasore cikis ve ayrilmis dosya adlari reddediliyor.
+    Tur/uzanti uyumu, alan turleri, boyut ve sema surumu denetleniyor.
+    Uzantisiz ve standart liste disindaki dosyalar da aktarilabiliyor.
+
+12. Yuksek: Secili dosya disari aktariminda ayni isimli kisiler ayni
+    klasorde birlesebiliyor, kopyalama hatalari basari sayilabiliyordu.
+    Benzersiz cikti klasoru, kisi/kategori ID'li klasor adlari, hash
+    dogrulamasi ve metadata iceren manifest.json eklendi.
+    Eksik dosya hata olarak bildirilir. Bu islev tam DB geri yukleme
+    sistemi degildir; tum arsiv yedegi yerine kullanilmamalidir.
+
+13. Kritik: Android DB'yi normal dosya kopyasi olarak tasimak acik
+    SQLite/WAL islemlerini eksik alabilirdi. VACUUM INTO ile tutarli
+    snapshot, SQLite integrity_check, belge/profil dosyasi hash kontrolleri,
+    kisi/kategori/belge sayisi karsilastirmasi eklendi. Yollar sadece
+    hazirlanan hedef DB'de degisiyor. Eski DB ve dosyalar korunuyor.
+    Hedef: /storage/emulated/0/Documents/Arsiv
+    Alt klasorler: Belgeler, Yedekler, Logs. Aktif DB: arsiv.db.
+
+14. Kritik: Acik DB'ye gecildikten sonra izin kaybi eski gizli DB'yi
+    yeniden aktiflestirip iki farkli arsiv olusturabilirdi. Kalici konum
+    isareti eklendi. Gecis tamamlandiktan sonra izin/DB kaybinda durulur;
+    eski veriye sessizce donulmez, bos DB acilmaz. Ilk tasima oncesinde
+    izin reddi veya kopya dogrulama hatasinda eski gizli arsiv kullanilir.
+    Isaretsiz iki DB varsa hangisinin guncel oldugu varsayilmaz.
+    Eski gizli arsivi temizleme dugmesi eklenmedi; eski kopya saklanir.
+
+15. Yuksek: Android release manifestinde ag izni eksikti. INTERNET izni
+    eklendi. Depolama izin/yazma kontrolu ortak konum servisiyle birlikte
+    kullaniliyor. Android'in gercek izin ekranlari cihazda sinanmadi.
+
+DOGRU AKTARIM SIRASI
+Eslesme -> paket semasi/kimlik/metadata on kontrolu -> gerekiyorsa kisi
+secimi -> sifreli dosya akisi -> boyut/SHA-256 -> hedef metadata tekrar
+kontrolu -> DB islemi -> dogrulanmis dosya onayi -> kaynak durum kontrolu
+-> dosya bazinda sonuc. Cakismalar otomatik ustune yazilarak cozulmez.
+
+SURUM VE CANLI VERI SINIRLARI
+Yeni aktarim protokolu v2'dir. Eski guvensiz /sync aktarim yollari 426
+doner. Onceki plandaki eski paketleri kabul etme maddesi bu uygulamada
+karsilanmiyor: guvenli bir eski-paket uyarlayicisi eklenmedi. Iki cihaz
+da guncellenmeden yeni/eski surumler arasinda aktarim yapilamaz.
+
+Aktarim kimlikleri/gecmisi mevcut DB'ye yeni tablolar olarak eklenir;
+mevcut belge/kisi/kategori ID'leri yeniden numaralanmaz. Ancak tum tarihi
+DB surumlerinin gercek kullanici verileriyle yukseltilmesi test edilmedi.
+Kurulu APK'nin imzasi, paket kimligi ve versionCode uyumlulugu bu
+calismada dogrulanmadi. Uygulamayi kaldirmak veya verisini temizlemek
+bu degisikliklerin bir parcasi degildir.
+
+Acik arsiv dosya yoneticisinden degistirilebilir/silinebilir. Bu erisim
+isteginin dogal sonucudur; tasima dogrulamasi daha sonra elle silinen
+veriyi korumaz. Aktif DB'yi baska uygulamayla duzenlemek uygun degildir.
+Gizli eski kopya tasima anini temsil eder; sonraki eklemelerin yedegi degildir.
+Eski surume dogrudan donmek de acik/gizli arsiv ayrismasi yaratabilir.
+
+Eski Android SQLite surumlerinde VACUUM INTO desteklenmezse tasima
+tamamlanmaz ve ilk geciste gizli arsiv korunarak uyari verilir.
+Gercek disk dolmasi, cihaz kapanmasi ve her ureticinin harici depolama
+davranisi ayri cihaz testi gerektirir. Sifir veri kaybi garantisi verilmez.
+
+TEST SONUCLARI
+flutter test --concurrency=1 --reporter expanded: 80 test gecti.
+50 test bu calismadaki aktarim/kisi secimi/depolama testleridir.
+Diger 30 test projedeki ana sayfa/tema testleridir.
+flutter analyze --no-pub: hata seviyesinde bulgu yok; 825 toplam
+uyari/bilgilendirme bildirimi var. AnalyzerExit=1; analiz tamamen temiz
+sayilmamali. Kapsam disindaki genel lint temizligi yapilmadi.
+
+26 uzanti/tur durumu: pdf, doc, docx, txt, rtf, jpg, jpeg, png, gif, bmp,
+mp3, wav, mp4, avi, mov, zip, rar, 7z, tar, gz, mkv, flac, aac, xlsx,
+bin ve uzantisiz dosya. Iki yonde ayni baytlar ve metadata dogrulandi.
+Bu testler sentetik bayt kullanir; gercek videonun oynatilmasini, PDF
+goruntulemesini veya codec destegini kanitlamaz.
+
+Ek kapsam: 1100 belge, tekrar/eszamanli gonderim, kesilen/bozuk akis,
+yanlis kisi secimi, metadata/evrensel kimlik cakismasi, DB yazma hatasi,
+sahte teslim onayi, bozuk hedef dosya, profil resmi cakismasi,
+sifreli paket tahrifi/siralama/kesilme, gonderim sirasinda kaynak degisikligi,
+WAL snapshot, izin reddi, aktif acik DB'nin kaybi ve dar ekran kisi secimi.
+11 MiB dosya gercek loopback HTTP uzerinden sifreli aktarildi.
+
+Fiziksel PC -> Android ve Android -> PC eslesme/aktarim testi yapilmadi.
+Bu nedenle guncellemeyi aktif binlerce kayda uygulamadan once mevcut
+arsivin bagimsiz dogrulanmis yedegiyle, kopya arsiv uzerinde cihaz testi
+ve kurulu surumun imza/paket/yukseltme kontrolu tamamlanmalidir.
+
+TEMEL KOD DOSYALARI
+lib/services/guvenli_aktarim_servisi.dart
+lib/services/aktarim_http.dart
+lib/services/http_sunucu_servisi.dart
+lib/services/senkronizasyon_yonetici_servisi.dart
+lib/services/depolama_konumu_servisi.dart
+lib/services/veritabani_servisi.dart
+lib/services/dosya_servisi.dart
+lib/services/yedekleme_servisi.dart
+test/guvenli_aktarim_test.dart
+test/aktarim_kisi_secimi_test.dart
+
+TEKNIK DAYANAKLAR
+SQLite tutarli snapshot: https://www.sqlite.org/backup.html
+SQLite WAL/kopyalama: https://www.sqlite.org/wal.html
+SQLite bozulma kosullari: https://www.sqlite.org/howtocorrupt.html
+AES-GCM kutuphanesi: https://pub.dev/packages/cryptography
+Flutter ag izni: https://docs.flutter.dev/data-and-backend/networking

@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/auth_servisi.dart';
@@ -252,6 +253,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final brand = Theme.of(context).extension<BrandColors>()!;
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -260,7 +262,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D3B1A), // Koyu yeşil
+      backgroundColor: brand.background, // Koyu yeşil
       body: Stack(
         children: [
           // Arkaplan gradient ve pattern
@@ -270,9 +272,17 @@ class _SplashScreenState extends State<SplashScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF0D3B1A), // Koyu yeşil
-                  const Color(0xFF155F2B).withOpacity(0.8), // Orta yeşil
-                  const Color(0xFF2E8B57).withOpacity(0.6), // Açık yeşil
+                  brand.background, // Koyu yeşil
+                  Color.lerp(
+                    brand.background,
+                    brand.accent,
+                    0.25,
+                  )!, // Orta yeşil
+                  Color.lerp(
+                    brand.background,
+                    brand.accent,
+                    0.45,
+                  )!, // Açık yeşil
                 ],
               ),
             ),
@@ -315,24 +325,16 @@ class _SplashScreenState extends State<SplashScreen>
                                 width: 120,
                                 height: 120,
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
+                                  gradient: LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
-                                      Color(0xFF4CAF50), // Yeşil
-                                      Color(0xFF2E7D32), // Koyu yeşil
+                                      brand.accent, // Yeşil
+                                      brand.background, // Koyu yeşil
                                     ],
                                   ),
                                   borderRadius: BorderRadius.circular(30),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF4CAF50,
-                                      ).withOpacity(0.5 * _glowAnimation.value),
-                                      blurRadius: 30,
-                                      spreadRadius: 10,
-                                    ),
-                                  ],
+                                  boxShadow: const [],
                                 ),
                                 child: Icon(
                                   Icons.archive_rounded,
@@ -356,11 +358,15 @@ class _SplashScreenState extends State<SplashScreen>
                       children: [
                         ShaderMask(
                           shaderCallback:
-                              (bounds) => const LinearGradient(
+                              (bounds) => LinearGradient(
                                 colors: [
-                                  Color(0xFF4CAF50), // Yeşil
-                                  Color(0xFF8BC34A), // Açık yeşil
-                                  Color(0xFFFFFFFF), // Beyaz
+                                  brand.accent, // Yeşil
+                                  Color.lerp(
+                                    brand.accent,
+                                    Colors.white,
+                                    0.55,
+                                  )!, // Açık yeşil
+                                  Colors.white, // Beyaz
                                 ],
                               ).createShader(bounds),
                           child: const Text(
@@ -427,22 +433,18 @@ class _SplashScreenState extends State<SplashScreen>
                               widthFactor: _loadingProgress,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
+                                  gradient: LinearGradient(
                                     colors: [
-                                      Color(0xFF4CAF50), // Yeşil
-                                      Color(0xFF8BC34A), // Açık yeşil
+                                      brand.accent, // Yeşil
+                                      Color.lerp(
+                                        brand.accent,
+                                        Colors.white,
+                                        0.55,
+                                      )!, // Açık yeşil
                                     ],
                                   ),
                                   borderRadius: BorderRadius.circular(2),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF4CAF50,
-                                      ).withOpacity(0.5),
-                                      blurRadius: 8,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
+                                  boxShadow: const [],
                                 ),
                               ),
                             );

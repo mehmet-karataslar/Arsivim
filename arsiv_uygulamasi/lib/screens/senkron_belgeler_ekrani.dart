@@ -7,6 +7,8 @@ import '../utils/yardimci_fonksiyonlar.dart';
 import '../models/belge_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
+import '../services/senkronizasyon_yonetici_servisi.dart';
+import '../widgets/aktarim_kisi_secimi.dart';
 
 class SenkronBelgelerEkrani extends StatefulWidget {
   const SenkronBelgelerEkrani({Key? key}) : super(key: key);
@@ -83,7 +85,10 @@ class _SenkronBelgelerEkraniState extends State<SenkronBelgelerEkrani>
 
     try {
       // Tüm belgeleri getir
-      final tumBelgeler = await _veriTabani.belgeleriGetir();
+      final tumBelgeler = await _veriTabani.belgeleriGetir(
+        limit: null,
+        offset: null,
+      );
 
       // Bekleyen belgeleri filtrele
       _bekleyenBelgeler =
@@ -96,21 +101,9 @@ class _SenkronBelgelerEkraniState extends State<SenkronBelgelerEkrani>
               )
               .toList();
 
-      // Platform bazlı ayırma (simüle edilmiş - gerçek uygulamada cihaz ID'sine göre ayırılır)
-      _pcBelgeleri =
-          _bekleyenBelgeler
-              .where(
-                (belge) =>
-                    belge.dosyaYolu.contains('Documents') ||
-                    belge.dosyaYolu.contains('Desktop') ||
-                    belge.dosyaYolu.contains('\\'), // Windows path separator
-              )
-              .toList();
-
-      _mobilBelgeler =
-          _bekleyenBelgeler
-              .where((belge) => !_pcBelgeleri.contains(belge))
-              .toList();
+      // Dosya yolu cihazin kokenini kanitlamaz; buradaki belgeler yerel arsivdedir.
+      _pcBelgeleri = _pcPlatform ? _bekleyenBelgeler : [];
+      _mobilBelgeler = _pcPlatform ? [] : _bekleyenBelgeler;
 
       // Kategoriler ve kişiler
       _kategoriler = await _veriTabani.kategorileriGetir();
@@ -903,29 +896,79 @@ class _SenkronBelgelerEkraniState extends State<SenkronBelgelerEkrani>
   }
 
   void _tekBelgeSenkronize(BelgeModeli belge) {
-    _basariMesaji(
-      '${belge.baslik ?? belge.orijinalDosyaAdi} senkronize edildi',
-    );
-    // Gerçek senkronizasyon logic'i buraya
+    _belgeleriAktar([belge]);
   }
 
   void _secilenBelgeleriSenkronize() {
     if (_secilenBelgeler.isEmpty) return;
 
-    _basariMesaji('${_secilenBelgeler.length} belge senkronize edildi');
-    setState(() {
-      _secilenBelgeler.clear();
-      _topluSecim = false;
-    });
-    // Gerçek senkronizasyon logic'i buraya
+    _belgeleriAktar(
+      _bekleyenBelgeler.where((b) => _secilenBelgeler.contains(b.id)).toList(),
+    );
   }
 
   void _tumBelgeleriSenkronize() {
     final belgeler = _getAktifBelgeler();
     if (belgeler.isEmpty) return;
 
-    _basariMesaji('${belgeler.length} belge senkronize edildi');
-    // Gerçek senkronizasyon logic'i buraya
+    _belgeleriAktar(belgeler);
+  }
+
+  Future<void> _belgeleriAktar(List<BelgeModeli> belgeler) async {
+    final yonetici = SenkronizasyonYoneticiServisi.instance;
+    final cihazlar =
+        yonetici.bagliCihazlar.where((d) => d['ip'] != 'incoming').toList();
+    if (cihazlar.isEmpty) {
+      _hataGoster(
+        'Önce senkronizasyon ekranından hedef cihazı QR koduyla eşleştirin.',
+      );
+      return;
+    }
+    final ip = await showDialog<String>(
+      context: context,
+      builder:
+          (ctx) => SimpleDialog(
+            title: const Text('Hedef cihaz'),
+            children: [
+              for (final cihaz in cihazlar)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(ctx, cihaz['ip'] as String),
+                  child: Text('${cihaz['name']} (${cihaz['ip']})'),
+                ),
+            ],
+          ),
+    );
+    if (ip == null || !mounted) return;
+    final oncekiSecim = yonetici.onKisiSecimi;
+    yonetici.onKisiSecimi =
+        (mesaj, adaylar) async =>
+            mounted ? aktarimKisiSecimi(context, mesaj, adaylar) : null;
+    try {
+      final tamam = await yonetici.belgeleriSenkronEt(ip, belgeler: belgeler);
+      if (!mounted) return;
+      if (tamam) {
+        _basariMesaji('${belgeler.length} belge alıcıda doğrulandı.');
+        setState(() {
+          _secilenBelgeler.clear();
+          _topluSecim = false;
+        });
+      } else {
+        final hatalar = yonetici.sonAktarimSonuclari.where(
+          (r) => r['durum'] == 'hata',
+        );
+        _hataGoster(
+          hatalar.isEmpty
+              ? 'Aktarım tamamlanamadı. Eşleşmeyi kontrol edin.'
+              : hatalar
+                  .take(3)
+                  .map((r) => '${r['dosya']}: ${r['mesaj']}')
+                  .join('\n'),
+        );
+      }
+      await _verileriYukle();
+    } finally {
+      yonetici.onKisiSecimi = oncekiSecim;
+    }
   }
 
   void _secilenBelgeleriSil() {

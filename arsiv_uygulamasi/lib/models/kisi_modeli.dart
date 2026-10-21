@@ -108,11 +108,11 @@ class KisiModeli extends BaseModel {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is KisiModeli && other.ad == ad && other.soyad == soyad;
+    return other is KisiModeli && id != null && other.id == id;
   }
 
   @override
-  int get hashCode => ad.hashCode ^ soyad.hashCode;
+  int get hashCode => id?.hashCode ?? identityHashCode(this);
 
   @override
   String toString() => 'KisiModeli{id: $id, tamAd: $tamAd}';

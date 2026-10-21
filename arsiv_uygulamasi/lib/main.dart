@@ -28,6 +28,7 @@ import 'services/cache_servisi.dart';
 
 // Providers
 import 'providers/app_state_manager.dart';
+import 'providers/theme_controller.dart';
 
 // Models
 import 'models/belge_modeli.dart';
@@ -56,9 +57,16 @@ void main() async {
     // Initialize core services
     await _initializeServices();
 
+    final themeController = await ThemeController.load();
+
     runApp(
       MultiProvider(
-        providers: [ChangeNotifierProvider(create: (_) => AppStateManager())],
+        providers: [
+          ChangeNotifierProvider(create: (_) => AppStateManager()),
+          ChangeNotifierProvider<ThemeController>(
+            create: (_) => themeController,
+          ),
+        ],
         child: const ArsivimApp(),
       ),
     );
@@ -262,25 +270,13 @@ class ArsivimApp extends StatelessWidget {
       ],
 
       // Theme configuration
-      theme: _buildLightTheme(),
+      theme: context.watch<ThemeController>().theme,
 
       // Home screen
       home: const SplashScreen(),
 
       // Route configuration
       onGenerateRoute: _generateRoute,
-
-      // Error handling
-      builder: (context, child) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            return MediaQuery(
-              data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
-              child: child!,
-            );
-          },
-        );
-      },
     );
   }
 
@@ -297,17 +293,17 @@ class ArsivimApp extends StatelessWidget {
           );
         } else {
           return MaterialPageRoute(
-            builder: (_) => Scaffold(
-              appBar: AppBar(title: const Text('Hata')),
-              body: const Center(
-                child: Text('Belge bilgisi bulunamadı!'),
-              ),
-            ),
+            builder:
+                (_) => Scaffold(
+                  appBar: AppBar(title: const Text('Hata')),
+                  body: const Center(child: Text('Belge bilgisi bulunamadı!')),
+                ),
           );
         }
       default:
         return MaterialPageRoute(
-          builder: (_) => Scaffold(
+          builder:
+              (_) => Scaffold(
                 body: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -324,98 +320,5 @@ class ArsivimApp extends StatelessWidget {
               ),
         );
     }
-  }
-
-  /// Build light theme
-  ThemeData _buildLightTheme() {
-    const primaryColor = Color(0xFF2E7D32); // Green
-    const secondaryColor = Color(0xFF4CAF50); // Light Green
-    const accentColor = Color(0xFFFF9800); // Orange
-
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-
-      // Color scheme
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryColor,
-        brightness: Brightness.light,
-        primary: primaryColor,
-        secondary: secondaryColor,
-        tertiary: accentColor,
-      ),
-
-      // App bar theme
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: primaryColor,
-        titleTextStyle: TextStyle(
-          color: primaryColor,
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-
-      // Card theme
-      cardTheme: CardThemeData(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        clipBehavior: Clip.antiAlias,
-      ),
-
-      // Button themes
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        ),
-      ),
-
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        ),
-      ),
-
-      // Input decoration theme
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-        fillColor: Colors.grey[50],
-      ),
-
-      // Bottom navigation theme
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: primaryColor,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        elevation: 8,
-      ),
-
-      // Floating action button theme
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 6,
-      ),
-
-      // Snackbar theme
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-
-      // Progress indicator theme
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: primaryColor,
-      ),
-    );
   }
 }

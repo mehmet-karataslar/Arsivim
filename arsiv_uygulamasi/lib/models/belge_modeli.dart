@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'base_model.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 
@@ -13,6 +14,7 @@ enum SenkronDurumu {
 
 /// Belge modeli - optimize edilmiş ve basitleştirilmiş
 class BelgeModeli extends BaseModel {
+  static const _degismedi = Object();
   int? id;
   String dosyaAdi;
   String orijinalDosyaAdi;
@@ -65,7 +67,7 @@ class BelgeModeli extends BaseModel {
       kisiId: map['kisi_id'],
       baslik: map['baslik'],
       aciklama: map['aciklama'],
-      etiketler: map['etiketler']?.split(',').cast<String>(),
+      etiketler: etiketleriCoz(map['etiketler']),
       olusturmaTarihi: DateTime.parse(map['olusturma_tarihi']),
       guncellemeTarihi: DateTime.parse(map['guncelleme_tarihi']),
       sonErisimTarihi:
@@ -73,7 +75,12 @@ class BelgeModeli extends BaseModel {
               ? DateTime.parse(map['son_erisim_tarihi'])
               : null,
       aktif: map['aktif'] == 1,
-      senkronDurumu: SenkronDurumu.values[map['senkron_durumu'] ?? 0],
+      senkronDurumu:
+          map['senkron_durumu'] is int &&
+                  map['senkron_durumu'] >= 0 &&
+                  map['senkron_durumu'] < SenkronDurumu.values.length
+              ? SenkronDurumu.values[map['senkron_durumu']]
+              : SenkronDurumu.BEKLEMEDE,
     );
   }
 
@@ -96,7 +103,7 @@ class BelgeModeli extends BaseModel {
       'kisi_id': kisiId,
       'baslik': baslik,
       'aciklama': aciklama,
-      'etiketler': etiketler?.join(','),
+      'etiketler': etiketler == null ? null : jsonEncode(etiketler),
       'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
       'guncelleme_tarihi': guncellemeTarihi.toIso8601String(),
       'son_erisim_tarihi': sonErisimTarihi?.toIso8601String(),
@@ -106,41 +113,68 @@ class BelgeModeli extends BaseModel {
   }
 
   /// Model'i kopyala
+  static List<String> etiketleriCoz(dynamic value) {
+    if (value == null || value == '') return [];
+    if (value is List) return value.cast<String>();
+    if (value is! String) throw const FormatException('Etiket yapisi gecersiz');
+    if (value.startsWith('[')) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List && decoded.every((v) => v is String)) {
+          return decoded.cast<String>();
+        }
+      } on FormatException {
+        // Eski CSV etiketleri '[' ile baslayabilir.
+      }
+    }
+    return value.split(',');
+  }
+
   BelgeModeli copyWith({
-    int? id,
+    Object? id = _degismedi,
     String? dosyaAdi,
     String? orijinalDosyaAdi,
     String? dosyaYolu,
     int? dosyaBoyutu,
     String? dosyaTipi,
     String? dosyaHash,
-    int? kategoriId,
-    int? kisiId,
-    String? baslik,
-    String? aciklama,
-    List<String>? etiketler,
+    Object? kategoriId = _degismedi,
+    Object? kisiId = _degismedi,
+    Object? baslik = _degismedi,
+    Object? aciklama = _degismedi,
+    Object? etiketler = _degismedi,
     DateTime? olusturmaTarihi,
     DateTime? guncellemeTarihi,
-    DateTime? sonErisimTarihi,
+    Object? sonErisimTarihi = _degismedi,
     bool? aktif,
     SenkronDurumu? senkronDurumu,
   }) {
     return BelgeModeli(
-      id: id ?? this.id,
+      id: identical(id, _degismedi) ? this.id : id as int?,
       dosyaAdi: dosyaAdi ?? this.dosyaAdi,
       orijinalDosyaAdi: orijinalDosyaAdi ?? this.orijinalDosyaAdi,
       dosyaYolu: dosyaYolu ?? this.dosyaYolu,
       dosyaBoyutu: dosyaBoyutu ?? this.dosyaBoyutu,
       dosyaTipi: dosyaTipi ?? this.dosyaTipi,
       dosyaHash: dosyaHash ?? this.dosyaHash,
-      kategoriId: kategoriId ?? this.kategoriId,
-      kisiId: kisiId ?? this.kisiId,
-      baslik: baslik ?? this.baslik,
-      aciklama: aciklama ?? this.aciklama,
-      etiketler: etiketler ?? this.etiketler,
+      kategoriId:
+          identical(kategoriId, _degismedi)
+              ? this.kategoriId
+              : kategoriId as int?,
+      kisiId: identical(kisiId, _degismedi) ? this.kisiId : kisiId as int?,
+      baslik: identical(baslik, _degismedi) ? this.baslik : baslik as String?,
+      aciklama:
+          identical(aciklama, _degismedi) ? this.aciklama : aciklama as String?,
+      etiketler:
+          identical(etiketler, _degismedi)
+              ? this.etiketler
+              : etiketler as List<String>?,
       olusturmaTarihi: olusturmaTarihi ?? this.olusturmaTarihi,
       guncellemeTarihi: guncellemeTarihi ?? this.guncellemeTarihi,
-      sonErisimTarihi: sonErisimTarihi ?? this.sonErisimTarihi,
+      sonErisimTarihi:
+          identical(sonErisimTarihi, _degismedi)
+              ? this.sonErisimTarihi
+              : sonErisimTarihi as DateTime?,
       aktif: aktif ?? this.aktif,
       senkronDurumu: senkronDurumu ?? this.senkronDurumu,
     );

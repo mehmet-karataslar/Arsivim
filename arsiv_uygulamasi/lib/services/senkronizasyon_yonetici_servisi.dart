@@ -1,13 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
-import 'package:crypto/crypto.dart';
 import 'veritabani_servisi.dart';
 import 'http_sunucu_servisi.dart';
-import 'dosya_servisi.dart';
 import '../utils/timestamp_manager.dart';
 import '../utils/network_optimizer.dart';
 import '../models/belge_modeli.dart';
@@ -15,6 +11,9 @@ import '../models/kisi_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../widgets/senkronizasyon_progress_dialog.dart';
 import 'log_servisi.dart';
+import 'guvenli_aktarim_servisi.dart';
+import 'aktarim_http.dart';
+import 'depolama_konumu_servisi.dart';
 
 class SenkronizasyonYoneticiServisi {
   static final SenkronizasyonYoneticiServisi _instance =
@@ -24,7 +23,6 @@ class SenkronizasyonYoneticiServisi {
 
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
-  final DosyaServisi _dosyaServisi = DosyaServisi();
   final LogServisi _logServisi = LogServisi.instance;
   final NetworkOptimizer _networkOptimizer = NetworkOptimizer.instance;
 
@@ -175,7 +173,10 @@ class SenkronizasyonYoneticiServisi {
       _sunucuCalisiyorMu = _httpSunucu.calisiyorMu;
 
       // Senkronizasyon istatistikleri
-      final belgeler = await _veriTabani.belgeleriGetir();
+      final belgeler = await _veriTabani.belgeleriGetir(
+        limit: null,
+        offset: null,
+      );
       _bekleyenDosyaSayisi =
           belgeler
               .where(
@@ -243,11 +244,14 @@ class SenkronizasyonYoneticiServisi {
   }
 
   Future<String> connectionDataOlustur() async {
+    if (!_httpSunucu.calisiyorMu) await _httpSunucu.sunucuyuBaslat();
     final ip = await _getRealIPAddress();
     print('📱 Connection data IP adresi: $ip');
 
     final connectionInfo = {
       'type': 'arsivim_connection',
+      'transfer_version': GuvenliAktarimServisi.surum,
+      'transfer_token': _httpSunucu.aktarimAnahtari,
       'version': '1.0',
       'device_id': _httpSunucu.cihazId ?? 'unknown',
       'device_name':
@@ -261,17 +265,34 @@ class SenkronizasyonYoneticiServisi {
       'server_status': _sunucuCalisiyorMu,
     };
 
-    print('📋 Connection info: ${json.encode(connectionInfo)}');
     return json.encode(connectionInfo);
   }
 
   Future<String> _getRealIPAddress() async {
     // HTTP sunucu servisinden gerçek IP adresini al
     final realIP = await _httpSunucu.getRealIPAddress();
-    return realIP ?? '192.168.1.100'; // Fallback IP
+    if (realIP == null)
+      throw AktarimHatasi('AG', 'Yerel ag adresi bulunamadi.');
+    return realIP;
   }
 
   Future<bool> yeniCihazBagla(Map<String, dynamic> connectionInfo) async {
+    final token = connectionInfo['transfer_token'];
+    if (connectionInfo['transfer_version'] != GuvenliAktarimServisi.surum ||
+        token is! String ||
+        !RegExp(r'^[a-f0-9]{48}$').hasMatch(token)) {
+      onError?.call('Iki cihazi da guncelleyip yeni QR koduyla eslestirin.');
+      return false;
+    }
+    final ip = connectionInfo['ip'];
+    if (ip is! String ||
+        InternetAddress.tryParse(ip)?.type != InternetAddressType.IPv4 ||
+        connectionInfo['port'] != 8080) {
+      onError?.call('QR kodundaki ag adresi veya port gecersiz.');
+      return false;
+    }
+    if (!_httpSunucu.calisiyorMu) await _httpSunucu.sunucuyuBaslat();
+    _httpSunucu.eslesmisAnahtarlar[ip] = token;
     final deviceName = connectionInfo['device_name'] ?? 'Bilinmeyen Cihaz';
     final deviceId = connectionInfo['device_id'];
     final deviceIP = connectionInfo['ip'];
@@ -372,81 +393,21 @@ class SenkronizasyonYoneticiServisi {
   }
 
   Future<void> _notifyConnection(String ip, int port, String deviceName) async {
-    try {
-      _logServisi.info('📡 $deviceName\'e bağlantı bildirimi gönderiliyor...');
-
-      final myInfo = {
-        'type': 'connection_notification',
+    final result = await AktarimHttp.jsonIstek(
+      Uri.parse('http://$ip:$port/sync/v2/pair'),
+      _httpSunucu.eslesmisAnahtarlar[ip]!,
+      body: {
+        'reverse_token': _httpSunucu.aktarimAnahtari,
         'device_id': _httpSunucu.cihazId,
-        'device_name':
-            Platform.isWindows || Platform.isLinux || Platform.isMacOS
-                ? 'PC-Arşivim'
-                : 'Mobile-Arşivim',
+        'device_name': _httpSunucu.cihazAdi ?? 'Arsivim',
         'platform': Platform.operatingSystem,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'message': 'Yeni cihaz bağlandı',
-      };
-
-      _logServisi.info('📋 Gönderilen bilgi: ${json.encode(myInfo)}');
-
-      // Network kalitesini kontrol et
-      final networkQuality = await _networkOptimizer.testNetworkQuality(
-        'http://$ip:$port',
+      },
+    );
+    if (result['success'] != true)
+      throw AktarimHatasi(
+        'ESLESME',
+        result['error'] as String? ?? 'Cihaz eslestirilemedi.',
       );
-
-      if (networkQuality.quality == ConnectionQuality.poor) {
-        _logServisi.warning(
-          '⚠️ Kötü network kalitesi, isteği kuyruğa alınıyor...',
-        );
-
-        // Queue request for poor network conditions
-        final response = await _networkOptimizer.queueRequest(
-          method: 'POST',
-          url: 'http://$ip:$port/device-connected',
-          headers: {'Content-Type': 'application/json'},
-          body: myInfo,
-          priority: 1, // High priority
-        );
-
-        if (response.statusCode == 200) {
-          _logServisi.info(
-            '✅ Bağlantı bildirimi $deviceName\'e gönderildi (kuyruğa alındı)',
-          );
-          final responseData = json.decode(response.body);
-          _logServisi.info(
-            '📋 Hedef cihazın cevabı: ${responseData['message']}',
-          );
-        } else {
-          _logServisi.error(
-            '❌ Bağlantı bildirimi hatası: ${response.statusCode}',
-          );
-        }
-      } else {
-        // Normal resilient request
-        final response = await _networkOptimizer.resilientRequest(
-          method: 'POST',
-          url: 'http://$ip:$port/device-connected',
-          headers: {'Content-Type': 'application/json'},
-          body: myInfo,
-          maxRetries: 3,
-          timeout: const Duration(seconds: 15),
-        );
-
-        if (response.statusCode == 200) {
-          _logServisi.info('✅ Bağlantı bildirimi $deviceName\'e gönderildi');
-          final responseData = json.decode(response.body);
-          _logServisi.info(
-            '📋 Hedef cihazın cevabı: ${responseData['message']}',
-          );
-        } else {
-          _logServisi.error(
-            '❌ Bağlantı bildirimi hatası: ${response.statusCode}',
-          );
-        }
-      }
-    } catch (e) {
-      _logServisi.error('❌ Bağlantı bildirimi gönderilemedi: $e');
-    }
   }
 
   // PC tarafında gelen bağlantı bildirimini işle
@@ -493,6 +454,7 @@ class SenkronizasyonYoneticiServisi {
   }
 
   Future<void> _notifyDisconnection(Map<String, dynamic> device) async {
+    final token = _httpSunucu.eslesmisAnahtarlar.remove(device['ip']);
     try {
       if (device['ip'] != null && device['ip'] != 'incoming') {
         _logServisi.info(
@@ -506,15 +468,13 @@ class SenkronizasyonYoneticiServisi {
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         };
 
-        // Short timeout for disconnection, don't retry too much
-        await _networkOptimizer.resilientRequest(
-          method: 'POST',
-          url: 'http://${device['ip']}:8080/device-disconnected',
-          headers: {'Content-Type': 'application/json'},
-          body: disconnectInfo,
-          maxRetries: 1,
-          timeout: const Duration(seconds: 5),
-        );
+        if (token != null) {
+          await AktarimHttp.jsonIstek(
+            Uri.parse('http://${device['ip']}:8080/sync/v2/disconnect'),
+            token,
+            body: disconnectInfo,
+          );
+        }
 
         _logServisi.info(
           '✅ Bağlantı kesimi bildirimi gönderildi: ${device['name']}',
@@ -532,7 +492,6 @@ class SenkronizasyonYoneticiServisi {
 
   Future<bool> qrKoduTarandi(String qrData) async {
     try {
-      print('📷 QR kod tarandı (Yönetici): $qrData');
       final connectionInfo = json.decode(qrData);
 
       if (connectionInfo['type'] == 'arsivim_connection') {
@@ -572,63 +531,18 @@ class SenkronizasyonYoneticiServisi {
 
   /// Bekleyen senkronizasyon verilerini getir
   Future<Map<String, dynamic>> bekleyenSenkronlariGetir() async {
-    try {
-      final belgeler = await _veriTabani.belgeleriGetir();
-      final bekleyenBelgeler =
-          belgeler
-              .where(
-                (belge) =>
-                    belge.senkronDurumu == SenkronDurumu.BEKLEMEDE ||
-                    belge.senkronDurumu == SenkronDurumu.YEREL_DEGISIM,
-              )
-              .toList();
-
-      final kisiler = await _veriTabani.kisileriGetir();
-      // Sadece son 6 saatte oluşturulan kişileri bekleyen olarak kabul et
-      // Senkronizasyon sırasında alınan kişiler 48 saat geriye çekildiği için dahil edilmez
-      final altiSaatOnce = DateTime.now().subtract(const Duration(hours: 6));
-      final bekleyenKisiler =
-          kisiler
-              .where((kisi) => kisi.olusturmaTarihi.isAfter(altiSaatOnce))
-              .toList();
-
-      final kategoriler = await _veriTabani.kategorileriGetir();
-
-      // Kategori optimizasyonu: Sadece bugünden itibaren eklenen kategorileri bekleyen olarak kabul et
-      // Mevcut 16 kategori her iki sistemde de var, onları senkronize etmeye gerek yok
-      final bugun = DateTime.now();
-      final bugunBaslangic = DateTime(bugun.year, bugun.month, bugun.day);
-
-      final bekleyenKategoriler =
-          kategoriler
-              .where(
-                (kategori) => kategori.olusturmaTarihi.isAfter(bugunBaslangic),
-              )
-              .toList();
-
-      print('📊 Bekleyen senkronizasyonlar:');
-      print('   • Belgeler: ${bekleyenBelgeler.length}');
-      print('   • Kişiler: ${bekleyenKisiler.length}');
-      print(
-        '   • Kategoriler: ${bekleyenKategoriler.length} (sadece bugün eklenenler)',
-      );
-      print(
-        '   • Kategori filtresi: ${bugunBaslangic.toIso8601String()} sonrası',
-      );
-
-      return {
-        'bekleyen_belgeler': bekleyenBelgeler,
-        'bekleyen_kisiler': bekleyenKisiler,
-        'bekleyen_kategoriler': bekleyenKategoriler,
-        'toplam_bekleyen':
-            bekleyenBelgeler.length +
-            bekleyenKisiler.length +
-            bekleyenKategoriler.length,
-      };
-    } catch (e) {
-      print('❌ Bekleyen senkronizasyonlar getirilemedi: $e');
-      throw Exception('Bekleyen senkronizasyonlar getirilemedi: $e');
-    }
+    final belgeler = await _veriTabani.belgeleriGetir(
+      limit: null,
+      offset: null,
+    );
+    final kisiler = await _veriTabani.kisileriGetir();
+    final kategoriler = await _veriTabani.kategorileriGetir();
+    return {
+      'bekleyen_belgeler': belgeler,
+      'bekleyen_kisiler': kisiler,
+      'bekleyen_kategoriler': kategoriler,
+      'toplam_bekleyen': belgeler.length + kisiler.length + kategoriler.length,
+    };
   }
 
   /// Progress stream oluştur
@@ -643,851 +557,263 @@ class SenkronizasyonYoneticiServisi {
     _progressController?.add(ilerleme);
   }
 
-  /// Belgeleri hedef cihaza senkronize et (Progress desteği ile)
+  Future<int?> Function(String mesaj, List<Map<String, dynamic>> adaylar)?
+  onKisiSecimi;
+  final List<Map<String, dynamic>> sonAktarimSonuclari = [];
+  bool _aktarimSuruyor = false;
+
   Future<bool> belgeleriSenkronEtProgress(
     String hedefIP, {
     List<BelgeModeli>? belgeler,
-  }) async {
-    try {
-      print('📄 Gelişmiş belge senkronizasyonu başlatılıyor...');
+  }) => belgeleriSenkronEt(hedefIP, belgeler: belgeler);
 
-      // Eğer belgeler verilmemişse, bekleyen belgeleri al
-      if (belgeler == null) {
-        final bekleyenler = await bekleyenSenkronlariGetir();
-        belgeler = bekleyenler['bekleyen_belgeler'] as List<BelgeModeli>;
-      }
-
-      if (belgeler.isEmpty) {
-        _sendProgress(
-          SenkronizasyonIlerleme(
-            asama: SenkronizasyonAsamasi.tamamlandi,
-            aciklama: 'Senkronize edilecek belge yok',
-          ),
-        );
-        onSuccess?.call('Senkronize edilecek belge yok');
-        return true;
-      }
-
-      // 1. Bağımlılık analizi
-      _sendProgress(
-        SenkronizasyonIlerleme(
-          asama: SenkronizasyonAsamasi.bagimlilikAnaliz,
-          aciklama: 'Belge bağımlılıkları analiz ediliyor...',
-          toplamIslem: 4,
-          tamamlananIslem: 1,
-        ),
+  Future<String> _aktarimAnahtari(String ip) async {
+    final token = _httpSunucu.eslesmisAnahtarlar[ip];
+    if (token == null)
+      throw AktarimHatasi(
+        'ESLESME',
+        'Iki cihazi da guncelleyip QR koduyla yeniden eslestirin.',
       );
-
-      final dependencyPaketi = await _belgeBagimlilikCozumle(belgeler);
-
-      print('📊 Bağımlılık analizi tamamlandı:');
-      print('   • Belgeler: ${dependencyPaketi['belgeler'].length}');
-      print('   • Kişiler: ${dependencyPaketi['kisiler'].length}');
-      print('   • Kategoriler: ${dependencyPaketi['kategoriler'].length}');
-
-      // 2. Kategoriler gönderiliyor
-      _sendProgress(
-        SenkronizasyonIlerleme(
-          asama: SenkronizasyonAsamasi.kategorilerGonderiliyor,
-          aciklama: 'Kategoriler hazırlanıyor...',
-          toplamIslem: 4,
-          tamamlananIslem: 2,
-        ),
+    final result = await AktarimHttp.jsonIstek(
+      Uri.parse('http://$ip:8080/sync/v2/capabilities'),
+      token,
+    );
+    if (result['surum'] != GuvenliAktarimServisi.surum ||
+        result['success'] != true) {
+      throw AktarimHatasi(
+        'SURUM',
+        'Karsi cihaz guvenli aktarimi desteklemiyor veya eslesme suresi doldu.',
       );
-
-      // 3. Kişiler gönderiliyor
-      _sendProgress(
-        SenkronizasyonIlerleme(
-          asama: SenkronizasyonAsamasi.kisilerGonderiliyor,
-          aciklama: 'Kişiler hazırlanıyor...',
-          toplamIslem: 4,
-          tamamlananIslem: 3,
-        ),
-      );
-
-      // 4. Belgeler gönderiliyor
-      _sendProgress(
-        SenkronizasyonIlerleme(
-          asama: SenkronizasyonAsamasi.belgelerGonderiliyor,
-          aciklama: 'Belgeler ve dosyalar gönderiliyor...',
-          toplamIslem: 4,
-          tamamlananIslem: 4,
-        ),
-      );
-
-      // Dependency-aware senkronizasyon paketi oluştur
-      final senkronPaketi = await _senkronizasyonPaketiOlustur(
-        dependencyPaketi,
-      );
-
-      // Hedef cihaza gönder - Network optimizer ile resilient request
-      final response = await _networkOptimizer.resilientRequest(
-        method: 'POST',
-        url: 'http://$hedefIP:8080/sync/belgeler-kapsamli',
-        headers: {'Content-Type': 'application/json'},
-        body: senkronPaketi,
-        maxRetries: 3,
-        timeout: const Duration(seconds: 90),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        if (responseData['success']) {
-          // Senkronize edilen belgelerin durumunu güncelle
-          for (final belge in belgeler) {
-            final guncellenmis = belge.copyWith(
-              senkronDurumu: SenkronDurumu.SENKRONIZE,
-            );
-            await _veriTabani.belgeGuncelle(guncellenmis);
-          }
-
-          final sonuc = responseData['sonuc'];
-
-          // Başarı progress'i gönder
-          _sendProgress(
-            SenkronizasyonIlerleme(
-              asama: SenkronizasyonAsamasi.tamamlandi,
-              aciklama: 'Senkronizasyon başarıyla tamamlandı!',
-              toplamIslem: 4,
-              tamamlananIslem: 4,
-              detaylar: {
-                'kategoriler_eklendi': sonuc['kategoriler_eklendi'] ?? 0,
-                'kisiler_eklendi': sonuc['kisiler_eklendi'] ?? 0,
-                'belgeler_eklendi': sonuc['belgeler_eklendi'] ?? 0,
-                'hatalar': sonuc['hatalar'] ?? 0,
-              },
-            ),
-          );
-
-          onSuccess?.call(
-            'Senkronizasyon tamamlandı!\n'
-            '• ${sonuc['belgeler_eklendi']} belge eklendi\n'
-            '• ${sonuc['kisiler_eklendi']} kişi eklendi\n'
-            '• ${sonuc['kategoriler_eklendi']} kategori eklendi',
-          );
-          return true;
-        } else {
-          _sendProgress(
-            SenkronizasyonIlerleme(
-              asama: SenkronizasyonAsamasi.hata,
-              aciklama: 'Senkronizasyon hatası oluştu',
-              hataMesaji: responseData['error'],
-            ),
-          );
-          onError?.call('Senkronizasyon hatası: ${responseData['error']}');
-          return false;
-        }
-      } else {
-        _sendProgress(
-          SenkronizasyonIlerleme(
-            asama: SenkronizasyonAsamasi.hata,
-            aciklama: 'Sunucu hatası',
-            hataMesaji: 'HTTP ${response.statusCode}',
-          ),
-        );
-        onError?.call('Senkronizasyon başarısız: ${response.statusCode}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Belge senkronizasyonu hatası: $e');
-      _sendProgress(
-        SenkronizasyonIlerleme(
-          asama: SenkronizasyonAsamasi.hata,
-          aciklama: 'Beklenmeyen hata oluştu',
-          hataMesaji: e.toString(),
-        ),
-      );
-      onError?.call('Belge senkronizasyonu hatası: $e');
-      return false;
     }
+    return token;
   }
 
-  /// Belgeleri hedef cihaza senkronize et (Dependency-Aware)
+  Future<Map<String, dynamic>> _onKontrol(
+    String ip,
+    String token,
+    Map<String, dynamic> paket,
+  ) async {
+    var result = await AktarimHttp.jsonIstek(
+      Uri.parse('http://$ip:8080/sync/v2/prepare'),
+      token,
+      body: paket,
+    );
+    if (result['kod'] == 'KISI_SECIMI' && onKisiSecimi != null) {
+      final secim = await onKisiSecimi!(
+        result['error'] as String,
+        (result['adaylar'] as List)
+            .map((v) => Map<String, dynamic>.from(v as Map))
+            .toList(),
+      );
+      if (secim != null) {
+        paket['hedef_kisi_id'] = secim;
+        result = await AktarimHttp.jsonIstek(
+          Uri.parse('http://$ip:8080/sync/v2/prepare'),
+          token,
+          body: paket,
+        );
+      }
+    }
+    return result;
+  }
+
   Future<bool> belgeleriSenkronEt(
     String hedefIP, {
     List<BelgeModeli>? belgeler,
   }) async {
-    try {
-      print('📄 Gelişmiş belge senkronizasyonu başlatılıyor...');
-
-      // Eğer belgeler verilmemişse, bekleyen belgeleri al
-      if (belgeler == null) {
-        final bekleyenler = await bekleyenSenkronlariGetir();
-        belgeler = bekleyenler['bekleyen_belgeler'] as List<BelgeModeli>;
-      }
-
-      if (belgeler.isEmpty) {
-        onSuccess?.call('Senkronize edilecek belge yok');
-        return true;
-      }
-
-      // 1. Belge bağımlılıklarını çözümle
-      final dependencyPaketi = await _belgeBagimlilikCozumle(belgeler);
-
-      print('📊 Bağımlılık analizi tamamlandı:');
-      print('   • Belgeler: ${dependencyPaketi['belgeler'].length}');
-      print('   • Kişiler: ${dependencyPaketi['kisiler'].length}');
-      print('   • Kategoriler: ${dependencyPaketi['kategoriler'].length}');
-
-      // 2. Dependency-aware senkronizasyon paketi oluştur
-      final senkronPaketi = await _senkronizasyonPaketiOlustur(
-        dependencyPaketi,
-      );
-
-      // 3. Hedef cihaza gönder - Network optimizer ile resilient request
-      final response = await _networkOptimizer.resilientRequest(
-        method: 'POST',
-        url: 'http://$hedefIP:8080/sync/belgeler-kapsamli',
-        headers: {'Content-Type': 'application/json'},
-        body: senkronPaketi,
-        maxRetries: 3,
-        timeout: const Duration(seconds: 90),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        if (responseData['success']) {
-          // Senkronize edilen belgelerin durumunu güncelle
-          for (final belge in belgeler) {
-            final guncellenmis = belge.copyWith(
-              senkronDurumu: SenkronDurumu.SENKRONIZE,
-            );
-            await _veriTabani.belgeGuncelle(guncellenmis);
-          }
-
-          final sonuc = responseData['sonuc'];
-
-          // Senkronizasyon log kaydı - başarı
-          _logServisi.syncLog('Belgeler Senkronize Edildi', 'success', {
-            'belgeler_eklendi': sonuc['belgeler_eklendi'] ?? 0,
-            'kisiler_eklendi': sonuc['kisiler_eklendi'] ?? 0,
-            'kategoriler_eklendi': sonuc['kategoriler_eklendi'] ?? 0,
-            'hedef_ip': hedefIP,
-            'belge_sayisi': belgeler.length,
-          });
-
-          onSuccess?.call(
-            'Senkronizasyon tamamlandı!\n'
-            '• ${sonuc['belgeler_eklendi']} belge eklendi\n'
-            '• ${sonuc['kisiler_eklendi']} kişi eklendi\n'
-            '• ${sonuc['kategoriler_eklendi']} kategori eklendi',
-          );
-          return true;
-        } else {
-          // Senkronizasyon log kaydı - hata
-          _logServisi.syncLog('Belgeler Senkronize Edilemedi', 'error', {
-            'error': responseData['error'],
-            'hedef_ip': hedefIP,
-            'belge_sayisi': belgeler.length,
-          });
-          onError?.call('Senkronizasyon hatası: ${responseData['error']}');
-          return false;
-        }
-      } else {
-        // Senkronizasyon log kaydı - HTTP hatası
-        _logServisi.syncLog('Senkronizasyon Sunucu Hatası', 'error', {
-          'status_code': response.statusCode,
-          'hedef_ip': hedefIP,
-          'belge_sayisi': belgeler.length,
-        });
-        onError?.call('Senkronizasyon başarısız: ${response.statusCode}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Belge senkronizasyonu hatası: $e');
-      onError?.call('Belge senkronizasyonu hatası: $e');
+    if (_aktarimSuruyor) {
+      onError?.call('Bir aktarim zaten devam ediyor.');
       return false;
     }
-  }
-
-  /// Belge bağımlılıklarını çözümle (kişi ve kategori)
-  Future<Map<String, dynamic>> _belgeBagimlilikCozumle(
-    List<BelgeModeli> belgeler,
-  ) async {
-    print('🔍 Belge bağımlılıkları analiz ediliyor...');
-
-    final gerekliKisiIdleri = <int>{};
-    final gerekliKategoriIdleri = <int>{};
-
-    // Belgelerin bağımlılıklarını topla
-    for (final belge in belgeler) {
-      if (belge.kisiId != null) {
-        gerekliKisiIdleri.add(belge.kisiId!);
-      }
-      if (belge.kategoriId != null) {
-        gerekliKategoriIdleri.add(belge.kategoriId!);
-      }
-    }
-
-    print('📋 Gerekli kişi ID\'leri: ${gerekliKisiIdleri.toList()}');
-    print('📋 Gerekli kategori ID\'leri: ${gerekliKategoriIdleri.toList()}');
-
-    // Kişi ve kategori verilerini al
-    final kisiler = <KisiModeli>[];
-    final kategoriler = <KategoriModeli>[];
-
-    // Kişileri getir
-    for (final kisiId in gerekliKisiIdleri) {
-      try {
-        final kisi = await _veriTabani.kisiGetir(kisiId);
-        if (kisi != null) {
-          kisiler.add(kisi);
-          print('👤 Kişi eklendi: ${kisi.ad} ${kisi.soyad}');
-        } else {
-          print('⚠️ Kişi bulunamadı: ID $kisiId');
-        }
-      } catch (e) {
-        print('❌ Kişi getirme hatası: $e');
-      }
-    }
-
-    // Kategorileri getir
-    for (final kategoriId in gerekliKategoriIdleri) {
-      try {
-        final kategori = await _veriTabani.kategoriGetir(kategoriId);
-        if (kategori != null) {
-          kategoriler.add(kategori);
-          print('📁 Kategori eklendi: ${kategori.ad}');
-        } else {
-          print('⚠️ Kategori bulunamadı: ID $kategoriId');
-        }
-      } catch (e) {
-        print('❌ Kategori getirme hatası: $e');
-      }
-    }
-
-    return {
-      'belgeler': belgeler,
-      'kisiler': kisiler,
-      'kategoriler': kategoriler,
-    };
-  }
-
-  /// Senkronizasyon paketi oluştur
-  Future<Map<String, dynamic>> _senkronizasyonPaketiOlustur(
-    Map<String, dynamic> dependencyPaketi,
-  ) async {
-    print('📦 Senkronizasyon paketi oluşturuluyor...');
-
-    final belgeler = dependencyPaketi['belgeler'] as List<BelgeModeli>;
-    final kisiler = dependencyPaketi['kisiler'] as List<KisiModeli>;
-    final kategoriler = dependencyPaketi['kategoriler'] as List<KategoriModeli>;
-
-    // Kişi ve kategori bilgilerini map'e çevir (ID eşleştirme için)
-    final kisiMap = <int, KisiModeli>{};
-    for (final kisi in kisiler) {
-      if (kisi.id != null) {
-        kisiMap[kisi.id!] = kisi;
-      }
-    }
-
-    final kategoriMap = <int, KategoriModeli>{};
-    for (final kategori in kategoriler) {
-      if (kategori.id != null) {
-        kategoriMap[kategori.id!] = kategori;
-      }
-    }
-
-    // Belgeleri hazırla (dosya içeriği ile)
-    final belgelerJson = [];
-    for (final belge in belgeler) {
-      final belgeMap = belge.toMap();
-
-      // Kişi bilgilerini ID yerine ad-soyad ile ekle
-      if (belge.kisiId != null && kisiMap.containsKey(belge.kisiId)) {
-        final kisi = kisiMap[belge.kisiId!]!;
-        belgeMap['kisi_ad'] = kisi.ad;
-        belgeMap['kisi_soyad'] = kisi.soyad;
-        belgeMap['kisi_kullanici_adi'] = kisi.kullaniciAdi;
-
-        // Kişi profil fotoğrafını da belge metadatasına ekle
-        if (kisi.profilFotografi != null && kisi.profilFotografi!.isNotEmpty) {
-          try {
-            final profilFile = File(kisi.profilFotografi!);
-            if (await profilFile.exists()) {
-              final dosyaBytes = await profilFile.readAsBytes();
-              if (dosyaBytes.isNotEmpty &&
-                  dosyaBytes.length <= 5 * 1024 * 1024) {
-                belgeMap['kisi_profil_fotografi_icerigi'] = base64Encode(
-                  dosyaBytes,
-                );
-                belgeMap['kisi_profil_fotografi_dosya_adi'] = path.basename(
-                  kisi.profilFotografi!,
-                );
-                print(
-                  '📸 Kişi profil fotoğrafı belge metadatasına eklendi: ${kisi.ad} ${kisi.soyad}',
-                );
-              }
-            }
-          } catch (e) {
-            print(
-              '⚠️ Kişi profil fotoğrafı metadata ekleme hatası: ${kisi.ad} ${kisi.soyad} - $e',
+    _aktarimSuruyor = true;
+    sonAktarimSonuclari.clear();
+    var basarili = 0;
+    try {
+      final token = await _aktarimAnahtari(hedefIP);
+      // Senkron durumu bir cihaz icin onaydir; yeni hedef icin tum belgeler denetlenir.
+      belgeler ??= await _veriTabani.belgeleriGetir(limit: null, offset: null);
+      final db = await _veriTabani.database;
+      final servis = GuvenliAktarimServisi(
+        db,
+        await DepolamaKonumuServisi.instance.belgelerKlasoru(),
+      );
+      for (var i = 0; i < belgeler.length; i++) {
+        final belge = belgeler[i];
+        _sendProgress(
+          SenkronizasyonIlerleme(
+            asama: SenkronizasyonAsamasi.belgelerGonderiliyor,
+            aciklama: belge.orijinalDosyaAdi,
+            toplamIslem: belgeler.length,
+            tamamlananIslem: i,
+          ),
+        );
+        try {
+          final paket = await servis.paketOlustur(belge.id!);
+          final kontrol = await _onKontrol(hedefIP, token, paket);
+          if (kontrol['success'] != true) {
+            throw AktarimHatasi(
+              kontrol['kod'] as String? ?? 'KONTROL',
+              kontrol['error'] as String? ?? 'On kontrol basarisiz.',
             );
           }
-        }
-      }
-
-      // Kategori bilgilerini ID yerine ad ile ekle
-      if (belge.kategoriId != null &&
-          kategoriMap.containsKey(belge.kategoriId)) {
-        final kategori = kategoriMap[belge.kategoriId!]!;
-        belgeMap['kategori_adi'] = kategori.ad;
-        belgeMap['kategori_renk'] = kategori.renkKodu;
-      }
-
-      // Dosya içeriğini base64 olarak ekle
-      try {
-        final dosyaBytes = File(belge.dosyaYolu).readAsBytesSync();
-        belgeMap['dosya_icerigi'] = base64Encode(dosyaBytes);
-        print(
-          '📄 Belge hazırlandı: ${belge.dosyaAdi} (${dosyaBytes.length} bytes)',
-        );
-      } catch (e) {
-        print('⚠️ Dosya okunamadı: ${belge.dosyaAdi} - $e');
-        belgeMap['dosya_icerigi'] = null;
-      }
-
-      belgelerJson.add(belgeMap);
-    }
-
-    // Kişileri hazırla (profil fotoğrafı ile)
-    final kisilerJson = [];
-    for (final kisi in kisiler) {
-      final kisiMap = kisi.toMap();
-
-      // Profil fotoğrafını dahil et
-      if (kisi.profilFotografi != null && kisi.profilFotografi!.isNotEmpty) {
-        try {
-          final profilFile = File(kisi.profilFotografi!);
-          if (await profilFile.exists()) {
-            final dosyaBytes = await profilFile.readAsBytes();
-            if (dosyaBytes.isNotEmpty) {
-              kisiMap['profil_fotografi_icerigi'] = base64Encode(dosyaBytes);
-              kisiMap['profil_fotografi_dosya_adi'] = path.basename(
-                kisi.profilFotografi!,
-              );
-              print(
-                '📸 Kişi profil fotoğrafı dahil edildi: ${kisi.ad} ${kisi.soyad} (${dosyaBytes.length} bytes)',
-              );
-            }
-          }
-        } catch (e) {
-          print(
-            '❌ Kişi profil fotoğrafı okuma hatası: ${kisi.ad} ${kisi.soyad} - $e',
+          final yanit = await AktarimHttp.gonder(
+            Uri.parse('http://$hedefIP:8080/sync/v2/file'),
+            token,
+            paket,
+            File(belge.dosyaYolu),
           );
-          kisiMap['profil_fotografi_icerigi'] = null;
-          kisiMap['profil_fotografi_dosya_adi'] = null;
+          if (!GuvenliAktarimServisi.onayGecerli(paket, yanit)) {
+            throw AktarimHatasi(
+              yanit['kod'] as String? ?? 'ONAY',
+              yanit['error'] as String? ??
+                  'Alici dogrulanmis dosya onayi vermedi.',
+            );
+          }
+          await servis.gonderimiOnayla(belge.id!, paket, yanit);
+          basarili++;
+          sonAktarimSonuclari.add({
+            'dosya': belge.orijinalDosyaAdi,
+            'durum': yanit['durum'],
+            'hash': belge.dosyaHash,
+          });
+        } catch (e) {
+          sonAktarimSonuclari.add({
+            'dosya': belge.orijinalDosyaAdi,
+            'durum': 'hata',
+            'mesaj': e.toString(),
+          });
         }
-      } else {
-        kisiMap['profil_fotografi_icerigi'] = null;
-        kisiMap['profil_fotografi_dosya_adi'] = null;
       }
-
-      // Kişi eşleştirme için unique identifier ekle
-      kisiMap['unique_key'] = '${kisi.ad}_${kisi.soyad}';
-      print(
-        '👤 Kişi hazırlandı: ${kisi.ad} ${kisi.soyad} (${kisiMap['unique_key']})',
+      final hatalar = belgeler.length - basarili;
+      final mesaj = '$basarili dosya dogrulandi, $hatalar dosya aktarilamadi.';
+      final logs = await DepolamaKonumuServisi.instance.logKlasoru();
+      await File(
+        path.join(
+          logs.path,
+          'aktarim-${DateTime.now().microsecondsSinceEpoch}.json',
+        ),
+      ).writeAsString(
+        jsonEncode({'hedef': hedefIP, 'sonuclar': sonAktarimSonuclari}),
+        flush: true,
       );
-
-      kisilerJson.add(kisiMap);
-    }
-
-    // Kategorileri hazırla
-    final kategorilerJson = [];
-    for (final kategori in kategoriler) {
-      final kategoriMap = kategori.toMap();
-
-      // Kategori eşleştirme için unique identifier ekle
-      kategoriMap['unique_key'] = kategori.ad;
-      print(
-        '📁 Kategori hazırlandı: ${kategori.ad} (${kategoriMap['unique_key']})',
+      _sendProgress(
+        SenkronizasyonIlerleme(
+          asama:
+              hatalar == 0
+                  ? SenkronizasyonAsamasi.tamamlandi
+                  : SenkronizasyonAsamasi.hata,
+          aciklama: mesaj,
+          toplamIslem: belgeler.length,
+          tamamlananIslem: basarili,
+          hataMesaji:
+              hatalar == 0
+                  ? null
+                  : sonAktarimSonuclari
+                      .where((r) => r['durum'] == 'hata')
+                      .take(5)
+                      .map((r) => '${r['dosya']}: ${r['mesaj']}')
+                      .join('\n'),
+        ),
       );
-
-      kategorilerJson.add(kategoriMap);
+      if (hatalar == 0) {
+        onSuccess?.call(mesaj);
+      } else {
+        onError?.call(
+          '$mesaj\n${sonAktarimSonuclari.where((r) => r['durum'] == 'hata').take(3).map((r) => '${r['dosya']}: ${r['mesaj']}').join('\n')}',
+        );
+      }
+      if (hatalar == 0 && _otomatikBaglantiKes)
+        await _otomatikBaglantiKes_Func(hedefIP);
+      return hatalar == 0;
+    } catch (e) {
+      _sendProgress(
+        SenkronizasyonIlerleme(
+          asama: SenkronizasyonAsamasi.hata,
+          aciklama: 'Aktarim tamamlanamadi',
+          hataMesaji: e.toString(),
+        ),
+      );
+      onError?.call(e.toString());
+      return false;
+    } finally {
+      _aktarimSuruyor = false;
     }
-
-    return {
-      'belgeler': belgelerJson,
-      'kisiler': kisilerJson,
-      'kategoriler': kategorilerJson,
-      'timestamp': DateTime.now().toIso8601String(),
-      'dependency_resolution': true,
-    };
   }
 
-  // Kişi senkronizasyon işlemi - Non-blocking optimized
   Future<bool> kisileriSenkronEt(
     String hedefIP, {
     List<KisiModeli>? kisiler,
-  }) async {
-    try {
-      print('👥 Kişi senkronizasyonu başlatılıyor: $hedefIP');
+  }) async => _referanslariGonder(
+    hedefIP,
+    'kisi',
+    (kisiler ?? await _veriTabani.kisileriGetir()).map((k) => k.id!).toList(),
+  );
 
-      // Kişi listesini hazırla
-      final gonderilecekKisiler = kisiler ?? await _veriTabani.kisileriGetir();
-
-      if (gonderilecekKisiler.isEmpty) {
-        print('⚠️ Gönderilecek kişi yok');
-        onSuccess?.call('Gönderilecek kişi yok');
-        return true;
-      }
-
-      // Kişi verilerini parallel olarak hazırla
-      final kisilerData = <Map<String, dynamic>>[];
-
-      // Batch processing to prevent UI blocking
-      const batchSize = 10;
-      for (int i = 0; i < gonderilecekKisiler.length; i += batchSize) {
-        final batch = gonderilecekKisiler.skip(i).take(batchSize).toList();
-
-        for (final kisi in batch) {
-          final kisiMap = kisi.toMap();
-
-          // Profil fotoğrafı varsa encode et (async)
-          if (kisi.profilFotografi != null &&
-              kisi.profilFotografi!.isNotEmpty) {
-            try {
-              final profilFile = File(kisi.profilFotografi!);
-              if (await profilFile.exists()) {
-                final profilBytes = await profilFile.readAsBytes();
-                if (profilBytes.isNotEmpty) {
-                  // Büyük dosyaları sınırla
-                  if (profilBytes.length > 5 * 1024 * 1024) {
-                    // 5MB limit
-                    print('⚠️ Profil fotoğrafı çok büyük: ${kisi.tamAd}');
-                    kisiMap['profil_fotografi_icerigi'] = null;
-                    kisiMap['profil_fotografi_dosya_adi'] = null;
-                  } else {
-                    kisiMap['profil_fotografi_icerigi'] = base64Encode(
-                      profilBytes,
-                    );
-                    kisiMap['profil_fotografi_dosya_adi'] = path.basename(
-                      kisi.profilFotografi!,
-                    );
-                    print('📸 Profil fotoğrafı encode edildi: ${kisi.tamAd}');
-                  }
-                } else {
-                  kisiMap['profil_fotografi_icerigi'] = null;
-                  kisiMap['profil_fotografi_dosya_adi'] = null;
-                }
-              } else {
-                kisiMap['profil_fotografi_icerigi'] = null;
-                kisiMap['profil_fotografi_dosya_adi'] = null;
-              }
-            } catch (e) {
-              print('⚠️ Profil fotoğrafı encode hatası: $e');
-              kisiMap['profil_fotografi_icerigi'] = null;
-              kisiMap['profil_fotografi_dosya_adi'] = null;
-            }
-          } else {
-            kisiMap['profil_fotografi_icerigi'] = null;
-            kisiMap['profil_fotografi_dosya_adi'] = null;
-          }
-
-          kisilerData.add(kisiMap);
-        }
-
-        // Yield control to prevent UI blocking
-        await Future.delayed(Duration.zero);
-      }
-
-      print('📦 ${kisilerData.length} kişi verisi hazırlandı');
-
-      // Network optimizer ile güvenli gönderim
-      final response = await _networkOptimizer.resilientRequest(
-        method: 'POST',
-        url: 'http://$hedefIP:8080/sync/receive_kisiler',
-        headers: {'Content-Type': 'application/json'},
-        body: {
-          'kisiler': kisilerData,
-          'sender_info': {
-            'platform': Platform.operatingSystem,
-            'device_name': Platform.localHostname,
-            'timestamp': DateTime.now().toIso8601String(),
-          },
-        },
-        maxRetries: 3,
-        timeout: const Duration(seconds: 60),
-      );
-
-      print('🔄 Kişi senkronizasyon yanıtı: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final result = json.decode(response.body);
-        if (result['success'] == true) {
-          // Başarılı transfer sonrası kişilerin senkronizasyon durumunu güncelle
-          // Batch update to prevent blocking
-          for (int i = 0; i < gonderilecekKisiler.length; i += batchSize) {
-            final batch = gonderilecekKisiler.skip(i).take(batchSize).toList();
-
-            for (final kisi in batch) {
-              if (kisi.id != null) {
-                // Kişinin olusturmaTarihi'ni eski tarihe çekerek bekleyenler listesinden çıkar
-                final guncellenmiKisi = kisi.copyWith(
-                  olusturmaTarihi: DateTime.now().subtract(
-                    const Duration(days: 2),
-                  ),
-                  guncellemeTarihi: DateTime.now(),
-                );
-                await _veriTabani.kisiGuncelle(guncellenmiKisi);
-                print(
-                  '✅ Kişi senkronizasyon durumu güncellendi: ${kisi.ad} ${kisi.soyad}',
-                );
-              }
-            }
-
-            // Yield control
-            await Future.delayed(Duration.zero);
-          }
-
-          final mesaj =
-              '${gonderilecekKisiler.length} kişi başarıyla senkronize edildi';
-          print('✅ Kişi senkronizasyonu başarılı: $mesaj');
-          onSuccess?.call(mesaj);
-          return true;
-        } else {
-          final hata = 'Kişi senkronizasyon hatası: ${result['message']}';
-          print('❌ $hata');
-          onError?.call(hata);
-          return false;
-        }
-      } else {
-        final hata = 'Kişi senkronizasyon hatası: HTTP ${response.statusCode}';
-        print('❌ $hata');
-        onError?.call(hata);
-        return false;
-      }
-    } catch (e) {
-      final hata = 'Kişi senkronizasyon hatası: $e';
-      print('❌ $hata');
-      onError?.call(hata);
-      return false;
-    }
-  }
-
-  /// Kategorileri hedef cihaza senkronize et - Non-blocking optimized
   Future<bool> kategorileriSenkronEt(
     String hedefIP, {
     List<KategoriModeli>? kategoriler,
-  }) async {
+  }) async => _referanslariGonder(
+    hedefIP,
+    'kategori',
+    (kategoriler ?? await _veriTabani.kategorileriGetir())
+        .map((k) => k.id!)
+        .toList(),
+  );
+
+  Future<bool> _referanslariGonder(String ip, String tur, List<int> ids) async {
     try {
-      print('📁 Kategori senkronizasyonu başlatılıyor...');
-
-      // Eğer kategoriler verilmemişse, bekleyen kategorileri al
-      if (kategoriler == null) {
-        final bekleyenler = await bekleyenSenkronlariGetir();
-        kategoriler =
-            (bekleyenler['bekleyen_kategoriler'] as List<dynamic>?)
-                ?.cast<KategoriModeli>() ??
-            [];
-      }
-
-      if (kategoriler.isEmpty) {
-        onSuccess?.call('Senkronize edilecek yeni kategori yok');
-        print(
-          'ℹ️ Mevcut 16 kategori her iki sistemde de var, sadece yeni kategoriler senkronize edilir',
+      final token = await _aktarimAnahtari(ip);
+      final servis = GuvenliAktarimServisi(
+        await _veriTabani.database,
+        await DepolamaKonumuServisi.instance.belgelerKlasoru(),
+      );
+      for (final id in ids) {
+        final paket = await servis.referansPaketi(tur, id);
+        var result = await AktarimHttp.jsonIstek(
+          Uri.parse('http://$ip:8080/sync/v2/entity'),
+          token,
+          body: paket,
         );
-        return true;
-      }
-
-      print(
-        '📦 ${kategoriler.length} yeni kategori senkronize edilecek (mevcut kategoriler hariç)',
-      );
-
-      // Kategori verilerini hazırla
-      final kategorilerJson = <Map<String, dynamic>>[];
-      const batchSize = 20; // Kategoriler küçük olduğu için daha büyük batch
-
-      for (int i = 0; i < kategoriler.length; i += batchSize) {
-        final batch = kategoriler.skip(i).take(batchSize).toList();
-
-        for (final kategori in batch) {
-          kategorilerJson.add(kategori.toMap());
-        }
-
-        // Yield control to prevent UI blocking
-        await Future.delayed(Duration.zero);
-      }
-
-      final response = await _networkOptimizer.resilientRequest(
-        method: 'POST',
-        url: 'http://$hedefIP:8080/sync/kategoriler',
-        headers: {'Content-Type': 'application/json'},
-        body: {
-          'kategoriler': kategorilerJson,
-          'timestamp': DateTime.now().toIso8601String(),
-          'aciklama': 'Sadece yeni eklenen kategoriler',
-        },
-        maxRetries: 3,
-        timeout: const Duration(seconds: 45),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        if (responseData['success']) {
-          // Senkronize edilen kategorileri bekleyen sıradan çıkar
-          // Batch update to prevent blocking
-          for (int i = 0; i < kategoriler.length; i += batchSize) {
-            final batch = kategoriler.skip(i).take(batchSize).toList();
-
-            for (final kategori in batch) {
-              final guncellenmiKategori = kategori.copyWith(
-                olusturmaTarihi: DateTime.now().subtract(
-                  const Duration(days: 2),
-                ),
-              );
-              await _veriTabani.kategoriGuncelle(guncellenmiKategori);
-              print(
-                '✅ Kategori senkronizasyon durumu güncellendi: ${kategori.ad}',
-              );
-            }
-
-            // Yield control
-            await Future.delayed(Duration.zero);
+        if (result['kod'] == 'KISI_SECIMI' && onKisiSecimi != null) {
+          final secim = await onKisiSecimi!(
+            result['error'] as String,
+            (result['adaylar'] as List)
+                .map((v) => Map<String, dynamic>.from(v as Map))
+                .toList(),
+          );
+          if (secim != null) {
+            paket['hedef_kisi_id'] = secim;
+            result = await AktarimHttp.jsonIstek(
+              Uri.parse('http://$ip:8080/sync/v2/entity'),
+              token,
+              body: paket,
+            );
           }
-
-          final mesaj =
-              '${responseData['basarili']} yeni kategori senkronize edildi';
-          print('✅ Kategori senkronizasyonu başarılı: $mesaj');
-          onSuccess?.call(mesaj);
-          return true;
-        } else {
-          final hata =
-              'Kategori senkronizasyonu hatası: ${responseData['error']}';
-          print('❌ $hata');
-          onError?.call(hata);
-          return false;
         }
-      } else {
-        final hata =
-            'Kategori senkronizasyonu başarısız: ${response.statusCode}';
-        print('❌ $hata');
-        onError?.call(hata);
-        return false;
+        if (result['success'] != true ||
+            result['metadata_hash'] != paket['metadata_hash']) {
+          throw AktarimHatasi(
+            'REFERANS',
+            result['error'] as String? ?? 'Kayit aktarimi dogrulanamadi.',
+          );
+        }
       }
+      onSuccess?.call('${ids.length} $tur kaydi dogrulandi.');
+      return true;
     } catch (e) {
-      final hata = 'Kategori senkronizasyonu hatası: $e';
-      print('❌ $hata');
-      onError?.call(hata);
+      onError?.call(e.toString());
       return false;
     }
   }
 
-  /// Tüm verileri hedef cihaza senkronize et (Dependency-Aware)
-  Future<bool> tumSenkronizasyonuBaslat(String hedefIP) async {
-    try {
-      print('🔄 Kapsamlı senkronizasyon başlatılıyor...');
-      onSuccess?.call('Senkronizasyon başlatıldı...');
+  Future<bool> tumSenkronizasyonuBaslat(String hedefIP) =>
+      belgeleriSenkronEt(hedefIP);
 
-      final bekleyenler = await bekleyenSenkronlariGetir();
-
-      // Bekleyen belgeleri al
-      final belgeler = bekleyenler['bekleyen_belgeler'] as List<BelgeModeli>;
-
-      if (belgeler.isEmpty) {
-        onSuccess?.call('Senkronize edilecek belge yok');
-        return true;
-      }
-
-      // Yeni dependency-aware belge senkronizasyonu
-      // Bu sistem otomatik olarak ilgili kişi ve kategorileri de gönderir
-      final belgeBasarisi = await belgeleriSenkronEt(
-        hedefIP,
-        belgeler: belgeler,
-      );
-
-      if (belgeBasarisi) {
-        onSuccess?.call('Kapsamlı senkronizasyon başarıyla tamamlandı');
-        print(
-          '✅ Senkronizasyon tamamlandı - belgeler, kişiler ve kategoriler dahil',
-        );
-
-        // Otomatik bağlantı kesme özelliği
-        if (_otomatikBaglantiKes) {
-          await Future.delayed(
-            const Duration(seconds: 2),
-          ); // Kullanıcı mesajını görsün
-          await _otomatikBaglantiKes_Func(hedefIP);
-        }
-
-        return true;
-      } else {
-        onError?.call('Senkronizasyon başarısız');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Kapsamlı senkronizasyon hatası: $e');
-      onError?.call('Senkronizasyon hatası: $e');
-      return false;
-    }
-  }
-
-  /// Tüm sistemi senkronize et (Belgeler, Kişiler, Kategoriler)
   Future<bool> tumSistemiSenkronEt(String hedefIP) async {
-    try {
-      print('🌐 Tüm sistem senkronizasyonu başlatılıyor...');
-      onSuccess?.call('Tüm sistem senkronizasyonu başlatıldı...');
-
-      // Tüm belgeleri al
-      final tumBelgeler = await _veriTabani.belgeleriGetir();
-
-      if (tumBelgeler.isEmpty) {
-        onSuccess?.call('Sistemde hiç belge yok');
-        return true;
-      }
-
-      // Belgelerin bağımlılıklarını çözümle
-      final dependencyPaketi = await _belgeBagimlilikCozumle(tumBelgeler);
-
-      print('📊 Tüm sistem analizi tamamlandı:');
-      print('   • Belgeler: ${dependencyPaketi['belgeler'].length}');
-      print('   • Kişiler: ${dependencyPaketi['kisiler'].length}');
-      print('   • Kategoriler: ${dependencyPaketi['kategoriler'].length}');
-
-      // Senkronizasyon paketi oluştur
-      final senkronPaketi = await _senkronizasyonPaketiOlustur(
-        dependencyPaketi,
-      );
-
-      // Hedef cihaza gönder
-      final response = await _networkOptimizer.resilientRequest(
-        method: 'POST',
-        url: 'http://$hedefIP:8080/sync/belgeler-kapsamli',
-        headers: {'Content-Type': 'application/json'},
-        body: senkronPaketi,
-        maxRetries: 3,
-        timeout: const Duration(seconds: 120),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        if (responseData['success']) {
-          final sonuc = responseData['sonuc'];
-
-          onSuccess?.call(
-            'Tüm sistem senkronizasyonu tamamlandı!\n'
-            '• ${sonuc['belgeler_eklendi']} belge eklendi\n'
-            '• ${sonuc['kisiler_eklendi']} kişi eklendi\n'
-            '• ${sonuc['kategoriler_eklendi']} kategori eklendi',
-          );
-          return true;
-        } else {
-          onError?.call(
-            'Tüm sistem senkronizasyonu hatası: ${responseData['error']}',
-          );
-          return false;
-        }
-      } else {
-        onError?.call(
-          'Tüm sistem senkronizasyonu başarısız: ${response.statusCode}',
-        );
-        return false;
-      }
-    } catch (e) {
-      print('❌ Tüm sistem senkronizasyonu hatası: $e');
-      onError?.call('Tüm sistem senkronizasyonu hatası: $e');
-      return false;
-    }
+    final kisiler = await kisileriSenkronEt(hedefIP);
+    final kategoriler = await kategorileriSenkronEt(hedefIP);
+    final belgeler = await belgeleriSenkronEt(hedefIP);
+    return kisiler && kategoriler && belgeler;
   }
 
   /// Otomatik bağlantı kesme işlemi
@@ -1640,6 +966,7 @@ class SenkronizasyonYoneticiServisi {
   }
 
   void dispose() {
+    onKisiSecimi = null;
     onStatusChanged = null;
     onDeviceListChanged = null;
     onSuccess = null;
