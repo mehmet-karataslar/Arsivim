@@ -15,6 +15,8 @@ class SyncDevices extends StatelessWidget {
     required this.onDisconnect,
     this.onScan,
     this.qrData,
+    this.onCompare,
+    this.onTrusted,
   });
   final SyncController controller;
   final VoidCallback onQr;
@@ -22,6 +24,8 @@ class SyncDevices extends StatelessWidget {
   final ValueChanged<SyncDevice> onDisconnect;
   final VoidCallback? onScan;
   final String? qrData;
+  final ValueChanged<SyncDevice>? onCompare;
+  final VoidCallback? onTrusted;
   @override
   Widget build(BuildContext context) => SyncSection(
     title: 'Cihaz bağlantıları',
@@ -46,6 +50,13 @@ class SyncDevices extends StatelessWidget {
                 onPressed: pairing || controller.busy ? null : onScan,
                 icon: const Icon(Icons.qr_code_scanner, size: 18),
                 label: const Text('QR kod tara'),
+              ),
+            if (onTrusted != null)
+              TextButton.icon(
+                key: const ValueKey('sync-trusted-devices'),
+                onPressed: pairing || controller.busy || controller.transferring || controller.gateway.transferring ? null : onTrusted,
+                icon: const Icon(Icons.verified_user_outlined, size: 18),
+                label: const Text('Tanınan cihazlar'),
               ),
           ],
         );
@@ -114,6 +125,13 @@ class SyncDevices extends StatelessWidget {
                                       ).colorScheme.onSurfaceVariant,
                                 ),
                               ),
+                              if (onCompare != null)
+                                TextButton.icon(
+                                  onPressed: controller.transferring || controller.gateway.transferring || controller.busy
+                                      ? null : () => onCompare!(device),
+                                  icon: const Icon(Icons.compare_arrows, size: 18),
+                                  label: const Text('Karşılaştır ve aktar'),
+                                ),
                             ],
                           ),
                         ),

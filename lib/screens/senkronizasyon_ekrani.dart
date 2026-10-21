@@ -16,6 +16,9 @@ import '../widgets/sync/sync_controls.dart';
 import '../widgets/sync/sync_devices.dart';
 import '../widgets/sync/sync_activity.dart';
 import '../widgets/sync/sync_statistics.dart';
+import '../models/sync_comparison.dart';
+import '../widgets/sync/sync_direction_dialog.dart';
+import '../widgets/sync/trusted_devices_dialog.dart';
 
 class SenkronizasyonEkrani extends StatefulWidget {
   const SenkronizasyonEkrani({
@@ -40,6 +43,70 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   String? _qr;
   bool _pairing = false;
   bool _qrOpen = false;
+  bool _directionOpen = false;
+  bool _trustedOpen = false;
+  final _seenConnections = <String>{};
+  final _pendingConnections = <String>[];
+  BuildContext? _qrDialogContext;
+  String _connectionKey(SyncDevice device) => '${device.id}:${device.ip}:${device.connectedAt}';
+
+  void _connectionsChanged() {
+    final current = _data.devices.map(_connectionKey).toSet();
+    _seenConnections.removeWhere((key) => !current.contains(key));
+    for (final device in _data.devices) {
+      if (_seenConnections.add(_connectionKey(device))) _pendingConnections.add(device.id);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_pendingConnections.isNotEmpty && _qrDialogContext?.mounted == true) {
+        Navigator.pop(_qrDialogContext!);
+        _qrDialogContext = null;
+      }
+      _offerNextConnection();
+    });
+  }
+
+  Future<void> _offerNextConnection() async {
+    if (!mounted || _pairing || _qrOpen || _directionOpen || _trustedOpen ||
+        _data.transferring || _data.gateway.transferring) return;
+    while (_pendingConnections.isNotEmpty) {
+      final id = _pendingConnections.removeAt(0);
+      final matches = _data.devices.where((d) => d.id == id);
+      if (matches.isNotEmpty) {
+        await _compare(matches.first);
+        break;
+      }
+    }
+  }
+
+  Future<void> _compare(SyncDevice device) async {
+    if (_directionOpen || _data.transferring || _data.gateway.transferring) return;
+    _directionOpen = true;
+    try {
+      final localName = Platform.isAndroid || Platform.isIOS ? 'Bu telefon' : 'Bu bilgisayar';
+      final choice = await showDialog<SyncDirectionChoice>(
+        context: context,
+        builder: (_) => SyncDirectionDialog(localName: localName, remoteName: device.name,
+          compare: () => _data.gateway.compare(device)),
+      );
+      if (choice != null && mounted) await _data.transferDirection(device, choice);
+    } finally {
+      _directionOpen = false;
+      if (mounted) _offerNextConnection();
+    }
+  }
+
+  Future<void> _trustedDevices() async {
+    if (_trustedOpen || _directionOpen) return;
+    _trustedOpen = true;
+    try {
+      await showDialog<void>(context: context,
+        builder: (_) => TrustedDevicesDialog(gateway: _data.gateway));
+    } finally {
+      _trustedOpen = false;
+      if (mounted) _offerNextConnection();
+    }
+  }
   late final Future<int?> Function(String, List<Map<String, dynamic>>)
   _choosePerson;
   @override
@@ -49,6 +116,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       widget.repository ?? SyncRepository(),
       widget.gateway ?? SyncGateway(),
     );
+    _seenConnections.addAll(_data.devices.map(_connectionKey));
+    _data.gateway.changes.addListener(_connectionsChanged);
     _choosePerson =
         (message, people) async =>
             mounted ? aktarimKisiSecimi(context, message, people) : null;
@@ -66,6 +135,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
 
   @override
   void dispose() {
+    _data.gateway.changes.removeListener(_connectionsChanged);
     WidgetsBinding.instance.removeObserver(this);
     if (widget.gateway == null &&
         _data.gateway.manager.onKisiSecimi == _choosePerson) {
@@ -106,8 +176,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         });
         await showDialog<void>(
           context: context,
-          builder:
-              (ctx) => AlertDialog(
+          builder: (ctx) {
+            _qrDialogContext = ctx;
+            return AlertDialog(
                 title: const Text('Cihaz bağlantı QR kodu'),
                 content: SizedBox(
                   width: (MediaQuery.sizeOf(ctx).width - 112).clamp(160, 360),
@@ -134,7 +205,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                     child: const Text('Kapat'),
                   ),
                 ],
-              ),
+              );
+          },
         );
       }
     } catch (_) {
@@ -145,6 +217,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
           _pairing = false;
           _qrOpen = false;
         });
+        _qrDialogContext = null;
+        _offerNextConnection();
       }
     }
   }
@@ -403,6 +477,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               onQr: _showQr,
               pairing: _pairing || _qrOpen,
               onDisconnect: _disconnect,
+              onCompare: _compare,
+              onTrusted: _trustedDevices,
               onScan: Platform.isAndroid || Platform.isIOS ? _scan : null,
             );
             final activity = SyncActivity(
@@ -428,6 +504,13 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                       Padding(
                         padding: const EdgeInsets.all(12),
                         child: Text(_data.error!),
+                      ),
+                    if ((overview?.pending ?? 0) > 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                        child: Text(Platform.isAndroid || Platform.isIOS
+                          ? 'Telefonda yeni veya değişen ${overview!.pending} belge var. Bilgisayarla karşılaştırabilirsiniz.'
+                          : 'Bilgisayarda yeni veya değişen ${overview!.pending} belge var. Telefonla karşılaştırabilirsiniz.'),
                       ),
                     if (!compact) ...[summary, const SizedBox(height: 16)],
                     SyncOptions(controller: _data, compact: compact),
