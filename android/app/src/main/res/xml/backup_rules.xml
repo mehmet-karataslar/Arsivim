@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Device trust and wrapped keys must never migrate with archive backups. -->
+    <exclude domain="sharedpref" path="arsivim_trusted_devices_v1.xml" />
+    <exclude domain="sharedpref" path="FlutterSecureKeyStorage:arsivim_trusted_devices_v1.xml" />
+    <exclude domain="sharedpref" path="FlutterSecureStorageConfiguration:arsivim_trusted_devices_v1.xml" />
+</full-backup-content>

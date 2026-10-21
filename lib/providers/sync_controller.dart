@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/sync_overview.dart';
+import '../models/sync_comparison.dart';
 import '../services/sync_gateway.dart';
 import '../services/sync_repository.dart';
 import '../widgets/senkronizasyon_progress_dialog.dart';
@@ -171,6 +172,41 @@ class SyncController extends ChangeNotifier {
     stopping = true;
     gateway.stop();
     _notify();
+  }
+
+  Future<void> transferDirection(SyncDevice device, SyncDirectionChoice choice) async {
+    if (busy || transferring || gateway.transferring) {
+      actionMessage = 'Başka bir aktarım devam ediyor.';
+      _notify();
+      return;
+    }
+    transferring = true;
+    stopping = false;
+    actionMessage = null;
+    progress = null;
+    _notify();
+    try {
+      _progressSubscription = gateway.progress().listen((value) {
+        progress = value;
+        _notify();
+      });
+      final success = choice.direction == SyncDirection.send
+          ? await gateway.sendIds(device, choice.comparison.sendIds)
+          : await gateway.receive(device, choice.comparison.receiveIds);
+      actionMessage = stopping
+          ? 'Aktarım durduruldu. Tamamlanan belgeler korundu.'
+          : success ? 'Seçilen yöndeki yeni belgeler aktarıldı ve doğrulandı.'
+          : 'Aktarım tam olarak tamamlanamadı. Sonuçları kontrol edip yeniden karşılaştırın.';
+    } catch (_) {
+      actionMessage = 'Aktarım tamamlanamadı. Mevcut belgeler korundu; yeniden karşılaştırın.';
+    } finally {
+      await _progressSubscription?.cancel();
+      _progressSubscription = null;
+      transferring = false;
+      stopping = false;
+      _notify();
+      if (!_disposed) await refresh();
+    }
   }
 
   @override

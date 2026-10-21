@@ -18,6 +18,8 @@ class AktarimEnvanterServisi {
 
   /// Keyset cursor is the *source-local* document ID, not a universal ID.
   /// Only active documents are advertised. A null next means end of inventory.
+  /// Responses stay strictly below 220 KiB of UTF-8 JSON; an oversized single
+  /// entry throws ENVANTER_BOYUT instead of being omitted from discovery.
   /// No files are opened or hashed and no business rows/sync flags are changed.
   /// The engine may persist missing universal IDs, exactly as for a transfer.
   ///
@@ -209,7 +211,8 @@ class AktarimEnvanterServisi {
   ///
   /// Only localNewIds / remoteNewIds are eligible for automatic direction
   /// selection. conflicts contains {localIds, remoteIds, reason}; byLocalId has
-  /// {status: new|same|conflict, remoteIds, reason}. same is the document count.
+  /// string local-ID keys and {status: new|same|conflict, remoteIds, reason}
+  /// values. same is the document count, not the number of matching aliases.
   /// "same" is metadata equality, NOT proof of intact on-disk bytes or an ACK.
   static Map<String, dynamic> compare(
     Iterable<Map<String, dynamic>> localItems,
@@ -340,17 +343,18 @@ class AktarimEnvanterServisi {
       bool matches(Map x, Map y) =>
           x['signature'] == y['signature'] &&
           (x['ids'] as List).any((id) => (y['ids'] as List).contains(id));
-      if (left.isEmpty) continue;
-      if (!matches(left.first, right.first)) return false;
       // Ambiguous links are not resolved by display name or list order.
-      final used = <int>{0};
-      for (final ref in left.skip(1)) {
+      final used = <int>{};
+      for (var index = 0; index < left.length; index++) {
         final candidates = <int>[
-          for (var i = 1; i < right.length; i++)
-            if (matches(ref, right[i])) i,
+          for (var i = 0; i < right.length; i++)
+            if (matches(left[index], right[i])) i,
         ];
-        if (candidates.length != 1 || !used.add(candidates.single))
+        if (candidates.length != 1 ||
+            (index == 0 && candidates.single != 0) ||
+            !used.add(candidates.single)) {
           return false;
+        }
       }
     }
     return true;

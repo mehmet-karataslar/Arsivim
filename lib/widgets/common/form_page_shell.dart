@@ -40,7 +40,7 @@ class FormPageShell extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                leading: BackButton(onPressed: () => onLeave()),
+                automaticallyImplyLeading: false,
               ),
       bottomNavigationBar:
           !desktop &&
@@ -77,11 +77,6 @@ class FormPageShell extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          IconButton(
-                            tooltip: 'Geri dön',
-                            onPressed: () => onLeave(),
-                            icon: const Icon(Icons.arrow_back),
-                          ),
                           Text(
                             'Arşivim',
                             style: TextStyle(

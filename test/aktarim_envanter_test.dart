@@ -485,6 +485,36 @@ void main() {
   });
 
   test(
+    'reference alias bridges cannot collapse two same-name people',
+    () async {
+      await seedLinks();
+      await source.update('kisiler', {
+        'ad': 'Same',
+        'soyad': 'Person',
+        'kullanici_adi': null,
+      });
+      final a = _items(await local.page()).single;
+      final b = _copy(a);
+      final left = (a['links']['kisi'] as List).cast<Map>();
+      final right = (b['links']['kisi'] as List).cast<Map>();
+      final first = (left[0]['ids'] as List).single;
+      final second = (left[1]['ids'] as List).single;
+      left[0]['ids'] = [first, 'first-alias'];
+      left[1]['ids'] = [second, 'second-alias'];
+      right[0]['ids'] = [first, second];
+      right[1]['ids'] = ['first-alias', 'second-alias'];
+      final result = AktarimEnvanterServisi.compare([a], [b]);
+      expect(result['same'], 0);
+      expect(
+        (result['conflicts'] as List).single['reason'],
+        'link_identity_unconfirmed',
+      );
+      expect(result['localNewIds'], isEmpty);
+      expect(result['remoteNewIds'], isEmpty);
+    },
+  );
+
+  test(
     'identity/hash bridges and duplicate aliases fail closed on either peer',
     () async {
       await source.insert('belgeler', _document(1));

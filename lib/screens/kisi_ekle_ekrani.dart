@@ -124,12 +124,13 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani> {
       );
       if (mounted && file != null) c.setPhoto(file.path);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Fotoğraf alınamadı. Yeniden deneyebilirsiniz.'),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => picking = false);
     }

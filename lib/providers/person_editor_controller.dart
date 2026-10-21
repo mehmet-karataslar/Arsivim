@@ -54,8 +54,9 @@ class PersonEditorController extends ChangeNotifier {
     if (busy) return false;
     if (validateName(ad.text) != null ||
         validateName(soyad.text) != null ||
-        validateEmail(email.text) != null)
+        validateEmail(email.text) != null) {
       return false;
+    }
     busy = true;
     error = null;
     _emit();
