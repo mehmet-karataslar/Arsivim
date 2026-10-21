@@ -51,20 +51,29 @@ class PersonEditorRepository {
             'kullanici_tipi': 'NORMAL',
           });
         } else {
-          final changed = await tx.update(
+          final rows = await tx.query(
             'kisiler',
-            values,
-            where: 'id = ? AND aktif = 1 AND guncelleme_tarihi = ?',
-            whereArgs: [
-              original.id,
-              original.guncellemeTarihi.toIso8601String(),
-            ],
+            where: 'id = ? AND aktif = 1',
+            whereArgs: [original.id],
           );
-          if (changed != 1) {
+          final currentTime =
+              rows.isEmpty
+                  ? null
+                  : DateTime.tryParse(
+                    rows.single['guncelleme_tarihi'] as String? ?? '',
+                  );
+          if (currentTime == null ||
+              !currentTime.isAtSameMomentAs(original.guncellemeTarihi)) {
             throw StateError(
               'Kişi başka bir işlemde değişti. Listeye dönüp yeniden açın.',
             );
           }
+          await tx.update(
+            'kisiler',
+            values,
+            where: 'id = ?',
+            whereArgs: [original.id],
+          );
         }
       });
     } catch (_) {

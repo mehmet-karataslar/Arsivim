@@ -153,7 +153,7 @@ class _KisiEkleEkraniState extends State<KisiEkleEkrani> {
         },
         child: FormPageShell(
           title: title,
-          selectedIndex: 3,
+          selectedIndex: 4,
           navigation: widget.navigation,
           onLeave: _leave,
           child: Column(

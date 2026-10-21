@@ -152,6 +152,9 @@ class HesapEslesmeServisi {
       );
     }
     await ekYetkiKontrol?.call(ip);
+    if (_cihazlar[ip] != device || device.oturum != auth.sessionGeneration) {
+      throw HesapHatasi('Cihaz oturumu doğrulama sırasında değişti.');
+    }
   }
 
   void baglantiKes(String ip) => _cihazlar.remove(ip);

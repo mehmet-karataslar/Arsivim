@@ -78,7 +78,7 @@ class VeriTabaniServisi {
           // Veritabanı bütünlüğünü kontrol et
           await _checkDatabaseIntegrity(db);
           await DocumentLinks.prepare(db);
-    await PersonContactSchema.prepare(db);
+          await PersonContactSchema.prepare(db);
         },
       );
 

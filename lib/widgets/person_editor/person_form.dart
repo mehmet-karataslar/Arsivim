@@ -22,6 +22,27 @@ class PersonForm extends StatelessWidget {
           number: 1,
           title: 'Temel Bilgiler',
           subtitle: 'Kişinin temel bilgilerini girin.',
+          trailing: IconButton(
+            tooltip:
+                c.photo == null
+                    ? 'Profil fotoğrafı ekle'
+                    : 'Profil fotoğrafını değiştir',
+            onPressed: onPhoto,
+            icon:
+                c.photo == null
+                    ? const Icon(Icons.add_a_photo_outlined)
+                    : ClipOval(
+                      child: Image.file(
+                        File(c.photo!),
+                        width: 32,
+                        height: 32,
+                        fit: BoxFit.cover,
+                        cacheWidth: 100,
+                        errorBuilder:
+                            (_, _, _) => const Icon(Icons.person_outline),
+                      ),
+                    ),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -46,32 +67,6 @@ class PersonForm extends StatelessWidget {
                     autofillHints: const [AutofillHints.familyName],
                   ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: onPhoto,
-                  icon:
-                      c.photo == null
-                          ? const Icon(Icons.add_a_photo_outlined, size: 20)
-                          : ClipOval(
-                            child: Image.file(
-                              File(c.photo!),
-                              width: 28,
-                              height: 28,
-                              fit: BoxFit.cover,
-                              cacheWidth: 100,
-                              errorBuilder:
-                                  (_, _, _) => const Icon(Icons.person_outline),
-                            ),
-                          ),
-                  label: Text(
-                    c.photo == null
-                        ? 'Profil fotoğrafı ekle (isteğe bağlı)'
-                        : 'Profil fotoğrafını değiştir',
-                  ),
-                ),
               ),
             ],
           ),

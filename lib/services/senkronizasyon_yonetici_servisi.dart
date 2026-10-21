@@ -32,6 +32,7 @@ class SenkronizasyonYoneticiServisi {
   final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
   final LogServisi _logServisi = LogServisi.instance;
   final NetworkOptimizer _networkOptimizer = NetworkOptimizer.instance;
+  bool _baglantiSuruyor = false;
 
   final ValueNotifier<int> changes = ValueNotifier(0);
   void _changed() => changes.value++;
@@ -305,6 +306,7 @@ class SenkronizasyonYoneticiServisi {
     initializeConnections();
     final bilet = await _httpSunucu.hesapEslesmesi.biletOlustur();
     if (!_httpSunucu.calisiyorMu) await _httpSunucu.sunucuyuBaslat();
+    _httpSunucu.aktarimAnahtari = GuvenliAktarimServisi.kimlik();
     final ip = await _getRealIPAddress();
     print('📱 Connection data IP adresi: $ip');
 
@@ -313,6 +315,7 @@ class SenkronizasyonYoneticiServisi {
       'type': 'arsivim_connection',
       'transfer_version': GuvenliAktarimServisi.surum,
       'trust_version': 1,
+      'session_version': 1,
       'transfer_token': _httpSunucu.aktarimAnahtari,
       'version': '1.0',
       'device_id': _httpSunucu.cihazId ?? 'unknown',
@@ -339,6 +342,13 @@ class SenkronizasyonYoneticiServisi {
   }
 
   Future<bool> yeniCihazBagla(Map<String, dynamic> connectionInfo) async {
+    if (_baglantiSuruyor || transferRunning) return false;
+    _baglantiSuruyor = true;
+    try { return await _yeniCihazBagla(connectionInfo); }
+    finally { _baglantiSuruyor = false; }
+  }
+
+  Future<bool> _yeniCihazBagla(Map<String, dynamic> connectionInfo) async {
     initializeConnections();
     try {
       await AuthServisi.instance.hesapTanitim(yeniDogrulama: true);
@@ -360,7 +370,8 @@ class SenkronizasyonYoneticiServisi {
       return false;
     }
     final token = connectionInfo['transfer_token'];
-    if (connectionInfo['transfer_version'] != GuvenliAktarimServisi.surum ||
+    if (connectionInfo['session_version'] != 1 ||
+        connectionInfo['transfer_version'] != GuvenliAktarimServisi.surum ||
         token is! String ||
         !RegExp(r'^[a-f0-9]{48}$').hasMatch(token)) {
       onError?.call('Iki cihazi da guncelleyip yeni QR koduyla eslestirin.');
@@ -487,6 +498,7 @@ class SenkronizasyonYoneticiServisi {
     final remember = connectionInfo['trust_version'] == 1;
     final trustId = GuvenilirCihazServisi.yeniGuvenId();
     final secret = GuvenilirCihazServisi.yeniGuvenAnahtari();
+    final reverseToken = GuvenliAktarimServisi.kimlik();
     final result = await AktarimHttp.jsonIstek(
       Uri.parse('http://$ip:$port/sync/v2/pair'),
       _httpSunucu.eslesmisAnahtarlar[ip]!,
@@ -494,7 +506,8 @@ class SenkronizasyonYoneticiServisi {
         'account_version': 1,
         'pair_ticket': connectionInfo['pair_ticket'],
         'account': await AuthServisi.instance.hesapTanitim(yeniDogrulama: true),
-        'reverse_token': _httpSunucu.aktarimAnahtari,
+        'reverse_token': reverseToken,
+        'session_version': 1,
         'device_id': _httpSunucu.cihazId,
         'device_name': _httpSunucu.cihazAdi ?? 'Arsivim',
         'platform': Platform.operatingSystem,
@@ -523,6 +536,11 @@ class SenkronizasyonYoneticiServisi {
       throw HesapHatasi('QR hesabi ile karsi cihaz hesabi uyusmuyor.');
     }
     await _httpSunucu.hesapEslesmesi.karsiCihazaBaglanildi(ip, remote);
+    final incoming = result['transfer_token'];
+    if (result['session_version'] != 1 || incoming is! String ||
+        !RegExp(r'^[a-f0-9]{48}$').hasMatch(incoming)) throw HesapHatasi('Cihaz oturum anahtarı doğrulanamadı.');
+    _httpSunucu.eslesmisAnahtarlar[ip] = incoming;
+    _httpSunucu.gelenAnahtarlar[ip] = reverseToken;
     if (remember) {
       if (result['trust_version'] != 1 || result['trust_id'] != trustId)
         throw HesapHatasi('Cihaz güveni onaylanmadı.');
@@ -568,12 +586,20 @@ class SenkronizasyonYoneticiServisi {
       }
       _httpSunucu.hesapEslesmesi.baglantiKes(ip);
       _httpSunucu.eslesmisAnahtarlar.remove(ip);
+      _httpSunucu.gelenAnahtarlar.remove(ip);
       _httpSunucu.guvenBaglantilari.remove(ip);
     }
     _changed();
   }
 
   Future<bool> taninanCihazaBaglan(String trustId, {String? adres}) async {
+    if (_baglantiSuruyor || transferRunning) return false;
+    _baglantiSuruyor = true;
+    try { return await _taninanCihazaBaglan(trustId, adres: adres); }
+    finally { _baglantiSuruyor = false; }
+  }
+
+  Future<bool> _taninanCihazaBaglan(String trustId, {String? adres}) async {
     if (transferRunning) return false;
     initializeConnections();
     String? ip;
@@ -600,6 +626,7 @@ class SenkronizasyonYoneticiServisi {
         'archive_id': trust.arsivId,
         'owner_id': trust.yoneticiId,
       };
+      final reverseToken = GuvenliAktarimServisi.kimlik();
       final challenge = await AktarimHttp.jsonIstek(
         Uri.parse('http://$ip:8080/sync/v2/trust-challenge'),
         trust.gizliAnahtar,
@@ -621,7 +648,7 @@ class SenkronizasyonYoneticiServisi {
         body: {
           ...identity,
           'challenge': challenge['challenge'],
-          'reverse_token': _httpSunucu.aktarimAnahtari,
+          'reverse_token': reverseToken,
         },
       );
       final token = result['transfer_token'];
@@ -649,6 +676,7 @@ class SenkronizasyonYoneticiServisi {
       if (session != AuthServisi.instance.sessionGeneration)
         throw HesapHatasi('Oturum değişti.');
       _httpSunucu.eslesmisAnahtarlar[ip] = token;
+      _httpSunucu.gelenAnahtarlar[ip] = reverseToken;
       _httpSunucu.guvenBaglantilari[ip] = trustId;
       final ready = await AktarimHttp.jsonIstek(
         Uri.parse('http://$ip:8080/sync/v2/ready'),
@@ -676,6 +704,7 @@ class SenkronizasyonYoneticiServisi {
     } catch (error) {
       if (ip != null) {
         _httpSunucu.eslesmisAnahtarlar.remove(ip);
+        _httpSunucu.gelenAnahtarlar.remove(ip);
         _httpSunucu.guvenBaglantilari.remove(ip);
         _httpSunucu.hesapEslesmesi.baglantiKes(ip);
       }
@@ -731,6 +760,8 @@ class SenkronizasyonYoneticiServisi {
 
   Future<void> _notifyDisconnection(Map<String, dynamic> device) async {
     final token = _httpSunucu.eslesmisAnahtarlar.remove(device['ip']);
+    _httpSunucu.gelenAnahtarlar.remove(device['ip']);
+    _httpSunucu.guvenBaglantilari.remove(device['ip']);
     if (device['ip'] is String)
       _httpSunucu.hesapEslesmesi.baglantiKes(device['ip']);
     try {
@@ -954,6 +985,7 @@ class SenkronizasyonYoneticiServisi {
     if (transferRunning) return false;
     if (ids.isEmpty) return true;
     _uzaktanAliniyor = true;
+    _httpSunucu.aktifAktarimCihazlari.add(ip);
     _stopRequested = false;
     _changed();
     sonAktarimSonuclari.clear();
@@ -1064,6 +1096,7 @@ class SenkronizasyonYoneticiServisi {
     } finally {
       _uzakIs = null;
       _uzaktanAliniyor = false;
+      _httpSunucu.aktifAktarimCihazlari.remove(ip);
       _changed();
     }
   }
@@ -1144,6 +1177,7 @@ class SenkronizasyonYoneticiServisi {
       return false;
     }
     _aktarimSuruyor = true;
+    _httpSunucu.aktifAktarimCihazlari.add(hedefIP);
     _stopRequested = false;
     _changed();
     sonAktarimSonuclari.clear();
@@ -1277,6 +1311,7 @@ class SenkronizasyonYoneticiServisi {
       return false;
     } finally {
       _aktarimSuruyor = false;
+      _httpSunucu.aktifAktarimCihazlari.remove(hedefIP);
       _changed();
     }
   }
@@ -1438,6 +1473,8 @@ class SenkronizasyonYoneticiServisi {
       final devices = List<Map<String, dynamic>>.from(_bagliCihazlar);
       final notifications = devices.map(_notifyDisconnection).toList();
       _httpSunucu.eslesmisAnahtarlar.clear();
+      _httpSunucu.gelenAnahtarlar.clear();
+      _httpSunucu.guvenBaglantilari.clear();
       _httpSunucu.hesapEslesmesi.temizle();
       // Tüm cihazları kaldır
       _bagliCihazlar.clear();

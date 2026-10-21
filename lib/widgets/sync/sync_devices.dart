@@ -43,7 +43,9 @@ class SyncDevices extends StatelessWidget {
               key: const ValueKey('sync-pair-device'),
               onPressed: controller.busy || pairing ? null : onQr,
               icon: const Icon(Icons.qr_code, size: 18),
-              label: Text(qrData == null ? 'QR kod göster' : 'QR kodu aç'),
+              label: Text(
+                qrData == null ? 'Yeni cihaz eşleştir' : 'QR kodu aç',
+              ),
             ),
             if (onScan != null)
               TextButton.icon(

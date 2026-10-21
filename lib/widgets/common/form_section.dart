@@ -8,10 +8,12 @@ class FormSection extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.child,
+    this.trailing,
   });
   final int number;
   final String title, subtitle;
   final Widget child;
+  final Widget? trailing;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -59,6 +61,7 @@ class FormSection extends StatelessWidget {
                   ],
                 ),
               ),
+              if (trailing != null) trailing!,
             ],
           ),
           const SizedBox(height: 26),

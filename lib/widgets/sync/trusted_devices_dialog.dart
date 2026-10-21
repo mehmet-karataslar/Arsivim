@@ -15,37 +15,14 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
   String? _error;
 
   Future<void> _connect(Map<String, dynamic> device) async {
-    final address = TextEditingController(
-      text: device['last_ip'] as String? ?? '',
-    );
     final ip = await showDialog<String>(
       context: context,
       builder:
-          (ctx) => AlertDialog(
-            title: Text('${device['device_name']} cihazına bağlan'),
-            content: TextField(
-              controller: address,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'Yerel IP adresi',
-                hintText: '192.168.1.100',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Vazgeç'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, address.text.trim()),
-                child: const Text('Bağlan'),
-              ),
-            ],
+          (_) => _DeviceAddressDialog(
+            deviceName: '${device['device_name']}',
+            initialAddress: device['last_ip'] as String? ?? '',
           ),
     );
-    // The route may still be animating out while its TextField is mounted.
-    WidgetsBinding.instance.addPostFrameCallback((_) => address.dispose());
     if (ip == null || !mounted) return;
     setState(() {
       _busy = true;
@@ -53,6 +30,10 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
     });
     try {
       if (await widget.gateway.reconnect(device['trust_id'] as String, ip)) {
+        if (!mounted) return;
+        setState(() => _busy = false);
+        // Rebuild PopScope before dismissing the successfully connected route.
+        await WidgetsBinding.instance.endOfFrame;
         if (mounted) Navigator.pop(context, true);
       } else if (mounted) {
         setState(
@@ -62,12 +43,13 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
         );
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () =>
               _error =
                   'Cihaz doğrulanamadı. IP adresini ve cihaz güvenini kontrol edin.',
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -78,6 +60,7 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
       context: context,
       builder:
           (ctx) => AlertDialog(
+            scrollable: true,
             title: const Text('Cihazı unut'),
             content: Text(
               '${device['device_name']} için kayıtlı bağlantı izni kaldırılacak. Kişiler ve belgeler silinmez.',
@@ -101,13 +84,15 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
     });
     try {
       await widget.gateway.forget(device['trust_id'] as String);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _devices = widget.gateway.trustedDevices();
         });
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = 'Cihaz izni kaldırılamadı. Yeniden deneyin.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -130,15 +115,17 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
               FutureBuilder<List<Map<String, dynamic>>>(
                 future: _devices,
                 builder: (context, state) {
-                  if (state.hasError)
+                  if (state.hasError) {
                     return const Text(
                       'Tanınan cihazlar okunamadı. Kayıtlar değiştirilmedi.',
                     );
+                  }
                   if (!state.hasData) return const LinearProgressIndicator();
-                  if (state.data!.isEmpty)
+                  if (state.data!.isEmpty) {
                     return const Text(
                       'Henüz kayıtlı cihaz yok. İlk bağlantıyı QR kod ile kurun.',
                     );
+                  }
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -187,5 +174,55 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
         ),
       ],
     ),
+  );
+}
+
+class _DeviceAddressDialog extends StatefulWidget {
+  const _DeviceAddressDialog({
+    required this.deviceName,
+    required this.initialAddress,
+  });
+
+  final String deviceName;
+  final String initialAddress;
+
+  @override
+  State<_DeviceAddressDialog> createState() => _DeviceAddressDialogState();
+}
+
+class _DeviceAddressDialogState extends State<_DeviceAddressDialog> {
+  late final TextEditingController _address = TextEditingController(
+    text: widget.initialAddress,
+  );
+
+  @override
+  void dispose() {
+    _address.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
+    title: Text('${widget.deviceName} cihazına bağlan'),
+    content: TextField(
+      controller: _address,
+      autofocus: true,
+      keyboardType: TextInputType.url,
+      decoration: const InputDecoration(
+        labelText: 'Yerel IP adresi',
+        hintText: '192.168.1.100',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Vazgeç'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, _address.text.trim()),
+        child: const Text('Bağlan'),
+      ),
+    ],
   );
 }
