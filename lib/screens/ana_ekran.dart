@@ -170,7 +170,7 @@ class _AnaEkranState extends State<AnaEkran> {
                 key: const ValueKey('workspace'),
                 child: Column(
                   children: [
-                    if (desktop && ![0, 1, 2, 4].contains(_selectedTab))
+                    if (desktop && ![0, 1, 2, 3, 4].contains(_selectedTab))
                       AppHeader(
                         onSearch: () => _navigate(1),
                         onRefresh: _refresh,
