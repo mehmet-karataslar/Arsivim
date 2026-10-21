@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Belge sayfalarını fotoğraflayıp tek PDF olarak taramak için kamera erişimi kullanılır.</string>
+	<string>Belgeleri fotoğraflayıp PDF olarak taramak ve cihaz bağlantısı için QR kod okumak amacıyla kamera erişimi kullanılır.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

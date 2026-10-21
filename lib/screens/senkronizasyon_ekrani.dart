@@ -19,6 +19,7 @@ import '../widgets/sync/sync_statistics.dart';
 import '../models/sync_comparison.dart';
 import '../widgets/sync/sync_direction_dialog.dart';
 import '../widgets/sync/trusted_devices_dialog.dart';
+import '../widgets/sync/sync_mobile_view.dart';
 
 class SenkronizasyonEkrani extends StatefulWidget {
   const SenkronizasyonEkrani({
@@ -27,11 +28,13 @@ class SenkronizasyonEkrani extends StatefulWidget {
     this.repository,
     this.gateway,
     this.verifyPairing,
+    this.mobileDevice,
   });
   final bool showHeading;
   final SyncRepository? repository;
   final SyncGateway? gateway;
   final Future<bool> Function(BuildContext)? verifyPairing;
+  final bool? mobileDevice;
   @override
   State<SenkronizasyonEkrani> createState() => _SenkronizasyonEkraniState();
 }
@@ -47,6 +50,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   bool _trustedOpen = false;
   bool _findingDifferences = false;
   String _differenceStatus = '';
+  bool get _mobileDevice =>
+      widget.mobileDevice ?? (Platform.isAndroid || Platform.isIOS);
   final _seenConnections = <String>{};
   final _pendingConnections = <String>[];
   BuildContext? _qrDialogContext;
@@ -95,8 +100,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       return;
     _directionOpen = true;
     try {
-      final localName =
-          Platform.isAndroid || Platform.isIOS ? 'Bu telefon' : 'Bu bilgisayar';
+      final localName = _mobileDevice ? 'Bu telefon' : 'Bu bilgisayar';
       final choice = await showDialog<SyncDirectionChoice>(
         context: context,
         builder:
@@ -151,6 +155,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         );
         return;
       }
+      setState(() => _differenceStatus = '');
       final target =
           targets.length == 1
               ? targets.single
@@ -201,6 +206,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       // The explicit comparison owns the connection event, avoiding a second dialog.
       _pendingConnections.removeWhere((id) => id == device.id);
       _seenConnections.add(_connectionKey(device));
+      setState(() => _findingDifferences = false);
       await _compare(device);
     } catch (error) {
       _message(
@@ -333,17 +339,25 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _scan() async {
-    if (_findingDifferences) return;
-    final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder:
-            (ctx) => QRScannerScreen(
-              onQRScanned: (value) => Navigator.of(ctx).pop(value),
-            ),
-      ),
-    );
-    if (!mounted || code == null) return;
+    if (_findingDifferences ||
+        _pairing ||
+        _directionOpen ||
+        _trustedOpen ||
+        _data.busy ||
+        _data.transferring ||
+        _data.gateway.transferring)
+      return;
+    setState(() => _pairing = true);
     try {
+      final code = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder:
+              (ctx) => QRScannerScreen(
+                onQRScanned: (value) => Navigator.of(ctx).pop(value),
+              ),
+        ),
+      );
+      if (!mounted || code == null) return;
       if (!await hesapEslesmesiniOnayla(context, code) || !mounted) return;
       final success = await _data.gateway.connect(code);
       _message(
@@ -355,6 +369,11 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       await _data.refresh();
     } catch (_) {
       _message('Bağlantı kurulamadı. Yeniden deneyin.');
+    } finally {
+      if (mounted) {
+        setState(() => _pairing = false);
+        _offerNextConnection();
+      }
     }
   }
 
@@ -444,6 +463,26 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     builder:
         (context, _) => LayoutBuilder(
           builder: (context, box) {
+            if (_mobileDevice) {
+              return SyncMobileView(
+                controller: _data,
+                showHeading: widget.showHeading,
+                blocked:
+                    _findingDifferences ||
+                    _pairing ||
+                    _qrOpen ||
+                    _directionOpen ||
+                    _trustedOpen,
+                connecting: _findingDifferences,
+                connectionStatus: _differenceStatus,
+                onDifferences: _showDifferences,
+                onScan: _scan,
+                onTrusted: _trustedDevices,
+                onCompare: _compare,
+                onDisconnect: _disconnect,
+                onHistory: _history,
+              );
+            }
             final compact = WorkspaceLayout.compact(context);
             final wide =
                 box.maxWidth >= 1120 &&
@@ -636,9 +675,11 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                   children: [
                     toolbar,
                     const SizedBox(height: 18),
-                    if (_data.loading || _pairing || _findingDifferences)
+                    if (_data.loading ||
+                        _pairing ||
+                        (_findingDifferences && _differenceStatus.isNotEmpty))
                       const LinearProgressIndicator(),
-                    if (_findingDifferences)
+                    if (_findingDifferences && _differenceStatus.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.all(12),
                         child: Text(_differenceStatus),
