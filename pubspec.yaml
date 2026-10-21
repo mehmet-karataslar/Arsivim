@@ -1,0 +1,93 @@
+name: arsiv_uygulamasi
+description: "Arşivim - Kişisel Belge Arşiv Uygulaması"
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 2.5.2+12
+
+environment:
+  sdk: ^3.7.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  
+  # Veritabanı
+  sqflite: ^2.4.1
+  sqflite_common_ffi: ^2.3.3
+  
+  # Dosya işlemleri
+  path_provider: ^2.1.4
+  file_picker: ^10.3.6
+  path: ^1.9.1
+  image_picker: ^1.1.2
+
+  # Kamera ve tarama
+  camera: ^0.11.0+2
+  image: ^4.1.7
+  cunning_document_scanner: ^1.2.3
+
+  # PDF oluşturma
+  pdf: ^3.11.1
+
+  # Dosya açma ve paylaşma
+  open_filex: ^4.3.4
+  share_plus: ^11.0.0
+
+  # Güvenlik ve hash
+  crypto: ^3.0.6
+  cryptography: ^2.7.0
+  unorm_dart: ^0.3.3
+
+  # Cihaz bilgileri (senkronizasyon için gerekli)
+  device_info_plus: ^11.1.0
+
+  # Network
+  http: ^1.2.2
+  connectivity_plus: ^6.1.4
+
+  # QR Code (senkronizasyon için)
+  qr_flutter: ^4.1.0
+  simple_barcode_scanner: ^0.6.0
+
+  # İzinler (Windows tarayıcı için gerekli)
+  permission_handler: ^12.0.3
+
+    # Calendar widget (temporarily disabled due to pub get issues)
+  # table_calendar: ^3.1.2
+  
+  # Voice commands (temporarily disabled due to pub get issues)  
+  # speech_to_text: ^7.0.0
+
+  # Ayarlar ve tercihler
+  shared_preferences: ^2.3.3
+
+  # Internationalization
+  intl: ^0.20.2
+
+  # State management
+  provider: ^6.1.2
+
+  # Logging
+  logging: ^1.2.0
+  
+  # Notifications
+  flutter_local_notifications: ^19.3.1
+  timezone: ^0.10.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # App icon
+  assets:
+    - assets/icons/

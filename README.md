@@ -21,6 +21,159 @@
 
 ## ✨ Özellikler
 
+### Profil ve renk paletleri
+
+Gezinme menüsündeki **Profil** sekmesi hesap bilgilerini ve görünüm tercihlerini
+aynı sayfada toplar. Varsayılan orman yeşiline ek olarak arduvaz mavisi, petrol,
+mürdüm ve toprak paletleri bulunur. Seçim cihazda saklanır, yeniden açılışta
+yüklenir ve Profil içinden varsayılan yeşile döndürülebilir.
+
+Tema altyapısı `lib/theme/app_palette.dart`, `lib/theme/app_theme.dart` ve
+`lib/providers/theme_controller.dart` içinde tutulur. Yeni sayfalar ana renk,
+zemin, metin ve çerçeveler için `Theme.of(context).colorScheme` kullanmalıdır:
+`primary/onPrimary`, `primaryContainer/onPrimaryContainer`,
+`surface/onSurface`, `onSurfaceVariant` ve `outlineVariant`.
+Açılış gibi koyu marka yüzeyleri `BrandColors` tema uzantısından alınır.
+Kategori renkleri kullanıcı verisidir; tema seçimi bu verileri değiştirmez.
+
+Bu aşamada açık zeminli renk paletleri desteklenir. Ana sayfa, Belgeler, Kategoriler, Profil, ortak tema,
+gezinme ve açılış renkleri entegredir; diğer sayfalardaki sabit renkler,
+sayfa sayfa yapılacak tasarım çalışmasında taşınacaktır. Hesap bölümü mevcut
+oturum bilgilerini gösterir; hesap düzenleme kontrolleri ayrıca eklenebilir.
+
+Doğrulama: `flutter test --no-pub test/theme_test.dart`.
+Windows'ta görsel önizlemeler için
+`flutter test --no-pub --dart-define=CAPTURE_THEME_PREVIEW=true test/theme_test.dart`
+komutu `artifacts/theme/` altında mobil ve masaüstü PNG çıktıları oluşturur.
+
+### Ortak arayüz bileşenleri ve ana sayfa
+
+- `lib/widgets/common/`: `AppCard` ortak kart yüzeyi, `AppStatCard` bilgi kartı,
+  `AppActionCard` işlem kartı, `AppSectionHeader` bölüm başlığı, `AppHeader`
+  üst çubuk ve `AdaptiveCardLayout` genişlik/yazı boyutuna uyumlu kart yerleşimi.
+  Kartlar sabit yükseklik veya platform türüne göre boyutlandırılmaz.
+- `lib/widgets/home/`: özet, hızlı işlemler, son belgeler ve veritabanı bilgi
+  penceresi. Bu bileşenler veri sorgulamaz; veriyi ve işlem callback'lerini alır.
+- `lib/models/ana_sayfa_ozeti.dart`: ana sayfanın veri modeli.
+- `lib/screens/ana_ekran.dart`: veri yükleme ve gezinme. Yenilemeler aynı devam
+  eden isteği paylaşır, yüklenmiş içerik korunur, hata halinde tekrar denenebilir.
+  Son belge sorgusu beş kayıtla sınırlıdır; iç içe kaydırılan listeler ve sürekli
+  animasyonlar kullanılmaz. Tema değişikliği veri sorgusunu yeniden başlatmaz.
+
+Yeni sayfalarda aynı kart bileşenleri ve `ColorScheme` rolleri kullanılmalıdır.
+Profil bölüm kartları da `AppCard` kullanır. Ana sayfa ve ortak bileşen testleri:
+`flutter test --no-pub test/home_test.dart test/theme_test.dart`.
+Windows'ta örnek verili görseller:
+`flutter test --no-pub --dart-define=CAPTURE_HOME_PREVIEW=true test/home_test.dart`.
+Çıktılar `artifacts/home/` klasörüne yazılır. Widget testleri taşma ve etkileşimleri
+doğrular; gerçek cihazda kare süresi ölçümü yerine geçmez.
+
+### Referans tasarımlar ve mobil yerleşim
+
+#### Sayfa envanteri ve tasarım durumu — 21 Ekim 2026
+
+Kodda 18 ayrı ekran sınıfı bulunuyor. Ekleme/düzenleme modları ve ekran içi
+iletişim kutuları ayrı sayfa olarak sayılmadı. Yeni sayfanın ayrıntılı tasarımına
+kullanıcının seçimiyle geçilir; ortak mobil başlık ve gezinme düzeltmeleri tüm
+ana sekmelere uygulanır.
+
+| Sayfa | Kaynak | Durum |
+| --- | --- | --- |
+| Ana Sayfa / uygulama kabuğu | `lib/screens/ana_ekran.dart` | Referans tasarımı ve sade mobil görünüm uygulandı |
+| Belgeler | `lib/screens/belgeler_ekrani.dart` | Referans tasarımı, mobil arama/filtre ve ortak belge kartları uygulandı |
+| Kategoriler | `lib/screens/kategoriler_ekrani.dart` | Referans tasarımı ve uyarlanabilir kart düzeni uygulandı |
+| Profil | `lib/screens/profil_ekrani.dart` | Hesap ve kalıcı tema tercihleri modüler; mobil bölüm çerçeveleri ve hesap sorgusu denetlendi |
+| Kişiler | `lib/screens/kisiler_ekrani.dart` | Referans kart düzeni, seçime bağlı ayrıntı paneli ve mobil alt panel uygulandı |
+| Senkronizasyon | `lib/screens/senkronizasyon_ekrani.dart` | Sayfa tasarımı bekliyor; ortak mobil başlıkla uyumlu |
+| Yedekleme | `lib/screens/yedekleme_ekrani.dart` | Sayfa tasarımı bekliyor; ortak mobil başlıkla uyumlu |
+| Yeni belge ekle | `lib/screens/yeni_belge_ekle_ekrani.dart` | Bekliyor |
+| Belge düzenle | `lib/screens/belge_duzenle_ekrani.dart` | Bekliyor |
+| Kişi ekle / düzenle | `lib/screens/kisi_ekle_ekrani.dart` | İki mod aynı ekran; bekliyor |
+| Kişinin belgeleri | `lib/screens/kisi_belgeleri_ekrani.dart` | Eski ekran korunuyor; Kişiler artık ortak Belgeler sayfasını kişi filtresiyle açıyor |
+| Açılış | `lib/screens/splash_screen.dart` | Tema renkleri bağlı; tam tasarım denetimi bekliyor |
+| Giriş | `lib/screens/auth/login_screen.dart` | Bekliyor |
+| Kayıt | `lib/screens/auth/register_screen.dart` | Bekliyor |
+| QR bağlantı | `lib/widgets/qr_generator_widget.dart` (`QRConnectionScreen`) | Bekliyor |
+| QR tarayıcı | `lib/widgets/qr_scanner_widget.dart` (`QRScannerScreen`) | Bekliyor |
+| Belge tarayıcı | `lib/screens/tarayici_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
+| Senkron belgeler | `lib/screens/senkron_belgeler_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
+
+Sayfa içi denetim parçaları: kategori düzenleme ve filtreleme, belge filtreleri
+ve işlem onayları, kişi seçimi, yedekleme klasörü seçimi, aktarım durumu ve
+sonuçları, hesap doğrulama/hata iletileri. Çağrısı bulunamayan ekranlar silinmedi;
+erişim ve kullanım kararı verilmeden tamamlanmış sayılmaz.
+
+Ana sayfa, Belgeler, Kategoriler ve Kişiler aynı `WorkspaceToolbar`, `AppSidebar`,
+`AppCard`, `ToneButton`, `MetricGrid` ve `ViewModeSwitch` bileşenlerini kullanır.
+Masaüstünde sol gezinme, mobilde yedi hedefli alt menü bulunur. Seçili sekmenin
+adı mobilde üst çubukta ortalanır. Bilgi kartlarının gösterildiği ekranlarda
+kartlar genişliğe ve yazı ölçeğine göre iki veya dört sütun olur.
+600 pikselin altında ve 1100 pikselden dar, 500 pikselden kısa yatay ekranlarda
+kartların dışındaki yatay sayfa boşluğu kaldırılır (`WorkspaceLayout`).
+`SectionSurface` mobilde kart listesini ikinci bir kart çerçevesine almaz.
+Metinler ve kontroller kendi iç boşluklarını korur. Depolama kartları yalnızca
+gerçek kullanılan alanı gösterir; varsayılan kota veya doluluk yüzdesi yoktur.
+
+Mobil Ana Sayfa ve Belgeler'de özet kartları, hızlı işlem panelleri ve yatay
+uzantı filtreleri gösterilmez. `MobileWorkspaceToolbar` aramayı ve açılır filtre
+kontrolünü, `MobileWorkspace` sağ alttaki ekleme düğmesini paylaşır.
+Kategoriler ve Kişiler de mobilde bu bileşenleri kullanır; özetler ve yan
+paneller kaldırılır, filtreler açılır kapanır. Kartlar iki sütun halinde
+ek yerleşim çerçevesi olmadan gösterilir.
+`DocumentFilterPanel` kişi, kategori, tür, tarih, boyut ve sıralamayı tek formda
+toplar; iptal değişiklikleri uygulamaz. Ana Sayfa'nın tür filtresi son belgeler
+üzerindedir; arama gönderildiğinde tüm arşivin sonuçları Belgeler'de açılır.
+`DocumentActions` dört işlemi tek satırda tutar; büyük erişilebilirlik yazısında
+dar düğmeler açıklamalı simgelere geçer. Kart başlığı iki satırla, kişi/kategori/
+tarih ayrı ve taşmayan satırlarla gösterilir; tam metin açıklamada korunur.
+
+- `lib/providers/documents_controller.dart`: 280 ms arama gecikmesi, eski istek
+  sonuçlarının elenmesi, 25 kayıtlık sayfalama ve hata/yenileme durumu.
+- `lib/services/document_repository.dart`: tüm aktif arşiv üzerinde parametreli
+  arama, tür/kişi/kategori/tarih/boyut filtreleri, sıralama ve toplu istatistik.
+- `lib/widgets/documents/`: hızlı filtreler, filtre penceresi ve işlem geçmişi.
+  `DocumentTile` ana sayfada da kullanılan aç/paylaş/düzenle/sil kartıdır.
+- `lib/providers/categories_controller.dart` ve `lib/services/category_repository.dart`:
+  kategori araması, sıralama, gruplama, yıldızlar ve tek sorguda belge sayıları.
+  Kategori okumaları kendiliğinden yeni kategori eklemez.
+- `lib/widgets/categories/`: kategori kartı, düzenleme formu, filtreler, sağ
+  paneller ve mevcut onaylı toplu işlemler birbirinden ayrı bileşenlerdir.
+
+- `lib/widgets/profile/`: hesap, görünüm tercihleri, palet kartı ve bölüm yüzeyi
+  ayrı bileşenlerdir. Tema değişirken hesap doğrulama sorgusu tekrarlanmaz.
+- `lib/widgets/people/`: kişi kartı, avatar, filtreler ve ayrıntı paneli.
+  Masaüstünde seçilen kişinin paneli sağda; dar ekranlarda alt panelde açılır.
+- `PeopleRepository`: sayılar ve kategoriler iki toplu sorguyla okunur. Panel
+  seçili kişinin son 10 belgesini, açıklaması olan son 20 belgesini ve gerçek
+  dosya konumlarını gösterir. Klasörler sanal klasör, Notlar ayrı kişi notu
+  değildir. Geçmiş verisi olmayan artış yüzdeleri veya grafikler üretilmez.
+- `PeopleController`: arama/filtre/sıralama bellekte; kart satırları ihtiyaç
+  oldukça oluşturulur. Hızlı seçimlerde eski yanıt yeni kişinin paneline yazılmaz.
+  Kişi silme mevcut pasife alma davranışını korur; belgeleri silmez.
+
+Kişiler önizlemeleri örnek test verileriyle üretilir:
+`flutter test --dart-define=CAPTURE_PEOPLE_PREVIEW=true test/people_test.dart`.
+Çıktılar `artifacts/people/` altında 390 ve 1672 piksel PNG dosyalarıdır.
+
+Kategori yıldızları, grupları ve bu ekrandaki düzenleme zamanları cihazda
+saklanan görünüm tercihleridir; cihazlar arasında senkronize edilmez. Son
+güncelleme, kayıtlı kategori düzenlemesi ile kategori belgelerinin güncelleme
+tarihinden hesaplanır. Belge etkinlik geçmişi başarılı açma/paylaşma/düzenleme
+işlemleriyle oluşur ve son 100 kayıtla sınırlıdır. Paylaşım sonucu platformda
+doğrulanamıyorsa paylaşılmış gibi gösterilmez. Eski işlemler için yapay geçmiş
+üretilmez. Son yedekleme yalnızca başarıyla tamamlanan yeni yedeklerden kaydedilir.
+
+Kontroller: `flutter test`. Windows'ta örnek verili ekran görüntüleri için:
+
+```powershell
+flutter test --dart-define=CAPTURE_HOME_PREVIEW=true --dart-define=CAPTURE_DOCUMENTS_PREVIEW=true --dart-define=CAPTURE_CATEGORIES_PREVIEW=true
+```
+
+Görseller sırasıyla `artifacts/home/`, `artifacts/documents/` ve
+`artifacts/categories/` altında oluşturulur. Bunlar widget önizlemeleridir;
+yerel dosya açma, işletim sistemi paylaşım penceresi ve gerçek telefondaki
+performans ayrıca cihaz üzerinde denenmelidir.
+
 ### 📋 Belge Yönetimi
 - **Çoklu Dosya Desteği**: PDF, DOC, DOCX, TXT, JPG, PNG, MP4, ZIP vb. 20+ dosya formatı
 - **✨ Belge Düzenleme (YENİ)**: Başlık, açıklama, kategori, kişi ve etiket düzenleme

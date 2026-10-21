@@ -1,0 +1,83 @@
+TEK YONETICI VE ORTAK ARSIV HESABI
+21 Ekim 2026
+
+UYGULANAN YAPI
+- Arsiv sahipligi arsiv_hesabi tablosunda tek satir olarak tutulur.
+  arsiv_id ve yonetici_id cihazlar arasinda ortak, yerel_kisi_id cihazda kalir.
+- Eski kisiler tablosu yeniden kurulmaz. Kisi/belge ID'leri degistirilmez.
+  Diger eski hesaplarin kisi kayitlari, parolalari ve belgeleri silinmez;
+  ancak arsive giris yetkisi sadece secilen tek yoneticiye aittir.
+  Eski kullanici_tipi etiketleri tek basina yonetici yetkisi vermez.
+- Mevcut hesaplar varsa yeni yonetici kaydi acilamaz. Ilk geciste mevcut
+  sifreyle giris gerekir. Gecerli eski ADMIN hesabi varsa onceliklidir.
+  Ayni normalize kullanici adiyla birden fazla eski hesap varsa kullanici
+  kaydi secer ve o kaydin sifresi dogrulanir; otomatik birlestirme yapilmaz.
+- Yonetici kisi kaydinin silinmesi, pasife alinmasi ve kullanici adinin
+  genel kisi duzenleme islemiyle degistirilmesi DB tetikleyicisiyle engellenir.
+- Gorunen isimler korunur. Karsilastirmada NFC Unicode normalizasyonu,
+  bosluk temizligi ve Turkce harf donusumu kullanilir: I/ı ve İ/i.
+  Karatas/Karataş veya i/ı ayni kabul edilmez. Parola normalizasyonu yapilmaz.
+
+YEDEK VE PAROLA GECISI
+Eski hesap bulunan DB'de yeni hesap tablolari kurulmadan once VACUUM INTO
+ile tutarli bir snapshot alinir. Yedek olusmazsa gecis durur.
+Konum: aktif DB'nin yanindaki Yedekler/hesap-gecisi-*/arsiv.db.
+Dogrulama dosyasi boyut, SHA-256 ve zamani icerir. Bu yedek hassas veri
+icerir ve kullanicinin arsiviyle birlikte korunmalidir.
+
+Eski SHA-256 parola kaydi, yalnizca basarili sifre dogrulamasi sonrasinda
+rastgele tuzlu PBKDF2-HMAC-SHA256 (600000 tekrar) ile guncellenir.
+Hesap sahipligi ve parola guncellemesi ayni DB islemi icindedir.
+Belge kayitlari/dosyalari bu geciste degistirilmez. Yeni parola hesaplamasi
+arayuzu bloke etmemek icin ayri Dart isolate'inda calisir.
+
+IKI CIHAZI BAGLAMA
+1. Bu degisiklikleri iceren surum iki cihazda da bulunmali.
+2. Iki cihazda da mevcut kullanici adi ve sifreyle giris yapilir.
+3. Ortak arsivin esas alinacagi cihazda QR kodu acilir ve yonetici
+   sifresi dogrulanir. Kod bes dakika gecerli, tek kullanimliktir.
+4. Diger cihaz kodu tarar, gosterilen hesap bilgilerini kontrol eder ve
+   kendi yerel yonetici sifresiyle baglantiyi onaylar.
+5. Ad/soyad/kullanici adi normalize edilerek denetlenir. Kayitlar uyusursa
+   QR gosteren cihazin arsiv/yonetici kimligi ortak kimlik olur.
+6. Profilde iki cihazda da ayni arsiv kimligi gorulur. Belgeler yine
+   mevcut aktarim islemiyle gonderilir; hesap eslestirmek tek basina
+   butun dosyalari kopyalamaz.
+
+Ilk eslesmeden sonra yeni cihazlar icin QR mevcut ortak arsive bagli
+cihazda olusturulmalidir. Iki farkli bagli arsiv otomatik birlestirilmez.
+Yanit kaybolursa yeni QR ile yeniden denenebilir; eski kisiler silinmez.
+Parola veya parola hash'i karsi cihaza gonderilmez. Ortak olan hesap
+kimligidir; cihazlarin yerel kilit acma sifreleri korunur. Bir cihazda
+sifre degistirmek diger cihazdaki sifreyi otomatik degistirmez.
+
+YETKI KONTROLLERI
+Eski token-onekli QR girisi ve agdan otomatik kullanici olusturma yolu
+kaldirildi. Aktarimda aktif yonetici oturumu ve o oturuma bagli cihaz
+kontrol edilir. Oturum/parola degisikligi eski eslesme yetkisini kaldirir.
+Baglanti kesme tum yollarda yerel yetkiyi kaldirir. Buyuk dosya kaydi
+tamamlanmadan once de yetki tekrar kontrol edilir.
+
+TEST KAPSAMI
+Son toplu calistirma: flutter test --no-pub --concurrency=1 --reporter expanded
+Sonuc: 137 testin tamami gecti.
+Statik analiz: 0 hata, 62 uyari, toplam 628 uyari/bilgilendirme bildirimi.
+Analiz cikis kodu 1; proje genelindeki lint bildirimleri suruyor.
+
+test/tek_hesap_test.dart: 16 senaryo.
+test/yonetici_dogrulama_test.dart: 2 ekran/genislik senaryosu.
+Mehmet Karataş/MEHMET KARATAŞ, farkli yerel ID'ler, 20 belge ve iki yonlu
+aktarim; mevcut hedef belge ve kisi sayilari; yedekten eski kayitlarin
+aynen okunmasi; yanlis sifre; eski QR girisi; mukerrer hesap secimi;
+tek yonetici; eszamanli ilk kayit; suresi dolan/tekrar kullanilan QR;
+farkli arsiv; kayip eslesme yaniti; DB hatasinda geri alma; yonetici
+silme engeli; parola tuzu/harf duyarliligi ve dialog iptal/hata durumlari.
+
+SINIRLAR
+Testler gecici SQLite DB'leri ve dosyalari kullanir. Gercek telefon-PC
+eslesmesi, kurulu APK imzasi ve yerinde uygulama guncellemesi bu calismada
+sinanmadi. Cihaza APK kurulmadi; canli arsiv uzerinde komut calistirilmadi.
+Eski surume donus PBKDF2 ve yeni hesap kurallariyla uyumlu olmayabilir;
+veri temizleme veya uygulamayi kaldirma bu gecisin bir parcasi degildir.
+Fiziksel yedek ve testler, donanim arizasi veya disaridan elle silinmeye
+karsi mutlak veri kaybi garantisi vermez.
