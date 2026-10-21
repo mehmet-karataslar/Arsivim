@@ -39,16 +39,18 @@ class ConnectionQr {
       }
       for (final key in ['pair_ticket', 'transfer_token']) {
         if (data[key] is! String ||
-            !RegExp(r'^[a-f0-9]{48}$').hasMatch(data[key]))
+            !RegExp(r'^[a-f0-9]{48}$').hasMatch(data[key])) {
           throw invalid;
+        }
       }
       if (data['pair_expires'] is! int ||
           data['account'] is! Map ||
           data['ip'] is! String ||
           data['port'] != 8080 ||
           InternetAddress.tryParse(data['ip'])?.type !=
-              InternetAddressType.IPv4)
+              InternetAddressType.IPv4) {
         throw invalid;
+      }
       final account = Map<String, dynamic>.from(data['account']);
       ArsivHesapServisi.tanitimDogrula(account);
       final result = ConnectionQr(
@@ -56,9 +58,8 @@ class ConnectionQr {
         device:
             data['device_name'] is String &&
                     (data['device_name'] as String).trim().isNotEmpty
-                ? (data['device_name'] as String).trim().substring(
-                  0,
-                  (data['device_name'] as String).trim().length.clamp(0, 120),
+                ? String.fromCharCodes(
+                  (data['device_name'] as String).trim().runes.take(120),
                 )
                 : 'Arşivim cihazı',
         address: '${data['ip']}:8080',

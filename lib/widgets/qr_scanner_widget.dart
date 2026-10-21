@@ -53,7 +53,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       );
       if (mounted && result != null) data.detect(result);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -61,6 +61,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             ),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _externalBusy = false);
     }
@@ -72,13 +73,16 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   }
 
   Widget _camera(BuildContext context) {
-    if (widget.cameraBuilder != null)
+    if (widget.cameraBuilder != null) {
       return widget.cameraBuilder!(context, data.detect);
-    if (Platform.isAndroid || Platform.isIOS)
+    }
+    if (Platform.isAndroid || Platform.isIOS) {
       return QrCameraView(
         key: ValueKey(_cameraVersion),
         onDetected: data.detect,
+        onError: data.fail,
       );
+    }
     return QrScannerNotice(
       icon: Icons.qr_code_scanner,
       title:
@@ -111,7 +115,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            ready ? 'Cihaz bulundu' : 'Cihazlarınızı bağlayın',
+            ready ? 'Cihaz bilgisi' : 'Cihazlarınızı bağlayın',
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 10),

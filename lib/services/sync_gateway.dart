@@ -53,8 +53,9 @@ class SyncGateway {
     for (final row in saved) {
       final id = row['device_id'];
       final trust = row['trust_id'];
-      if (id is! String || id.isEmpty || trust is! String || trust.isEmpty)
+      if (id is! String || id.isEmpty || trust is! String || trust.isEmpty) {
         continue;
+      }
       targets[id] = SyncComparisonTarget(
         trustId: trust,
         device: SyncDevice(
@@ -76,8 +77,9 @@ class SyncGateway {
   }
 
   Future<SyncDevice> prepareComparison(SyncComparisonTarget target) async {
-    if (transferring)
+    if (transferring) {
       throw StateError('Aktarım devam ediyor. Bitmesini bekleyin.');
+    }
     SyncDevice? current() =>
         devices
             .where((device) => device.id == target.device.id && device.canSend)
@@ -85,14 +87,16 @@ class SyncGateway {
     final connected = current();
     if (connected != null) return connected;
     final trustId = target.trustId;
-    if (trustId == null)
+    if (trustId == null) {
       throw StateError(
         'Cihazın bağlantısı kesildi. QR koduyla yeniden eşleştirin.',
       );
-    if (target.device.ip.isEmpty)
+    }
+    if (target.device.ip.isEmpty) {
       throw StateError(
         'Cihazın ağ adresi kayıtlı değil. Tanınan cihazlar bölümünden adresini güncelleyin.',
       );
+    }
     if (!await reconnect(trustId, target.device.ip)) {
       throw StateError(
         connectionError ??
@@ -100,14 +104,16 @@ class SyncGateway {
       );
     }
     final result = current();
-    if (result == null)
+    if (result == null) {
       throw StateError(
         'Beklenen cihaz bağlantısı doğrulanamadı. Yeniden deneyin.',
       );
-    if (transferring)
+    }
+    if (transferring) {
       throw StateError(
         'Aktarım başladı. Karşılaştırmadan önce bitmesini bekleyin.',
       );
+    }
     return result;
   }
 

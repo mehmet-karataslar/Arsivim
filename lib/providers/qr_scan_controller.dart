@@ -19,6 +19,12 @@ class QrScanController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void fail(String message) {
+    if (!scanning) return;
+    error = message;
+    notifyListeners();
+  }
+
   void retry() {
     if (submitted) return;
     result = null;

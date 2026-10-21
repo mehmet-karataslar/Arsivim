@@ -20,6 +20,7 @@ import '../models/sync_comparison.dart';
 import '../widgets/sync/sync_direction_dialog.dart';
 import '../widgets/sync/trusted_devices_dialog.dart';
 import '../widgets/sync/sync_mobile_view.dart';
+import '../widgets/sync/sync_target_picker.dart';
 
 class SenkronizasyonEkrani extends StatefulWidget {
   const SenkronizasyonEkrani({
@@ -62,8 +63,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     final current = _data.devices.map(_connectionKey).toSet();
     _seenConnections.removeWhere((key) => !current.contains(key));
     for (final device in _data.devices) {
-      if (_seenConnections.add(_connectionKey(device)))
+      if (_seenConnections.add(_connectionKey(device))) {
         _pendingConnections.add(device.id);
+      }
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -83,8 +85,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         _trustedOpen ||
         _findingDifferences ||
         _data.transferring ||
-        _data.gateway.transferring)
+        _data.gateway.transferring) {
       return;
+    }
     while (_pendingConnections.isNotEmpty) {
       final id = _pendingConnections.removeAt(0);
       final matches = _data.devices.where((d) => d.id == id);
@@ -96,8 +99,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _compare(SyncDevice device) async {
-    if (_directionOpen || _data.transferring || _data.gateway.transferring)
+    if (_directionOpen || _data.transferring || _data.gateway.transferring) {
       return;
+    }
     _directionOpen = true;
     try {
       final localName = _mobileDevice ? 'Bu telefon' : 'Bu bilgisayar';
@@ -110,8 +114,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               compare: () => _data.gateway.compare(device),
             ),
       );
-      if (choice != null && mounted)
+      if (choice != null && mounted) {
         await _data.transferDirection(device, choice);
+      }
     } finally {
       _directionOpen = false;
       if (mounted) _offerNextConnection();
@@ -140,8 +145,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         _qrOpen ||
         _data.busy ||
         _data.transferring ||
-        _data.gateway.transferring)
+        _data.gateway.transferring) {
       return;
+    }
     setState(() {
       _findingDifferences = true;
       _differenceStatus = 'Tanınan cihazlar kontrol ediliyor…';
@@ -161,39 +167,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               ? targets.single
               : await showDialog<SyncComparisonTarget>(
                 context: context,
-                builder:
-                    (ctx) => AlertDialog(
-                      title: const Text('Karşılaştırılacak cihaz'),
-                      content: SizedBox(
-                        width: 480,
-                        height: MediaQuery.sizeOf(ctx).height * .5,
-                        child: ListView.builder(
-                          itemCount: targets.length,
-                          itemBuilder: (_, index) {
-                            final target = targets[index];
-                            return ListTile(
-                              key: ValueKey(
-                                'sync-difference-target-${target.device.id}',
-                              ),
-                              leading: Icon(
-                                target.connected ? Icons.link : Icons.devices,
-                              ),
-                              title: Text(target.device.name),
-                              subtitle: Text(
-                                '${target.device.ip}\n${target.connected ? 'Bağlı' : 'Tanınan cihaz'}',
-                              ),
-                              onTap: () => Navigator.pop(ctx, target),
-                            );
-                          },
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Vazgeç'),
-                        ),
-                      ],
-                    ),
+                builder: (ctx) => SyncTargetPicker(targets: targets),
               );
       if (!mounted || target == null) return;
       setState(
@@ -345,8 +319,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         _trustedOpen ||
         _data.busy ||
         _data.transferring ||
-        _data.gateway.transferring)
+        _data.gateway.transferring) {
       return;
+    }
     setState(() => _pairing = true);
     try {
       final code = await Navigator.of(context).push<String>(

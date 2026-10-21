@@ -218,6 +218,26 @@ void main() {
   );
 
   testWidgets(
+    'desktop retains QR display and server controls beside differences',
+    (tester) async {
+      final gateway = _Gateway()..devices = [_device];
+      await _mount(tester, gateway);
+      expect(find.byKey(const ValueKey('sync-pair-device')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sync-server-button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('sync-mobile-scan')), findsNothing);
+      expect(find.byKey(_button), findsOneWidget);
+      if (capture) {
+        await expectLater(
+          find.byType(SenkronizasyonEkrani),
+          matchesGoldenFile('../build/sync_preview/desktop-page.png'),
+        );
+      }
+      expect(tester.takeException(), isNull);
+      _noTransfer(gateway);
+    },
+  );
+
+  testWidgets(
     'mobile keeps stop accessible and disables connection actions during transfer',
     (tester) async {
       final gateway = _Gateway();
@@ -396,11 +416,12 @@ void main() {
           scrollable:
               find
                   .descendant(
-                    of: find.byType(AlertDialog),
+                    of: find.byKey(const ValueKey('sync-target-picker')),
                     matching: find.byType(Scrollable),
                   )
                   .first,
         );
+        await tester.pumpAndSettle();
         await tester.tap(target);
         await tester.pumpAndSettle();
         expect(gateway.reconnects.single.$1, 'trust-pc');

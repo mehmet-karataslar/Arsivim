@@ -6,8 +6,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'qr_scanner_notice.dart';
 
 class QrCameraView extends StatefulWidget {
-  const QrCameraView({super.key, required this.onDetected});
-  final ValueChanged<String> onDetected;
+  const QrCameraView({
+    super.key,
+    required this.onDetected,
+    required this.onError,
+  });
+  final ValueChanged<String> onDetected, onError;
   @override
   State<QrCameraView> createState() => _QrCameraViewState();
 }
@@ -34,6 +38,7 @@ class _QrCameraViewState extends State<QrCameraView>
       try {
         if (_foreground) {
           await camera.start();
+          if (!_foreground && !_disposed) await camera.stop();
         } else {
           await camera.stop();
         }
@@ -98,7 +103,10 @@ class _QrCameraViewState extends State<QrCameraView>
             }
           }
         },
-        onDetectError: (_, _) {},
+        onDetectError:
+            (_, _) => widget.onError(
+              'Kamera görüntüsü okunamadı. Yeniden taramayı deneyin.',
+            ),
         placeholderBuilder:
             (_) => const Center(
               child: CircularProgressIndicator(
@@ -165,7 +173,7 @@ class _QrCameraViewState extends State<QrCameraView>
                                     try {
                                       await camera.toggleTorch();
                                     } catch (_) {
-                                      if (context.mounted)
+                                      if (context.mounted) {
                                         ScaffoldMessenger.of(
                                           context,
                                         ).showSnackBar(
@@ -175,6 +183,7 @@ class _QrCameraViewState extends State<QrCameraView>
                                             ),
                                           ),
                                         );
+                                      }
                                     }
                                   },
                           icon: Icon(
