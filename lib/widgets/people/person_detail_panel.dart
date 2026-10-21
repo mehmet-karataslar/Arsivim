@@ -148,6 +148,13 @@ class _PersonDetailPanelState extends State<PersonDetailPanel> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _information('Ad Soyad', Text(person.person.tamAd)),
+                      for (final item in [
+                        ('E-posta', person.person.eposta),
+                        ('Telefon', person.person.telefon),
+                        ('Adres', person.person.adres),
+                      ])
+                        if (item.$2?.isNotEmpty == true)
+                          _information(item.$1, SelectableText(item.$2!)),
                       if (person.person.kullaniciAdi?.isNotEmpty == true)
                         _information(
                           'Kullanıcı adı',

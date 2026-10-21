@@ -9,6 +9,7 @@ class KisiModeli extends BaseModel {
   String? kullaniciAdi;
   String? sifre;
   String? kullaniciTipi;
+  String? eposta, telefon, adres;
   String? profilFotografi; // Profil fotoğrafı yolu
   DateTime olusturmaTarihi;
   DateTime guncellemeTarihi;
@@ -22,6 +23,9 @@ class KisiModeli extends BaseModel {
     this.sifre,
     this.kullaniciTipi,
     this.profilFotografi,
+    this.eposta,
+    this.telefon,
+    this.adres,
     required this.olusturmaTarihi,
     required this.guncellemeTarihi,
     this.aktif = true,
@@ -37,6 +41,9 @@ class KisiModeli extends BaseModel {
       sifre: map['sifre'],
       kullaniciTipi: map['kullanici_tipi'],
       profilFotografi: map['profil_fotografi'],
+      eposta: map['eposta'],
+      telefon: map['telefon'],
+      adres: map['adres'],
       olusturmaTarihi: DateTime.parse(map['olusturma_tarihi']),
       guncellemeTarihi: DateTime.parse(map['guncelleme_tarihi']),
       aktif: map['aktif'] == 1,
@@ -58,6 +65,9 @@ class KisiModeli extends BaseModel {
       'sifre': sifre,
       'kullanici_tipi': kullaniciTipi,
       'profil_fotografi': profilFotografi,
+      if (eposta != null) 'eposta': eposta,
+      if (telefon != null) 'telefon': telefon,
+      if (adres != null) 'adres': adres,
       'olusturma_tarihi': olusturmaTarihi.toIso8601String(),
       'guncelleme_tarihi': guncellemeTarihi.toIso8601String(),
       'aktif': aktif ? 1 : 0,
@@ -73,6 +83,9 @@ class KisiModeli extends BaseModel {
     String? sifre,
     String? kullaniciTipi,
     String? profilFotografi,
+    String? eposta,
+    String? telefon,
+    String? adres,
     DateTime? olusturmaTarihi,
     DateTime? guncellemeTarihi,
     bool? aktif,
@@ -85,6 +98,9 @@ class KisiModeli extends BaseModel {
       sifre: sifre ?? this.sifre,
       kullaniciTipi: kullaniciTipi ?? this.kullaniciTipi,
       profilFotografi: profilFotografi ?? this.profilFotografi,
+      eposta: eposta ?? this.eposta,
+      telefon: telefon ?? this.telefon,
+      adres: adres ?? this.adres,
       olusturmaTarihi: olusturmaTarihi ?? this.olusturmaTarihi,
       guncellemeTarihi: guncellemeTarihi ?? this.guncellemeTarihi,
       aktif: aktif ?? this.aktif,

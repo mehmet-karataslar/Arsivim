@@ -84,7 +84,7 @@ doğrular; gerçek cihazda kare süresi ölçümü yerine geçmez.
   yönetir. Taslaklar hesap ve belgeye göre ayrılır; kaynak dosyaları referanslarıyla
   saklar. Kaynak taşınmış/silinmişse yeniden seçim istenir. Çoklu eklemede başlıklar
   dosya adlarından üretilir; diğer alanlar seçilen dosyaların tamamına uygulanır.
-- Sürükle-bırak, dosya/fotoğraf seçimi ve mobil PDF taraması kullanılabilir.
+- Masaüstünde sürükle-bırak, Dosya Seç ve mobilde Fotoğraf Çek ile çok sayfalı PDF taraması kullanılabilir.
   [desktop_drop 0.6.1](https://pub.dev/packages/desktop_drop/versions/0.6.1)
   mevcut Flutter sürümüyle uyumlu olacak şekilde sabitlendi. PDF sıkıştırması
   ayrı isolate üzerinde çalışır. Sürekli animasyon veya form yazarken DB sorgusu yoktur.
@@ -807,3 +807,16 @@ Fotoğraf seçme için ayrı kart yoktur; mevcut görseller Dosya Seç ile alın
 Masaüstü sürükle-bırak korunur, mobil kamera tarayıcısı bilgisayarda devre dışıdır.
 PDF üretimi arka plan isolate'ında çalışır; Belgeyi kaydet işlemi PDF'yi arşive
 kopyalar ve seçili çoklu kişi/kategori bağlantılarıyla kaydeder.
+
+Tarama kontrol ekranında sayfa ekleme, sıralama, döndürme, kaldırma ve son kaldırmayı
+geri alma bulunur. PDF oluşturulmadan önce yakınlaştırılabilir sayfa önizlemesi
+sunulur; formdaki **Sayfaları düzenle** aynı PDF üzerinde çalışır. PDF adı ayrıca
+belirlenebilir. Önizleme ve PDF aynı sıra/yön, A4 sayfa ve 10 mm kenar boşluğunu
+kullanır. Sayfa önizlemesi taranmış görseller içindir; diğer dosyalar mevcut dosya
+görüntüleyicisinde açılır. PDF oluşturmak arşive kayıt yapmaz.
+
+Tarama PDF'leri ve sayfa görselleri uygulamanın destek klasöründeki `scan_drafts`
+altında tutulur; taslak kaydında sayfa sırası/yönü de saklanır. PDF oluşturma
+başarısız olduğunda kontrol ekranındaki sayfalar korunur ve yeniden denenebilir.
+Tarama verisi, PDF servisi, kontrol ekranı ve önizleme bileşenleri ayrıdır.
+Kontrol: `flutter test test/document_scan_test.dart test/scan_review_test.dart test/document_editor_test.dart test/document_editor_repository_test.dart`.

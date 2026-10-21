@@ -188,6 +188,15 @@ void main() {
           addTearDown(tester.view.resetPhysicalSize);
           addTearDown(tester.view.resetDevicePixelRatio);
           final key = GlobalKey();
+          await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+          await tester.runAsync(() async {
+            for (final width in [180, 1600]) {
+              await precacheImage(
+                ResizeImage(FileImage(File(imagePath)), width: width),
+                tester.element(find.byType(SizedBox)),
+              );
+            }
+          });
           await tester.pumpWidget(
             MaterialApp(
               theme: AppTheme.forPalette(AppPalette.forest),

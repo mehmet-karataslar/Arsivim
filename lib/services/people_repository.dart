@@ -1,3 +1,4 @@
+import 'person_contact_schema.dart';
 import 'document_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as paths;
@@ -17,9 +18,10 @@ class PeopleRepository {
   Future<PeopleOverview> read() async {
     final db = await _database();
     await DocumentLinks.prepare(db);
+    await PersonContactSchema.prepare(db);
     final people = await db.rawQuery('''
       SELECT p.id, p.ad, p.soyad, p.kullanici_adi, p.kullanici_tipi,
-        p.profil_fotografi, p.olusturma_tarihi, p.guncelleme_tarihi, p.aktif,
+        p.profil_fotografi, p.eposta, p.telefon, p.adres, p.olusturma_tarihi, p.guncelleme_tarihi, p.aktif,
         COUNT(b.id) AS document_count, MAX(b.guncelleme_tarihi) AS document_updated
       FROM kisiler p LEFT JOIN belgeler b ON ${DocumentLinks.contains('kisi', 'p.id')} AND b.aktif = 1
       WHERE p.aktif = 1 GROUP BY p.id ORDER BY p.ad, p.soyad
@@ -66,6 +68,7 @@ class PeopleRepository {
   Future<PersonDetails> details(int personId) async {
     final db = await _database();
     await DocumentLinks.prepare(db);
+    await PersonContactSchema.prepare(db);
     final documents = await db.query(
       'belgeler',
       where: '${DocumentLinks.contains('kisi', '?', '')} AND aktif = 1',
@@ -101,6 +104,7 @@ class PeopleRepository {
   Future<void> remove(int id) async {
     final db = await _database();
     await DocumentLinks.prepare(db);
+    await PersonContactSchema.prepare(db);
     await db.update('kisiler', {'aktif': 0}, where: 'id = ?', whereArgs: [id]);
   }
 }

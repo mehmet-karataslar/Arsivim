@@ -215,6 +215,7 @@ class AktarimHttp {
     Uri uri,
     String token, {
     Map<String, dynamic>? body,
+    String? guvenId,
   }) async {
     final client =
         HttpClient()..connectionTimeout = const Duration(seconds: 15);
@@ -224,6 +225,7 @@ class AktarimHttp {
           .timeout(bekleme);
       req.followRedirects = false;
       final id = _basliklar(req, token, uri);
+      if (guvenId != null) req.headers.set('x-arsiv-trust', guvenId);
       if (body != null) {
         final bytes = utf8.encode(jsonEncode(body));
         final max =

@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:image/image.dart' as img;
+import 'package:arsiv_uygulamasi/models/scan_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:arsiv_uygulamasi/services/document_scan_service.dart';
 
@@ -41,6 +43,50 @@ void main() {
     expect(RegExp(r'/Type\s*/Page\b').allMatches(pdf).length, 2);
     expect(await root.list().where((f) => f.path.endsWith('.pdf')).length, 1);
   });
+  test(
+    'PDF preserves all page rotations and dotted names in durable copies',
+    () async {
+      final picture = img.Image(width: 420, height: 594);
+      img.fill(picture, color: img.ColorRgb8(255, 255, 255));
+      img.fillRect(
+        picture,
+        x1: 30,
+        y1: 35,
+        x2: 390,
+        y2: 85,
+        color: img.ColorRgb8(0, 125, 90),
+      );
+      img.fillRect(
+        picture,
+        x1: 35,
+        y1: 130,
+        x2: 270,
+        y2: 136,
+        color: img.ColorRgb8(130, 142, 140),
+      );
+      final original = await File(
+        '${root.path}/original.png',
+      ).writeAsBytes(img.encodePng(picture));
+      final result = await PageScanner(null, root).createPdf(
+        List.generate(4, (i) => ScanPage(original.path, quarterTurns: i)),
+        name: 'Tutanak.2026.pdf',
+      );
+      expect(result.file.name, 'Tutanak.2026.pdf');
+      expect(result.pages.map((p) => p.quarterTurns), [0, 1, 2, 3]);
+      await original.delete();
+      for (final page in result.pages) {
+        expect(await File(page.path).exists(), isTrue);
+      }
+      final bytes = await File(result.file.path!).readAsBytes();
+      expect(
+        RegExp(r'/Type\s*/Page\b').allMatches(latin1.decode(bytes)).length,
+        4,
+      );
+      if (const bool.fromEnvironment('CAPTURE_SCAN_PREVIEW')) {
+        await File('artifacts/scan-rotation-check.pdf').writeAsBytes(bytes);
+      }
+    },
+  );
   test('Cancellation and empty capture do not generate a PDF', () async {
     for (final pages in [null, <String>[]]) {
       final scanner = PageScanner(pages, root);

@@ -70,11 +70,12 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
     } catch (e) {
       _error('Dosya seçilemedi: $e');
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _picking = false;
           _reviewOpen = false;
         });
+      }
     }
   }
 
@@ -107,11 +108,12 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
     } catch (e) {
       _error('Tarama tamamlanamadı: $e');
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _picking = false;
           _reviewOpen = false;
         });
+      }
     }
   }
 
@@ -134,11 +136,12 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
       );
       if (mounted && result != null) c.addScan(result, replacing: path);
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _picking = false;
           _reviewOpen = false;
         });
+      }
     }
   }
 

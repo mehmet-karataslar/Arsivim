@@ -212,9 +212,13 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
                         onFilter: _filters,
                         onAdd: _add,
                         onAddPerson: () async {
+                          final navigation = EditorNavigationScope.maybeOf(
+                            context,
+                          );
                           await Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => const KisiEkleEkrani(),
+                              builder:
+                                  (_) => KisiEkleEkrani(navigation: navigation),
                             ),
                           );
                           if (mounted) await _data.refresh();

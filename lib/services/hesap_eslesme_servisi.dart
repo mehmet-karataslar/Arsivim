@@ -11,7 +11,33 @@ class HesapEslesmeServisi {
   DateTime? _son;
   int? _oturum;
   bool _mesgul = false;
-  final Map<String, ({int oturum, String arsiv})> _cihazlar = {};
+  Future<void> Function(String ip)? ekYetkiKontrol;
+  final Map<String, ({int oturum, String arsiv, String baglanti})> _cihazlar = {};
+
+  String baglantiKimligi(String ip) {
+    final device = _cihazlar[ip];
+    if (device == null || device.oturum != auth.sessionGeneration) {
+      throw HesapHatasi('Etkin cihaz oturumu yok.');
+    }
+    return device.baglanti;
+  }
+
+  /// Only call after a persisted device credential has been proven.
+  Future<void> guvenilirBaglanti(String ip, Map<String, dynamic> remote) async {
+    final session = auth.sessionGeneration;
+    final local = await auth.hesapTanitim();
+    ArsivHesapServisi.tanitimDogrula(remote);
+    if (local['arsiv_id'] != remote['arsiv_id'] ||
+        local['yonetici_id'] != remote['yonetici_id'] ||
+        session != auth.sessionGeneration) {
+      throw HesapHatasi('Tanimli cihaz bu arsive ait degil.');
+    }
+    _cihazlar[ip] = (
+      oturum: session,
+      arsiv: local['arsiv_id'] as String,
+      baglanti: ArsivHesapServisi.kimlik(),
+    );
+  }
 
   /// Reopening a QR must reuse only the current, unused ticket for this session.
   bool biletGecerli(String ticket) =>
@@ -87,6 +113,7 @@ class HesapEslesmeServisi {
       _cihazlar[ip] = (
         oturum: auth.sessionGeneration,
         arsiv: local['arsiv_id'] as String,
+        baglanti: ArsivHesapServisi.kimlik(),
       );
       return await auth.hesapTanitim();
     } finally {
@@ -109,6 +136,7 @@ class HesapEslesmeServisi {
     _cihazlar[ip] = (
       oturum: auth.sessionGeneration,
       arsiv: remote['arsiv_id'] as String,
+      baglanti: ArsivHesapServisi.kimlik(),
     );
   }
 
@@ -122,6 +150,7 @@ class HesapEslesmeServisi {
         'Cihaz bu yonetici oturumuna bagli degil. Yeniden eslestirin.',
       );
     }
+    await ekYetkiKontrol?.call(ip);
   }
 
   void baglantiKes(String ip) => _cihazlar.remove(ip);

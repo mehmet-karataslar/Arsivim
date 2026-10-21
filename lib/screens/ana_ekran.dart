@@ -256,10 +256,14 @@ class _AnaEkranState extends State<AnaEkran> {
           onSearch: (query) {
             _openDocuments(query: query);
           },
-          onAddPerson:
-              () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const KisiEkleEkrani())),
+          onAddPerson: () async {
+            final changed = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => KisiEkleEkrani(navigation: _editorNavigation),
+              ),
+            );
+            if (mounted && changed == true) await _refresh();
+          },
           onStorage: _showStorage,
           onDocumentAction: _documentAction,
         );

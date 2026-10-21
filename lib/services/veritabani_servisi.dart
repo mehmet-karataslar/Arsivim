@@ -1,3 +1,4 @@
+import 'person_contact_schema.dart';
 import 'document_links.dart';
 import 'dart:async';
 import 'dart:io';
@@ -77,6 +78,7 @@ class VeriTabaniServisi {
           // Veritabanı bütünlüğünü kontrol et
           await _checkDatabaseIntegrity(db);
           await DocumentLinks.prepare(db);
+    await PersonContactSchema.prepare(db);
         },
       );
 
@@ -209,6 +211,7 @@ class VeriTabaniServisi {
     // İndeksler
     await _createIndexes(db);
     await DocumentLinks.prepare(db);
+    await PersonContactSchema.prepare(db);
 
     // Varsayılan kategorileri ekle
     await _insertDefaultCategories(db);

@@ -61,7 +61,9 @@ class DocumentScanService {
     final title =
         name == null || name.trim().isEmpty
             ? 'Tarama_${DateTime.now().millisecondsSinceEpoch}'
-            : paths.basenameWithoutExtension(name.trim());
+            : paths
+                .basename(name.trim())
+                .replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '');
     final document = await DosyaServisi().tarananFotograflariPdfYap(
       stored.map((p) => p.path).toList(),
       '$title.pdf',

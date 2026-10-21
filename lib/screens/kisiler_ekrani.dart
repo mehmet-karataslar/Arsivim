@@ -67,8 +67,11 @@ class _KisilerEkraniState extends State<KisilerEkrani> {
   }
 
   Future<void> _edit([KisiModeli? person]) async {
+    final navigation = EditorNavigationScope.maybeOf(context);
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => KisiEkleEkrani(kisi: person)),
+      MaterialPageRoute(
+        builder: (_) => KisiEkleEkrani(kisi: person, navigation: navigation),
+      ),
     );
     if (changed == true && mounted) await _changed();
   }

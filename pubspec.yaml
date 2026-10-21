@@ -41,6 +41,7 @@ dependencies:
   # Güvenlik ve hash
   crypto: ^3.0.6
   cryptography: ^2.7.0
+  flutter_secure_storage: ^10.3.4
   unorm_dart: ^0.3.3
 
   # Cihaz bilgileri (senkronizasyon için gerekli)
@@ -78,7 +79,7 @@ dependencies:
   # Notifications
   flutter_local_notifications: ^19.3.1
   timezone: ^0.10.1
-  desktop_drop: 0.6.1
+  desktop_drop: 0.7.1
 
 dev_dependencies:
   flutter_test:
