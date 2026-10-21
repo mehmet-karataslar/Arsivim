@@ -24,7 +24,7 @@ void main() {
     await db.execute(
       '''CREATE TABLE belgeler(id INTEGER PRIMARY KEY,dosya_adi TEXT,
       orijinal_dosya_adi TEXT,dosya_yolu TEXT,dosya_boyutu INTEGER,dosya_tipi TEXT,
-      dosya_hash TEXT,kategori_id INTEGER,kisi_id INTEGER,baslik TEXT,aciklama TEXT,
+      dosya_hash TEXT,kategori_ids TEXT, kisi_ids TEXT, kategori_id INTEGER,kisi_id INTEGER,baslik TEXT,aciklama TEXT,
       etiketler TEXT,olusturma_tarihi TEXT,guncelleme_tarihi TEXT,
       son_erisim_tarihi TEXT,aktif INTEGER,senkron_durumu INTEGER)''',
     );

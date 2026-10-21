@@ -46,10 +46,12 @@ class CategoryEvent {
 }
 
 class CategoryOverview {
-  const CategoryOverview(this.entries, this.events);
+  const CategoryOverview(this.entries, this.events, {this.uniqueDocuments});
+  final int? uniqueDocuments;
   final List<CategoryEntry> entries;
   final List<CategoryEvent> events;
-  int get documents => entries.fold(0, (count, item) => count + item.count);
+  int get documents =>
+      uniqueDocuments ?? entries.fold(0, (count, item) => count + item.count);
   CategoryEntry? get busiest =>
       entries.isEmpty
           ? null

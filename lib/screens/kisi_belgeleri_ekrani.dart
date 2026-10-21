@@ -1,3 +1,4 @@
+import '../widgets/document_editor/editor_navigation.dart';
 import 'package:flutter/material.dart';
 import '../models/belge_modeli.dart';
 import '../models/kisi_modeli.dart';
@@ -685,7 +686,7 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
   Future<void> _yeniBelgeEkle() async {
     final sonuc = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const YeniBelgeEkleEkrani()),
+      MaterialPageRoute(builder: (_) => YeniBelgeEkleEkrani(navigation: EditorNavigationScope.maybeOf(context))),
     );
 
     if (sonuc == true) {
@@ -739,7 +740,7 @@ class _KisiBelgeleriEkraniState extends State<KisiBelgeleriEkrani> {
     final sonuc = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => YeniBelgeEkleEkrani(duzenlenecekBelge: belge),
+        builder: (_) => YeniBelgeEkleEkrani(duzenlenecekBelge: belge, navigation: EditorNavigationScope.maybeOf(context)),
       ),
     );
 

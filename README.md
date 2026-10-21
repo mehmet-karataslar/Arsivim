@@ -68,11 +68,43 @@ Windows'ta örnek verili görseller:
 Çıktılar `artifacts/home/` klasörüne yazılır. Widget testleri taşma ve etkileşimleri
 doğrular; gerçek cihazda kare süresi ölçümü yerine geçmez.
 
+### Belge ekleme ve düzenleme
+
+- `DocumentEditorScreen` ortak düzeni; `widgets/document_editor/` kaynak, dosya
+  bilgileri, detaylar, aramalı bağlantı seçimi, canlı özet ve alt işlemleri içerir.
+  Masaüstü yan menüsü mevcut uygulama kabuğuna döner. Mobilde başlık ortalanır,
+  dış bölüm kartları kaldırılır; kayıt işlemleri ve alt gezinme erişilebilir kalır.
+  Dosya Seç / Fotoğraf Seç tüm genişliklerde iki sütundur. Mobilde alttaki
+  tekrar dosya seçimi alanı, ayrı dosya türü bölümü ve yinelenen özet kaldırılır;
+  tür ve boyut dosya satırında görünür. Masaüstü sürükle-bırak alanı korunur. Mobil kişi/kategori
+  seçimi ekranın %95 yüksekliğinde, aramalı ve kaydırılabilir alt panelde açılır;
+  seçim sayacı, seçilenler filtresi, temizleme ve sabit uygulama düğmesi bulunur.
+- `DocumentEditorController` dosya kuyruğu, seçimler, kayıt ve taslak durumunu;
+  `DocumentEditorRepository` atomik düzenleme, ilişki doğrulama ve taslak kayıtlarını
+  yönetir. Taslaklar hesap ve belgeye göre ayrılır; kaynak dosyaları referanslarıyla
+  saklar. Kaynak taşınmış/silinmişse yeniden seçim istenir. Çoklu eklemede başlıklar
+  dosya adlarından üretilir; diğer alanlar seçilen dosyaların tamamına uygulanır.
+- Sürükle-bırak, dosya/fotoğraf seçimi ve mobil PDF taraması kullanılabilir.
+  [desktop_drop 0.6.1](https://pub.dev/packages/desktop_drop/versions/0.6.1)
+  mevcut Flutter sürümüyle uyumlu olacak şekilde sabitlendi. PDF sıkıştırması
+  ayrı isolate üzerinde çalışır. Sürekli animasyon veya form yazarken DB sorgusu yoktur.
+- Şema 11: `kisi_ids` / `kategori_ids` ek bağlantıları saklar; eski `kisi_id` /
+  `kategori_id` birincil bağlantıları korunur. Filtreler ve kategori/kişi ayrıntıları
+  tüm bağlantıları kullanır; toplam belge ve depolama hesabında çift sayım yapılmaz.
+  Yedek manifesti çoklu bağlantıları ve ilgili kişi kimliklerini içerir.
+- Aktarım protokolü 3 çoklu referansları metadata hash'ine dahil eder ve hedefin
+  yerel kimliklerine çevirir. İki cihaz da güncellenmelidir; eski alıcıya sessizce
+  eksik bağlantı gönderilmez. HTTP yol adları geriye dönük olarak `/sync/v2` kalır.
+- Düzenlemede başka işlemde değişen kayıt üzerine yazılmaz. Yinelenen dosyada yeni
+  kopya temizlenir; mevcut belge korunur. Kısmi ekleme hatasında başarılı dosyalar
+  tekrar kuyruğa alınmaz ve kalan dosyalar formda gösterilir.
+
 ### Referans tasarımlar ve mobil yerleşim
 
 #### Sayfa envanteri ve tasarım durumu — 21 Ekim 2026
 
-Kodda 18 ayrı ekran sınıfı bulunuyor. Ekleme/düzenleme modları ve ekran içi
+Envanterde 18 sayfa girişi bulunuyor. Ekleme ve düzenleme girişleri ortak
+`DocumentEditorScreen` ekranını kullanıyor. Ekleme/düzenleme modları ve ekran içi
 iletişim kutuları ayrı sayfa olarak sayılmadı. Yeni sayfanın ayrıntılı tasarımına
 kullanıcının seçimiyle geçilir; ortak mobil başlık ve gezinme düzeltmeleri tüm
 ana sekmelere uygulanır.
@@ -84,19 +116,24 @@ ana sekmelere uygulanır.
 | Kategoriler | `lib/screens/kategoriler_ekrani.dart` | Referans tasarımı ve uyarlanabilir kart düzeni uygulandı |
 | Profil | `lib/screens/profil_ekrani.dart` | Hesap ve kalıcı tema tercihleri modüler; mobil bölüm çerçeveleri ve hesap sorgusu denetlendi |
 | Kişiler | `lib/screens/kisiler_ekrani.dart` | Referans kart düzeni, seçime bağlı ayrıntı paneli ve mobil alt panel uygulandı |
-| Senkronizasyon | `lib/screens/senkronizasyon_ekrani.dart` | Sayfa tasarımı bekliyor; ortak mobil başlıkla uyumlu |
-| Yedekleme | `lib/screens/yedekleme_ekrani.dart` | Sayfa tasarımı bekliyor; ortak mobil başlıkla uyumlu |
-| Yeni belge ekle | `lib/screens/yeni_belge_ekle_ekrani.dart` | Bekliyor |
-| Belge düzenle | `lib/screens/belge_duzenle_ekrani.dart` | Bekliyor |
+| Senkronizasyon | `lib/screens/senkronizasyon_ekrani.dart` | Referans panel düzeni, gerçek sunucu/aktarım kontrolleri ve sade mobil görünüm uygulandı |
+| Yedekleme | `lib/screens/yedekleme_ekrani.dart` | Referans düzen, kişi/kategori seçimi, canlı özet ve kalıcı işlem geçmişi uygulandı; yalnızca bilgisayarda |
+| Yeni belge ekle | `lib/screens/yeni_belge_ekle_ekrani.dart` | Referans form, canlı özet, taslak ve çoklu bağlantılar uygulandı |
+| Belge düzenle | `lib/screens/belge_duzenle_ekrani.dart` | Ortak form, mevcut dosyayı koruma ve çoklu bağlantılar uygulandı |
 | Kişi ekle / düzenle | `lib/screens/kisi_ekle_ekrani.dart` | İki mod aynı ekran; bekliyor |
-| Kişinin belgeleri | `lib/screens/kisi_belgeleri_ekrani.dart` | Eski ekran korunuyor; Kişiler artık ortak Belgeler sayfasını kişi filtresiyle açıyor |
+| Kişinin belgeleri | `lib/screens/kisi_belgeleri_ekrani.dart` | Çağıran ekran kalmadı; Kişiler artık ortak Belgeler sayfasını kişi filtresiyle açıyor. Eski kod korunuyor |
 | Açılış | `lib/screens/splash_screen.dart` | Tema renkleri bağlı; tam tasarım denetimi bekliyor |
 | Giriş | `lib/screens/auth/login_screen.dart` | Bekliyor |
 | Kayıt | `lib/screens/auth/register_screen.dart` | Bekliyor |
-| QR bağlantı | `lib/widgets/qr_generator_widget.dart` (`QRConnectionScreen`) | Bekliyor |
+| QR bağlantı | `lib/widgets/qr_generator_widget.dart` (`QRConnectionScreen`) | Çağıran ekran kalmadı; Senkronizasyon kendi süre kontrollü QR panelini ve büyütme penceresini kullanıyor. Eski kod korunuyor |
 | QR tarayıcı | `lib/widgets/qr_scanner_widget.dart` (`QRScannerScreen`) | Bekliyor |
 | Belge tarayıcı | `lib/screens/tarayici_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
 | Senkron belgeler | `lib/screens/senkron_belgeler_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
+
+Güncel ayrım: 7 ana sayfa ve 2 belge formunun tasarımı yenilendi, 5 ekranın ayrıntılı tasarımı
+bekliyor. Kalan 4 eski ekran sınıfını açan bir çağrı bulunmuyor; bunlar aktif
+ekranlarla aynı iş listesinde değerlendirilmemeli. Yeni ekran eklenmeden veya
+eski kod kaldırılmadan önce kullanım kararı verilmelidir.
 
 Sayfa içi denetim parçaları: kategori düzenleme ve filtreleme, belge filtreleri
 ve işlem onayları, kişi seçimi, yedekleme klasörü seçimi, aktarım durumu ve
@@ -105,7 +142,10 @@ erişim ve kullanım kararı verilmeden tamamlanmış sayılmaz.
 
 Ana sayfa, Belgeler, Kategoriler ve Kişiler aynı `WorkspaceToolbar`, `AppSidebar`,
 `AppCard`, `ToneButton`, `MetricGrid` ve `ViewModeSwitch` bileşenlerini kullanır.
-Masaüstünde sol gezinme, mobilde yedi hedefli alt menü bulunur. Seçili sekmenin
+Masaüstünde sol gezinme, mobilde altı hedefli, simge ve ad içeren alt menü bulunur. Yedekleme yalnızca
+bilgisayar görünümünde sunulur; mobil hızlı işlemlerden de kaldırılır. Dar alanda
+Senkronizasyon etiketi Senkron olarak kısalır; büyük erişilebilirlik yazısında
+menü yazıyı küçültmeden yatay kayar. Seçili sekmenin
 adı mobilde üst çubukta ortalanır. Bilgi kartlarının gösterildiği ekranlarda
 kartlar genişliğe ve yazı ölçeğine göre iki veya dört sütun olur.
 600 pikselin altında ve 1100 pikselden dar, 500 pikselden kısa yatay ekranlarda
@@ -154,6 +194,31 @@ tarih ayrı ve taşmayan satırlarla gösterilir; tam metin açıklamada korunur
 Kişiler önizlemeleri örnek test verileriyle üretilir:
 `flutter test --dart-define=CAPTURE_PEOPLE_PREVIEW=true test/people_test.dart`.
 Çıktılar `artifacts/people/` altında 390 ve 1672 piksel PNG dosyalarıdır.
+
+Senkronizasyon sayfası `widgets/sync/` altında durum, seçenekler, kontroller,
+cihaz/QR, istatistik ve geçmiş bileşenlerine ayrılır. `SyncRepository` aktif belge
+sayılarını SQL ile toplar; bugünkü farklı dosyaları doğrulanmış `aktarim_gecmisi`
+kayıtlarından yerel gün sınırlarıyla hesaplar. Son 30 kayıt gösterilir. İlk
+aktarımı olmayan arşiv için geçmiş veya başarı yüzdesi üretilmez. Son yedekleme
+Ana Sayfa ile aynı başarılı yedek kaydından okunur. Ağ alanı yerel IP'yi gösterir;
+Wi-Fi adı veya ağ değiştirme işlevi taklit edilmez.
+
+`SyncController` seçim/işlem/yükleme durumunu, `SyncGateway` mevcut doğrulanmış
+aktarım servisine bağlantıyı yönetir. Sunucu düğmesi HTTP sunucusunu gerçekten
+başlatır/durdurur. Başlat seçili cihazlara, Tümünü bağlı cihazlara tüm aktif
+belgeleri gönderir. Hızlı senkron yalnızca bekleyen yerel değişiklikleri gönderir;
+yeni cihazın tam arşivini kurmak için tüm belgeler kullanılmalıdır. Durdur,
+devam eden dosyanın tamamlanmasını bekler ve kalan dosya/cihaz sırasını keser.
+
+QR oluşturma mevcut yönetici doğrulamasını, tarama hesap eşleştirme onayını
+korur; kod süresi dolunca gösterilmez. Sürekli animasyon veya 10/15 saniyelik
+tüm arşiv taraması yoktur. Gelen dosya, bağlantı ve sunucu olayları yenilemeyi
+birleştirir; uygulamaya dönüş ve elle yenileme de desteklenir. İşlemler sürerken
+son yüklenen içerik ekranda kalır. Mobilde ayrıntılı istatistikler açılır bölümde,
+kontroller iki sütundadır. Örnek verili önizleme:
+`flutter test --dart-define=CAPTURE_SYNC_PREVIEW=true test/sync_test.dart`;
+çıktılar `artifacts/sync/` altına yazılır. Ağ geçidi testlerde taklit edilir;
+widget önizlemesi gerçek iki cihaz arasındaki aktarım testi değildir.
 
 Kategori yıldızları, grupları ve bu ekrandaki düzenleme zamanları cihazda
 saklanan görünüm tercihleridir; cihazlar arasında senkronize edilmez. Son
@@ -714,3 +779,31 @@ Bu proje aşağıdaki açık kaynak teknolojileri kullanmaktadır:
 **Son Güncelleme:** 19 Temmuz 2025  
 **Mevcut Sürüm:** v2.5.1+2  
 **Geliştirici:** [@mehmet-karataslar](https://github.com/mehmet-karataslar)
+
+### Yedekleme ekranı
+
+`BackupController` seçimleri ve ilerlemeyi, `BackupRepository` veri ve işlem geçmişini yönetir.
+`widgets/backup/` altındaki hedef, seçim, özet, bilgi kartları ve geçmiş bölümleri ayrı bileşenlerdir.
+Kişiler ve kategoriler arama/seçim için bir defa yüklenir; kartlar 24 kayıtlık gruplarla açılır.
+Birden fazla kişi/kategori bağlantısı hesaba katılır. Belge sayısı benzersiz belgeleri,
+tahmini boyut kişi klasörlerine yazılacak kopyaları gösterir. Boş kategori seçimi hiçbir
+belgeyi dahil etmez. Kategorisiz belgeler ayrı bir seçenekle yedeklenebilir.
+Mevcut servis ZIP üretmez: doğrulanan dosyalar ve bağlantı bilgilerini içeren `manifest.json`
+yeni bir klasöre yazılır. Son 50 işlem yerelde saklanır; eksik/bozuk dosya başarı sayılmaz.
+Mobil gezinme ve hızlı işlemlerde Yedekleme hedefi bulunmaz.
+
+Kontrol: `flutter test test/backup_test.dart test/guvenli_aktarim_test.dart`.
+
+Senkronizasyonda QR gösterme/büyütme tek düğmededir. Geçerli eşleştirme kodu
+aynı sayfada yeniden açıldığında yeni bilet üretilmez ve şifre tekrar istenmez.
+Kullanılmış, süresi dolmuş, sunucusu durmuş veya oturumu değişmiş bir kod tekrar
+kullanılmaz; yeni kod için yönetici doğrulaması gerekir. Mobildeki QR tarama
+akışı ayrı bir işlem olarak korunur.
+
+Belge ekleme kaynağı **Dosya Seç / Fotoğraf Çek** olarak sunulur. Fotoğraf Çek,
+Android/iOS yerel belge tarayıcısını açar; sayfalar gözden geçirildikten sonra
+tek PDF olarak forma eklenir. Android'de tarama başına en fazla 100 sayfa vardır.
+Fotoğraf seçme için ayrı kart yoktur; mevcut görseller Dosya Seç ile alınabilir.
+Masaüstü sürükle-bırak korunur, mobil kamera tarayıcısı bilgisayarda devre dışıdır.
+PDF üretimi arka plan isolate'ında çalışır; Belgeyi kaydet işlemi PDF'yi arşive
+kopyalar ve seçili çoklu kişi/kategori bağlantılarıyla kaydeder.

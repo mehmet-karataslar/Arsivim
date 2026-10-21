@@ -408,7 +408,7 @@ class AppStateManager extends ChangeNotifier {
     if (_selectedKategori != null) {
       _filteredBelgeler =
           _filteredBelgeler
-              .where((belge) => belge.kategoriId == _selectedKategori!.id)
+              .where((belge) => belge.tumKategoriIds.contains(_selectedKategori!.id))
               .toList();
     }
 
@@ -416,7 +416,7 @@ class AppStateManager extends ChangeNotifier {
     if (_selectedKisi != null) {
     _filteredBelgeler =
           _filteredBelgeler
-              .where((belge) => belge.kisiId == _selectedKisi!.id)
+              .where((belge) => belge.tumKisiIds.contains(_selectedKisi!.id))
               .toList();
     }
   }

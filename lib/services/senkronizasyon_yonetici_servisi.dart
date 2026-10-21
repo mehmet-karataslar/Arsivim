@@ -12,6 +12,7 @@ import '../models/kisi_modeli.dart';
 import '../models/kategori_modeli.dart';
 import '../widgets/senkronizasyon_progress_dialog.dart';
 import 'log_servisi.dart';
+import 'sync_repository.dart';
 import 'guvenli_aktarim_servisi.dart';
 import 'aktarim_http.dart';
 import 'depolama_konumu_servisi.dart';
@@ -31,17 +32,30 @@ class SenkronizasyonYoneticiServisi {
 
   final ValueNotifier<int> changes = ValueNotifier(0);
   void _changed() => changes.value++;
-  void initializeConnections() => _httpSunucuCallbackleriKur();
+  bool _dashboardEventsBound = false;
+  void initializeConnections() {
+    _httpSunucuCallbackleriKur();
+    if (!_dashboardEventsBound) {
+      _httpSunucu.dataChanges.addListener(_changed);
+      _dashboardEventsBound = true;
+    }
+  }
+
   bool get transferRunning => _aktarimSuruyor;
   bool _stopRequested = false;
+  int stopVersion = 0;
   void requestStop() {
     if (_aktarimSuruyor) {
       _stopRequested = true;
+      stopVersion++;
       _changed();
     }
   }
+
   Future<void> setServerRunning(bool running) async {
-    if (_aktarimSuruyor) throw StateError('Aktarım sürerken sunucu durdurulamaz.');
+    if (_aktarimSuruyor) {
+      throw StateError('Aktarım sürerken sunucu durdurulamaz.');
+    }
     if (running) {
       await _httpSunucu.sunucuyuBaslat();
     } else {
@@ -202,29 +216,15 @@ class SenkronizasyonYoneticiServisi {
       // Sunucu durumu
       _sunucuCalisiyorMu = _httpSunucu.calisiyorMu;
 
-      // Senkronizasyon istatistikleri
-      final belgeler = await _veriTabani.belgeleriGetir(
-        limit: null,
-        offset: null,
-      );
-      _bekleyenDosyaSayisi =
-          belgeler
-              .where(
-                (b) =>
-                    b.senkronDurumu == SenkronDurumu.BEKLEMEDE ||
-                    b.senkronDurumu == SenkronDurumu.YEREL_DEGISIM,
-              )
-              .length;
-      _senkronizeDosyaSayisi =
-          belgeler
-              .where((b) => b.senkronDurumu == SenkronDurumu.SENKRONIZE)
-              .length;
-
-      // Son senkronizasyon zamanı
-      _sonSenkronizasyon = TimestampManager.instance
-          .formatHumanReadableTimestamp(
-            DateTime.now().subtract(const Duration(hours: 2)),
-          );
+      final overview = await SyncRepository().read();
+      _bekleyenDosyaSayisi = overview.pending;
+      _senkronizeDosyaSayisi = overview.synced;
+      _sonSenkronizasyon =
+          overview.lastTransfer == null
+              ? 'Henüz yapılmadı'
+              : TimestampManager.instance.formatHumanReadableTimestamp(
+                overview.lastTransfer!,
+              );
 
       _durum = _sunucuCalisiyorMu ? 'Sunucu Aktif' : 'Sunucu Kapalı';
       onStatusChanged?.call(_durum);
@@ -241,20 +241,12 @@ class SenkronizasyonYoneticiServisi {
     }
   }
 
-  void sunucuToggle() {
-    _sunucuCalisiyorMu = !_sunucuCalisiyorMu;
-    _durum = _sunucuCalisiyorMu ? 'Sunucu Aktif' : 'Sunucu Kapalı';
-
-    // Sunucu toggle log kaydı
-    _logServisi.syncLog(
-      _sunucuCalisiyorMu ? 'Sunucu Başlatıldı' : 'Sunucu Durduruldu',
-      _sunucuCalisiyorMu ? 'started' : 'stopped',
-    );
-
-    onStatusChanged?.call(_durum);
-    onSuccess?.call(
-      _sunucuCalisiyorMu ? 'Sunucu başlatıldı' : 'Sunucu durduruldu',
-    );
+  Future<void> sunucuToggle() async {
+    try {
+      await setServerRunning(!_httpSunucu.calisiyorMu);
+    } catch (error) {
+      onError?.call('Sunucu durumu değiştirilemedi: $error');
+    }
   }
 
   void senkronizasyonToggle() {
@@ -387,7 +379,7 @@ class SenkronizasyonYoneticiServisi {
           _bagliCihazlar.add(newDevice);
 
           _changed();
-        onDeviceListChanged?.call();
+          onDeviceListChanged?.call();
           onDeviceConnected?.call(deviceName, newDevice);
           verileriYukle();
 
@@ -511,7 +503,7 @@ class SenkronizasyonYoneticiServisi {
       _bagliCihazlar.add(newDevice);
 
       _changed();
-        onDeviceListChanged?.call();
+      onDeviceListChanged?.call();
       onDeviceConnected?.call(deviceName, newDevice);
       onSuccess?.call('$deviceName cihazı bağlandı');
     }
@@ -526,7 +518,7 @@ class SenkronizasyonYoneticiServisi {
 
       _bagliCihazlar.removeAt(index);
       _changed();
-        onDeviceListChanged?.call();
+      onDeviceListChanged?.call();
       onSuccess?.call('Cihaz bağlantısı kesildi');
     }
   }
@@ -680,7 +672,7 @@ class SenkronizasyonYoneticiServisi {
       token,
       body: paket,
     );
-    if (result['kod'] == 'KISI_SECIMI' && onKisiSecimi != null) {
+    while (result['kod'] == 'KISI_SECIMI' && onKisiSecimi != null) {
       final secim = await onKisiSecimi!(
         result['error'] as String,
         (result['adaylar'] as List)
@@ -688,12 +680,20 @@ class SenkronizasyonYoneticiServisi {
             .toList(),
       );
       if (secim != null) {
-        paket['hedef_kisi_id'] = secim;
+        final universal = result['kisi_evrensel_id'];
+        if (universal is String) {
+          (paket['hedef_kisi_secimleri'] ??= <String, dynamic>{})[universal] =
+              secim;
+        } else {
+          paket['hedef_kisi_id'] = secim;
+        }
         result = await AktarimHttp.jsonIstek(
           Uri.parse('http://$ip:8080/sync/v2/prepare'),
           token,
           body: paket,
         );
+      } else {
+        break;
       }
     }
     return result;
@@ -771,10 +771,12 @@ class SenkronizasyonYoneticiServisi {
         }
       }
       final hatalar = sonAktarimSonuclari.length - basarili;
-      final stopped = _stopRequested && sonAktarimSonuclari.length < belgeler.length;
-      final mesaj = stopped
-          ? 'Aktarım durduruldu. $basarili dosya doğrulandı; kalan dosyalar gönderilmedi.'
-          : '$basarili dosya doğrulandı, $hatalar dosya aktarılamadı.';
+      final stopped =
+          _stopRequested && sonAktarimSonuclari.length < belgeler.length;
+      final mesaj =
+          stopped
+              ? 'Aktarım durduruldu. $basarili dosya doğrulandı; kalan dosyalar gönderilmedi.'
+              : '$basarili dosya doğrulandı, $hatalar dosya aktarılamadı.';
       final logs = await DepolamaKonumuServisi.instance.logKlasoru();
       await File(
         path.join(
@@ -866,7 +868,7 @@ class SenkronizasyonYoneticiServisi {
           token,
           body: paket,
         );
-        if (result['kod'] == 'KISI_SECIMI' && onKisiSecimi != null) {
+        while (result['kod'] == 'KISI_SECIMI' && onKisiSecimi != null) {
           final secim = await onKisiSecimi!(
             result['error'] as String,
             (result['adaylar'] as List)
@@ -950,7 +952,7 @@ class SenkronizasyonYoneticiServisi {
 
       // UI'yı güncelle
       _changed();
-        onDeviceListChanged?.call();
+      onDeviceListChanged?.call();
 
       // Log kaydı
       _logServisi.syncLog(
@@ -995,7 +997,7 @@ class SenkronizasyonYoneticiServisi {
 
       // UI'yı güncelle
       _changed();
-        onDeviceListChanged?.call();
+      onDeviceListChanged?.call();
 
       // Log kaydı
       _logServisi.syncLog('Tüm Bağlantılar Kesildi', 'disconnected', {

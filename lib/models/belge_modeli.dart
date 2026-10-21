@@ -24,6 +24,18 @@ class BelgeModeli extends BaseModel {
   String dosyaHash;
   int? kategoriId;
   int? kisiId;
+  List<int> kategoriIds;
+  List<int> kisiIds;
+  List<int> get tumKategoriIds =>
+      {
+        ...[kategoriId].whereType<int>(),
+        ...kategoriIds,
+      }.toList();
+  List<int> get tumKisiIds =>
+      {
+        ...[kisiId].whereType<int>(),
+        ...kisiIds,
+      }.toList();
   String? baslik;
   String? aciklama;
   List<String>? etiketler;
@@ -43,6 +55,8 @@ class BelgeModeli extends BaseModel {
     required this.dosyaHash,
     this.kategoriId,
     this.kisiId,
+    this.kategoriIds = const [],
+    this.kisiIds = const [],
     this.baslik,
     this.aciklama,
     this.etiketler,
@@ -65,6 +79,8 @@ class BelgeModeli extends BaseModel {
       dosyaHash: map['dosya_hash'],
       kategoriId: map['kategori_id'],
       kisiId: map['kisi_id'],
+      kategoriIds: idsCoz(map['kategori_ids']),
+      kisiIds: idsCoz(map['kisi_ids']),
       baslik: map['baslik'],
       aciklama: map['aciklama'],
       etiketler: etiketleriCoz(map['etiketler']),
@@ -101,6 +117,8 @@ class BelgeModeli extends BaseModel {
       'dosya_hash': dosyaHash,
       'kategori_id': kategoriId,
       'kisi_id': kisiId,
+      'kategori_ids': jsonEncode(tumKategoriIds),
+      'kisi_ids': jsonEncode(tumKisiIds),
       'baslik': baslik,
       'aciklama': aciklama,
       'etiketler': etiketler == null ? null : jsonEncode(etiketler),
@@ -130,6 +148,12 @@ class BelgeModeli extends BaseModel {
     return value.split(',');
   }
 
+  static List<int> idsCoz(dynamic value) {
+    if (value == null) return [];
+    final decoded = value is String ? jsonDecode(value) : value;
+    return (decoded as List).cast<int>().where((id) => id > 0).toSet().toList();
+  }
+
   BelgeModeli copyWith({
     Object? id = _degismedi,
     String? dosyaAdi,
@@ -140,6 +164,8 @@ class BelgeModeli extends BaseModel {
     String? dosyaHash,
     Object? kategoriId = _degismedi,
     Object? kisiId = _degismedi,
+    List<int>? kategoriIds,
+    List<int>? kisiIds,
     Object? baslik = _degismedi,
     Object? aciklama = _degismedi,
     Object? etiketler = _degismedi,
@@ -162,6 +188,16 @@ class BelgeModeli extends BaseModel {
               ? this.kategoriId
               : kategoriId as int?,
       kisiId: identical(kisiId, _degismedi) ? this.kisiId : kisiId as int?,
+      kategoriIds:
+          kategoriIds ??
+          (identical(kategoriId, _degismedi)
+              ? this.kategoriIds
+              : this.kategoriIds.where((id) => id != this.kategoriId).toList()),
+      kisiIds:
+          kisiIds ??
+          (identical(kisiId, _degismedi)
+              ? this.kisiIds
+              : this.kisiIds.where((id) => id != this.kisiId).toList()),
       baslik: identical(baslik, _degismedi) ? this.baslik : baslik as String?,
       aciklama:
           identical(aciklama, _degismedi) ? this.aciklama : aciklama as String?,

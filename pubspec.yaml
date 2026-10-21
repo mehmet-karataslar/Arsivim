@@ -78,6 +78,7 @@ dependencies:
   # Notifications
   flutter_local_notifications: ^19.3.1
   timezone: ^0.10.1
+  desktop_drop: 0.6.1
 
 dev_dependencies:
   flutter_test:

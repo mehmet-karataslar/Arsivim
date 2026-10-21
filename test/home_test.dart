@@ -130,8 +130,17 @@ void main() {
           expect(tester.getCenter(pageTitle).dx, closeTo(width / 2, 1));
           expect(tester.getTopLeft(pageTitle).dy, lessThan(60));
           expect(find.byType(Drawer), findsNothing);
-          for (var index = 0; index < 7; index++) {
+          expect(find.byKey(const ValueKey('navigation-6')), findsNothing);
+          for (final index in [0, 1, 2, 4, 3, 5]) {
             expect(find.byKey(ValueKey('navigation-$index')), findsOneWidget);
+          }
+          if (const bool.fromEnvironment('CAPTURE_HOME_PREVIEW') &&
+              scale == 1) {
+            final lastTab = find.byKey(const ValueKey('navigation-5'));
+            expect(
+              tester.getRect(lastTab).right,
+              lessThanOrEqualTo(width + 0.1),
+            );
           }
           final tile = find.byType(DocumentTile).first;
           expect(tester.getRect(tile).left, 0);
@@ -146,7 +155,7 @@ void main() {
         expect(tester.takeException(), isNull);
         if (const bool.fromEnvironment('CAPTURE_HOME_PREVIEW') &&
             scale == 1 &&
-            (width == 390 || width == 1440 || width == 1672)) {
+            (width == 320 || width == 390 || width == 1440 || width == 1672)) {
           final scrollable = tester.state<ScrollableState>(
             find
                 .descendant(
@@ -259,7 +268,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('navigation-5')));
       await tester.pumpAndSettle();
       expect(find.byType(ProfilEkrani), findsOneWidget);
-      expect(find.text('Profil'), findsOneWidget);
+      expect(find.text('Profil'), findsNWidgets(2));
       expect(
         tester
             .widget<Text>(find.byKey(const ValueKey('mobile-page-title')))

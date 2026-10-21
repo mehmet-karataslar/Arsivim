@@ -185,6 +185,45 @@ void main() {
     }
   }
 
+  testWidgets('Dar ekranda büyük yazıyla tüm gezinme hedefleri erişilebilir', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var selected = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.forPalette(AppPalette.forest),
+        builder:
+            (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(2)),
+              child: child!,
+            ),
+        home: Scaffold(
+          bottomNavigationBar: AppNavigationBar(
+            selectedIndex: 0,
+            onSelected: (index) => selected = index,
+          ),
+        ),
+      ),
+    );
+    for (final index in [0, 1, 2, 4, 3, 5]) {
+      final target = find.byKey(ValueKey('navigation-$index'));
+      await tester.ensureVisible(target);
+      await tester.pumpAndSettle();
+      await tester.tap(target);
+      expect(selected, index);
+      expect(tester.getSize(target).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(target).height, greaterThanOrEqualTo(48));
+      expect(tester.takeException(), isNull);
+    }
+    expect(find.byKey(const ValueKey('navigation-6')), findsNothing);
+  });
+
   testWidgets('Profil gezinme hedefi seçilebilir', (tester) async {
     var selected = 0;
     await tester.pumpWidget(
@@ -200,7 +239,8 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('navigation-5')));
     expect(selected, 5);
-    for (var index = 0; index < 7; index++) {
+    expect(find.byKey(const ValueKey('navigation-6')), findsNothing);
+    for (final index in [0, 1, 2, 4, 3, 5]) {
       await tester.tap(find.byKey(ValueKey('navigation-$index')));
       expect(selected, index);
     }

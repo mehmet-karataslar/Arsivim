@@ -13,9 +13,18 @@ class HesapEslesmeServisi {
   bool _mesgul = false;
   final Map<String, ({int oturum, String arsiv})> _cihazlar = {};
 
+  /// Reopening a QR must reuse only the current, unused ticket for this session.
+  bool biletGecerli(String ticket) =>
+      _bilet != null &&
+      ticket == _bilet &&
+      _son != null &&
+      saat().isBefore(_son!) &&
+      _oturum == auth.sessionGeneration;
+
   Future<Map<String, dynamic>> biletOlustur() async {
-    if (_mesgul)
+    if (_mesgul) {
       throw HesapHatasi('Eslesme tamamlanirken yeni QR olusturulamaz.');
+    }
     final session = auth.sessionGeneration;
     final account = await auth.hesapTanitim(yeniDogrulama: true);
     if (session != auth.sessionGeneration) throw HesapHatasi('Oturum degisti.');
@@ -67,12 +76,14 @@ class HesapEslesmeServisi {
         'arsiv_id': local['arsiv_id'],
         'yonetici_id': local['yonetici_id'],
       });
-      if (session != auth.sessionGeneration)
+      if (session != auth.sessionGeneration) {
         throw HesapHatasi('Oturum degisti.');
+      }
       await service.bagla(localId, local);
       _bilet = null;
-      if (session != auth.sessionGeneration)
+      if (session != auth.sessionGeneration) {
         throw HesapHatasi('Oturum degisti. Yeniden eslestirin.');
+      }
       _cihazlar[ip] = (
         oturum: auth.sessionGeneration,
         arsiv: local['arsiv_id'] as String,
@@ -92,8 +103,9 @@ class HesapEslesmeServisi {
     await auth.hesapTanitim(yeniDogrulama: true);
     if (session != auth.sessionGeneration) throw HesapHatasi('Oturum degisti.');
     await (await auth.hesapServisi).bagla(localId!, remote);
-    if (session != auth.sessionGeneration)
+    if (session != auth.sessionGeneration) {
       throw HesapHatasi('Oturum degisti. Yeniden eslestirin.');
+    }
     _cihazlar[ip] = (
       oturum: auth.sessionGeneration,
       arsiv: remote['arsiv_id'] as String,

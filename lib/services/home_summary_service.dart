@@ -1,3 +1,4 @@
+import 'document_links.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../models/ana_sayfa_ozeti.dart';
 import 'home_preferences.dart';
@@ -30,6 +31,7 @@ class HomeSummaryService {
 
   /// Toplamlar tüm aktif arşivden hesaplanır; son beş kayıtla sınırlanmaz.
   static Future<Map<String, Object?>> aggregate(Database db) async {
+    await DocumentLinks.prepare(db);
     final rows = await db.rawQuery('''
       WITH files AS (
         SELECT b.dosya_boyutu, CASE WHEN k.aktif = 1 THEN k.id END AS category,
@@ -42,7 +44,7 @@ class HomeSummaryService {
         WHERE b.aktif = 1
       )
       SELECT COUNT(*) AS count, COALESCE(SUM(dosya_boyutu),0) AS bytes,
-        COUNT(DISTINCT category) AS categories,
+        (SELECT COUNT(*) FROM kategoriler k WHERE k.aktif=1 AND EXISTS(SELECT 1 FROM belgeler b WHERE b.aktif=1 AND ${DocumentLinks.contains('kategori', 'k.id')})) AS categories,
         COALESCE(SUM(CASE WHEN kind='documents' THEN dosya_boyutu ELSE 0 END),0) AS documents,
         COALESCE(SUM(CASE WHEN kind='images' THEN dosya_boyutu ELSE 0 END),0) AS images,
         COALESCE(SUM(CASE WHEN kind='videos' THEN dosya_boyutu ELSE 0 END),0) AS videos,

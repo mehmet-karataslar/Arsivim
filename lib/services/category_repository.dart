@@ -1,3 +1,4 @@
+import 'document_links.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../models/kategori_modeli.dart';
 import '../models/category_overview.dart';
@@ -10,12 +11,12 @@ class CategoryRepository {
   final Future<Database> Function() _database;
   Future<CategoryOverview> read() async {
     final db = await _database();
+    await DocumentLinks.prepare(db);
     // Tek toplulaştırma: her kategori için ayrı belge sorgusu yapılmaz.
     final rows = await db.rawQuery(
-      '''SELECT k.*, COALESCE(b.total,0) AS belge_sayisi, b.updated AS document_updated
-      FROM kategoriler k LEFT JOIN (
-        SELECT kategori_id,COUNT(*) AS total,MAX(guncelleme_tarihi) AS updated FROM belgeler WHERE aktif=1 GROUP BY kategori_id
-      ) b ON b.kategori_id=k.id WHERE k.aktif=1 ORDER BY k.kategori_adi''',
+      '''SELECT k.*, COUNT(b.id) AS belge_sayisi, MAX(b.guncelleme_tarihi) AS document_updated
+      FROM kategoriler k LEFT JOIN belgeler b ON ${DocumentLinks.contains('kategori', 'k.id')} AND b.aktif=1
+      WHERE k.aktif=1 GROUP BY k.id ORDER BY k.kategori_adi''',
     );
     final prefs = await CategoryPreferences.read();
     final entries = <CategoryEntry>[];
@@ -65,13 +66,21 @@ class CategoryRepository {
       }
     }
     events.sort((a, b) => b.time.compareTo(a.time));
-    return CategoryOverview(entries, events.take(50).toList());
+    final totals = await db.rawQuery(
+      'SELECT COUNT(*) AS total FROM belgeler b WHERE b.aktif=1 AND EXISTS(SELECT 1 FROM kategoriler k WHERE k.aktif=1 AND ${DocumentLinks.contains('kategori', 'k.id')})',
+    );
+    return CategoryOverview(
+      entries,
+      events.take(50).toList(),
+      uniqueDocuments: totals.single['total'] as int,
+    );
   }
 
   Future<void> favorite(CategoryEntry entry) =>
       CategoryPreferences.update(entry.category.id!, favorite: !entry.favorite);
   Future<void> save(KategoriModeli category, CategoryGroup group) async {
     final db = await _database();
+    await DocumentLinks.prepare(db);
     final editing = category.id != null;
     final map = category.toMap()..remove('belge_sayisi');
     if (editing) {

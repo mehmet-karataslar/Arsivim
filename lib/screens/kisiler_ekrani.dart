@@ -1,3 +1,4 @@
+import '../widgets/document_editor/editor_navigation.dart';
 import 'package:flutter/material.dart';
 import '../models/people_overview.dart';
 import '../models/kisi_modeli.dart';
@@ -184,7 +185,13 @@ class _KisilerEkraniState extends State<KisilerEkrani> {
         await service.belgePaylas(file, context);
       case HomeDocumentAction.edit:
         final changed = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (_) => BelgeDuzenleEkrani(belge: file)),
+          MaterialPageRoute(
+            builder:
+                (_) => BelgeDuzenleEkrani(
+                  belge: file,
+                  navigation: EditorNavigationScope.maybeOf(context),
+                ),
+          ),
         );
         if (changed != true || !mounted) return;
         await DocumentActivityService.record(file, 'edit');

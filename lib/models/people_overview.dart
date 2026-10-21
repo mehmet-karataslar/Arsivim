@@ -20,16 +20,22 @@ class PersonSummary {
 }
 
 class PeopleOverview {
-  const PeopleOverview(this.people);
+  const PeopleOverview(this.people, {this.uniqueDocuments});
+  final int? uniqueDocuments;
   final List<PersonSummary> people;
   int get documentCount =>
+      uniqueDocuments ??
       people.fold(0, (sum, item) => sum + item.documentCount);
   List<KategoriModeli> get categories =>
       {
         for (final person in people)
           for (final category in person.categories) category.id: category,
       }.values.toList();
-  double get average => people.isEmpty ? 0 : documentCount / people.length;
+  double get average =>
+      people.isEmpty
+          ? 0
+          : people.fold(0, (sum, item) => sum + item.documentCount) /
+              people.length;
 }
 
 class PersonFolder {

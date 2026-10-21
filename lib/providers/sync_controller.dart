@@ -24,15 +24,26 @@ class SyncController extends ChangeNotifier {
   SenkronizasyonIlerleme? progress;
   StreamSubscription<SenkronizasyonIlerleme>? _progressSubscription;
   List<SyncDevice> get devices => gateway.devices;
-  List<SyncDevice> get visibleDevices => devices.where((d) =>
-    '${d.name} ${d.ip} ${d.platform}'.toLowerCase().contains(query.toLowerCase().trim())).toList();
-  void _notify() { if (!_disposed) notifyListeners(); }
+  List<SyncDevice> get visibleDevices =>
+      devices
+          .where(
+            (d) => '${d.name} ${d.ip} ${d.platform}'.toLowerCase().contains(
+              query.toLowerCase().trim(),
+            ),
+          )
+          .toList();
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
   void _onChange() {
+    if (!transferring && !gateway.transferring) stopping = false;
     selected.removeWhere((id) => !devices.any((d) => d.id == id));
     _notify();
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), refresh);
   }
+
   Future<void> refresh() => _read ??= _load().whenComplete(() => _read = null);
   Future<void> _load() async {
     loading = true;
@@ -53,58 +64,115 @@ class SyncController extends ChangeNotifier {
       _notify();
     }
   }
-  void search(String value) { query = value; _notify(); }
+
+  void search(String value) {
+    query = value;
+    _notify();
+  }
+
   void select(String id, bool value) {
     if (transferring) return;
     value ? selected.add(id) : selected.remove(id);
     _notify();
   }
-  void automatic(bool value) { gateway.autoDisconnect = value; _notify(); }
+
+  void automatic(bool value) {
+    gateway.autoDisconnect = value;
+    _notify();
+  }
+
   Future<void> server() async {
     if (busy || transferring || gateway.transferring) return;
-    busy = true; actionMessage = null; _notify();
-    try { await gateway.setServer(!gateway.running); await refresh(); }
-    catch (_) { actionMessage = 'Sunucu durumu değiştirilemedi. Bağlantıyı kontrol edin.'; }
-    finally { busy = false; _notify(); }
-  }
-  Future<void> disconnect(String id) async {
-    if (busy || transferring) return;
-    busy = true; _notify();
+    busy = true;
+    actionMessage = null;
+    _notify();
     try {
-      if (!await gateway.disconnect(id)) actionMessage = 'Cihaz bağlantısı kesilemedi.';
+      await gateway.setServer(!gateway.running);
       await refresh();
-    } catch (_) { actionMessage = 'Cihaz bağlantısı kesilemedi.'; }
-    finally { busy = false; _notify(); }
+    } catch (_) {
+      actionMessage = 'Sunucu durumu değiştirilemedi. Bağlantıyı kontrol edin.';
+    } finally {
+      busy = false;
+      _notify();
+    }
   }
-  List<SyncDevice> targets(SyncMode mode) => devices.where((d) => d.canSend &&
-    (mode == SyncMode.all || selected.contains(d.id))).toList();
+
+  Future<void> disconnect(String id) async {
+    if (busy || transferring || gateway.transferring) return;
+    busy = true;
+    _notify();
+    try {
+      if (!await gateway.disconnect(id)) {
+        actionMessage = 'Cihaz bağlantısı kesilemedi.';
+      }
+      await refresh();
+    } catch (_) {
+      actionMessage = 'Cihaz bağlantısı kesilemedi.';
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  List<SyncDevice> targets(SyncMode mode) =>
+      devices
+          .where(
+            (d) =>
+                d.canSend && (mode == SyncMode.all || selected.contains(d.id)),
+          )
+          .toList();
   Future<void> transfer(SyncMode mode, List<SyncDevice> targets) async {
     if (busy || transferring || gateway.transferring || targets.isEmpty) return;
-    transferring = true; stopping = false; actionMessage = null; progress = null; _notify();
+    transferring = true;
+    stopping = false;
+    actionMessage = null;
+    progress = null;
+    _notify();
     var completed = 0;
+    final stopVersion = gateway.stopVersion;
     try {
-      final docs = mode == SyncMode.pending ? await repository.pendingDocuments() : null;
+      final docs =
+          mode == SyncMode.pending ? await repository.pendingDocuments() : null;
       if (docs != null && docs.isEmpty) {
         actionMessage = 'Gönderilmeyi bekleyen yerel değişiklik yok.';
         return;
       }
-      _progressSubscription = gateway.progress().listen((value) { progress = value; _notify(); });
+      _progressSubscription = gateway.progress().listen((value) {
+        progress = value;
+        _notify();
+      });
       for (final target in targets) {
-        if (stopping || _disposed) break;
+        if (stopping || stopVersion != gateway.stopVersion) {
+          stopping = true;
+          break;
+        }
         if (await gateway.send(target, documents: docs)) completed++;
+        if (stopVersion != gateway.stopVersion) stopping = true;
       }
-      actionMessage = stopping ? 'Aktarım durduruldu. Tamamlanan belgeler korundu.' :
-        '$completed / ${targets.length} cihazla aktarım tamamlandı.';
-    } catch (_) { actionMessage = 'Aktarım tamamlanamadı. Bağlantıyı ve aktarım sonuçlarını kontrol edin.'; }
-    finally {
-      await _progressSubscription?.cancel();
+      actionMessage =
+          stopping
+              ? 'Aktarım durduruldu. Tamamlanan belgeler korundu.'
+              : '$completed / ${targets.length} cihazla aktarım tamamlandı.';
+    } catch (_) {
+      actionMessage =
+          'Aktarım tamamlanamadı. Bağlantıyı ve aktarım sonuçlarını kontrol edin.';
+    } finally {
+      unawaited(_progressSubscription?.cancel());
       _progressSubscription = null;
       transferring = false;
+      stopping = false;
       _notify();
       if (!_disposed) await refresh();
     }
   }
-  void stop() { if (!transferring) return; stopping = true; gateway.stop(); _notify(); }
+
+  void stop() {
+    if (!transferring && !gateway.transferring) return;
+    stopping = true;
+    gateway.stop();
+    _notify();
+  }
+
   @override
   void dispose() {
     _disposed = true;

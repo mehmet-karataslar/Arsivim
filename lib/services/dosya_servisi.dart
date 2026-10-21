@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show compute;
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
@@ -231,36 +233,22 @@ class DosyaServisi {
   // Taranan fotoğrafları PDF'e dönüştür ve kaydet
   Future<BelgeModeli> tarananFotograflariPdfYap(
     List<String> fotografYollari,
-    String pdfAdi,
-  ) async {
+    String pdfAdi, {
+    Directory? outputDirectory,
+    List<int>? quarterTurns,
+  }) async {
     try {
-      // PDF oluştur
-      final pdf = pw.Document();
-
-      for (String fotografYolu in fotografYollari) {
-        File fotografDosyasi = File(fotografYolu);
-        if (await fotografDosyasi.exists()) {
-          final Uint8List fotografBytes = await fotografDosyasi.readAsBytes();
-
-          // PDF sayfası ekle
-          pdf.addPage(
-            pw.Page(
-              pageFormat: PdfPageFormat.a4,
-              build: (pw.Context context) {
-                return pw.Center(
-                  child: pw.Image(
-                    pw.MemoryImage(fotografBytes),
-                    fit: pw.BoxFit.contain,
-                  ),
-                );
-              },
-            ),
-          );
-        }
+      if (quarterTurns != null &&
+          quarterTurns.length != fotografYollari.length) {
+        throw ArgumentError('Sayfa yönleri eksik.');
       }
+      final pdfBytes = await compute(_scanPdfBytes, {
+        'paths': fotografYollari,
+        'turns': quarterTurns ?? List.filled(fotografYollari.length, 0),
+      });
 
       // Hedef klasörü oluştur
-      Directory belgelerKlasoru = await _belgelerKlasorunu();
+      Directory belgelerKlasoru = outputDirectory ?? await _belgelerKlasorunu();
 
       // Benzersiz PDF dosya adı oluştur
       String temelAd = path.basenameWithoutExtension(pdfAdi);
@@ -273,7 +261,6 @@ class DosyaServisi {
       String hedefYol = path.join(belgelerKlasoru.path, yeniDosyaAdi);
 
       // PDF'i kaydet
-      final Uint8List pdfBytes = await pdf.save();
       File pdfDosyasi = File(hedefYol);
       await pdfDosyasi.writeAsBytes(pdfBytes);
 
@@ -388,4 +375,39 @@ class DosyaServisi {
       throw Exception('Senkronizasyon dosyası kaydedilemedi: $e');
     }
   }
+}
+
+// Image decoding and PDF compression run off the UI isolate on mobile/desktop.
+Future<Uint8List> _scanPdfBytes(Map<String, dynamic> request) async {
+  final paths = request['paths'] as List<String>;
+  final turns = request['turns'] as List<int>;
+  final pdf = pw.Document();
+  for (var i = 0; i < paths.length; i++) {
+    final path = paths[i];
+    final file = File(path);
+    if (!await file.exists()) throw StateError('Taranan sayfa bulunamadı.');
+    final bytes = await file.readAsBytes();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(10 * PdfPageFormat.mm),
+        build:
+            (_) => pw.Center(
+              child: pw.FittedBox(
+                fit: pw.BoxFit.contain,
+                child: pw.Transform.rotateBox(
+                  angle: -(turns[i] % 4) * math.pi / 2,
+                  unconstrained: true,
+                  child: pw.Image(
+                    pw.MemoryImage(bytes),
+                    fit: pw.BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+      ),
+    );
+  }
+  if (paths.isEmpty) throw StateError('Taranan sayfa yok.');
+  return pdf.save();
 }

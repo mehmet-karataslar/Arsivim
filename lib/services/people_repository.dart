@@ -1,3 +1,4 @@
+import 'document_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as paths;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -15,18 +16,19 @@ class PeopleRepository {
 
   Future<PeopleOverview> read() async {
     final db = await _database();
+    await DocumentLinks.prepare(db);
     final people = await db.rawQuery('''
       SELECT p.id, p.ad, p.soyad, p.kullanici_adi, p.kullanici_tipi,
         p.profil_fotografi, p.olusturma_tarihi, p.guncelleme_tarihi, p.aktif,
         COUNT(b.id) AS document_count, MAX(b.guncelleme_tarihi) AS document_updated
-      FROM kisiler p LEFT JOIN belgeler b ON b.kisi_id = p.id AND b.aktif = 1
+      FROM kisiler p LEFT JOIN belgeler b ON ${DocumentLinks.contains('kisi', 'p.id')} AND b.aktif = 1
       WHERE p.aktif = 1 GROUP BY p.id ORDER BY p.ad, p.soyad
     ''');
     final rows = await db.rawQuery('''
-      SELECT b.kisi_id, k.*, COUNT(b.id) AS count_in_person
-      FROM belgeler b JOIN kisiler p ON p.id = b.kisi_id AND p.aktif = 1
-      JOIN kategoriler k ON k.id = b.kategori_id AND k.aktif = 1
-      WHERE b.aktif = 1 GROUP BY b.kisi_id, k.id ORDER BY k.kategori_adi
+      SELECT p.id AS kisi_id, k.*, COUNT(b.id) AS count_in_person
+      FROM belgeler b JOIN kisiler p ON ${DocumentLinks.contains('kisi', 'p.id')} AND p.aktif = 1
+      JOIN kategoriler k ON ${DocumentLinks.contains('kategori', 'k.id')} AND k.aktif = 1
+      WHERE b.aktif = 1 GROUP BY p.id, k.id ORDER BY k.kategori_adi
     ''');
     final categories = <int, List<KategoriModeli>>{};
     for (final row in rows) {
@@ -37,6 +39,9 @@ class PeopleRepository {
         }),
       );
     }
+    final totals = await db.rawQuery(
+      'SELECT COUNT(*) AS total FROM belgeler b WHERE b.aktif=1 AND EXISTS (SELECT 1 FROM kisiler p WHERE p.aktif=1 AND ${DocumentLinks.contains('kisi', 'p.id')})',
+    );
     return PeopleOverview(
       people.map((row) {
         final person = KisiModeli.fromMap(row);
@@ -54,14 +59,16 @@ class PeopleRepository {
                   : person.guncellemeTarihi,
         );
       }).toList(),
+      uniqueDocuments: totals.single['total'] as int,
     );
   }
 
   Future<PersonDetails> details(int personId) async {
     final db = await _database();
+    await DocumentLinks.prepare(db);
     final documents = await db.query(
       'belgeler',
-      where: 'kisi_id = ? AND aktif = 1',
+      where: '${DocumentLinks.contains('kisi', '?', '')} AND aktif = 1',
       whereArgs: [personId],
       orderBy: 'guncelleme_tarihi DESC, id DESC',
       limit: 10,
@@ -69,7 +76,7 @@ class PeopleRepository {
     final notes = await db.query(
       'belgeler',
       where:
-          "kisi_id = ? AND aktif = 1 AND aciklama IS NOT NULL AND TRIM(aciklama) != ''",
+          "${DocumentLinks.contains('kisi', '?', '')} AND aktif = 1 AND aciklama IS NOT NULL AND TRIM(aciklama) != ''",
       whereArgs: [personId],
       orderBy: 'guncelleme_tarihi DESC, id DESC',
       limit: 20,
@@ -77,7 +84,7 @@ class PeopleRepository {
     final rows = await db.query(
       'belgeler',
       columns: ['dosya_yolu'],
-      where: 'kisi_id = ? AND aktif = 1',
+      where: '${DocumentLinks.contains('kisi', '?', '')} AND aktif = 1',
       whereArgs: [personId],
     );
     final files = rows.map((row) => row['dosya_yolu'] as String).toList();
@@ -93,6 +100,7 @@ class PeopleRepository {
 
   Future<void> remove(int id) async {
     final db = await _database();
+    await DocumentLinks.prepare(db);
     await db.update('kisiler', {'aktif': 0}, where: 'id = ?', whereArgs: [id]);
   }
 }

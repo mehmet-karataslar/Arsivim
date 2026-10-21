@@ -1,3 +1,4 @@
+import '../common/workspace_layout.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_tones.dart';
 import '../common/section_surface.dart';
@@ -82,13 +83,14 @@ class HomeActions extends StatelessWidget {
             AppTone.teal,
             3,
           ),
-          (
-            'Yedekleme',
-            'Belgelerinin kopyasını al',
-            Icons.cloud_outlined,
-            AppTone.amber,
-            6,
-          ),
+          if (WorkspaceLayout.backupAvailable(context))
+            (
+              'Yedekleme',
+              'Belgelerinin kopyasını al',
+              Icons.cloud_outlined,
+              AppTone.amber,
+              6,
+            ),
         ])
           Padding(
             padding: const EdgeInsets.only(bottom: 8),

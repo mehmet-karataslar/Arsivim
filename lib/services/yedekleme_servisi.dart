@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 import '../models/kategori_modeli.dart';
+import '../models/backup_overview.dart';
 import '../models/belge_modeli.dart';
 import '../services/veritabani_servisi.dart';
 import 'home_preferences.dart';
@@ -18,17 +19,13 @@ class YedeklemeServisi {
   /// [hedefKlasorYolu] - Yedekleme yapılacak klasör yolu
   /// [kategoriSecimi] - Kişi bazında seçilen kategori ID'leri (kisiId -> kategoriIds)
   /// [onProgress] - İlerleme callback'i (0.0 - 1.0 arası ve işlem açıklaması)
-  Future<void> kisiVeKategoriYedeklemeYap(
+  Future<BackupRecord> kisiVeKategoriYedeklemeYap(
     List<int> kisiIds,
     String hedefKlasorYolu, {
     Map<int, List<int>>? kategoriSecimi,
     Function(double progress, String operation)? onProgress,
   }) async {
     try {
-      final output = await Directory(
-        hedefKlasorYolu,
-      ).createTemp('Arsiv-Yedek-');
-      hedefKlasorYolu = output.path;
       final hatalar = <String>[];
       final manifest = <Map<String, dynamic>>[];
       // Kişi ve kategori verilerini getir
@@ -43,12 +40,28 @@ class YedeklemeServisi {
         throw Exception('Yedeklenecek kişi bulunamadı');
       }
 
-      // Toplam işlem sayısını hesapla
-      int toplamBelgeSayisi = 0;
+      final selectedDocuments = <int, List<BelgeModeli>>{};
       for (final kisi in yedeklenecekKisiler) {
-        final belgeSayisi = await _veriTabani.kisiBelgeSayisi(kisi.id!);
-        toplamBelgeSayisi += belgeSayisi;
+        final filter =
+            kategoriSecimi == null
+                ? null
+                : (kategoriSecimi[kisi.id!] ?? <int>[]);
+        selectedDocuments[kisi.id!] =
+            (await _veriTabani.kisiBelgeleriniGetir(
+              kisi.id!,
+            )).where((document) => backupIncludes(document, filter)).toList();
       }
+      final toplamBelgeSayisi = selectedDocuments.values.fold<int>(
+        0,
+        (sum, docs) => sum + docs.length,
+      );
+      if (toplamBelgeSayisi == 0) {
+        throw Exception('Seçimle eşleşen belge bulunamadı.');
+      }
+      final output = await Directory(
+        hedefKlasorYolu,
+      ).createTemp('Arsiv-Yedek-');
+      hedefKlasorYolu = output.path;
 
       int islenenBelgeSayisi = 0;
 
@@ -66,18 +79,26 @@ class YedeklemeServisi {
         await Directory(kisiKlasoruYolu).create(recursive: true);
 
         // Kişinin belgelerini getir
-        final kisiBelgeleri = await _veriTabani.kisiBelgeleriniGetir(kisi.id!);
+        final kisiBelgeleri = selectedDocuments[kisi.id!]!;
 
         // Belgeleri kategorilere göre grupla - sadece seçilen kategoriler
         final kategorilereGoreGruplar = <int, List<BelgeModeli>>{};
-        final secilenKategoriler = kategoriSecimi?[kisi.id!] ?? [];
+        final filter =
+            kategoriSecimi == null
+                ? null
+                : (kategoriSecimi[kisi.id!] ?? <int>[]);
+        final secilenKategoriler = filter ?? <int>[];
 
         for (final belge in kisiBelgeleri) {
-          final kategoriId = belge.kategoriId ?? 0;
+          final matches =
+              belge.tumKategoriIds.where(secilenKategoriler.contains).toList();
+          final kategoriId =
+              matches.isNotEmpty
+                  ? matches.first
+                  : (belge.kategoriId ?? belge.tumKategoriIds.firstOrNull ?? 0);
 
           // Eğer kategori seçimi yapılmışsa, sadece seçilen kategorileri dahil et
-          if (secilenKategoriler.isNotEmpty &&
-              !secilenKategoriler.contains(kategoriId)) {
+          if (!backupIncludes(belge, filter)) {
             continue;
           }
 
@@ -128,7 +149,6 @@ class YedeklemeServisi {
               });
               islenenBelgeSayisi++;
             } catch (e) {
-              print('Belge kopyalanırken hata: ${belge.baslik} - $e');
               hatalar.add('${belge.orijinalDosyaAdi}: $e');
               // Hata durumunda da sayacı artır
               islenenBelgeSayisi++;
@@ -144,7 +164,13 @@ class YedeklemeServisi {
           'belgeler': manifest,
           'hatalar': hatalar,
           'kisiler': [
-            for (final k in yedeklenecekKisiler)
+            for (final k in kisiler.where(
+              (k) =>
+                  yedeklenecekKisiler.any((p) => p.id == k.id) ||
+                  manifest.any(
+                    (b) => BelgeModeli.idsCoz(b['kisi_ids']).contains(k.id),
+                  ),
+            ))
               {
                 'id': k.id,
                 'ad': k.ad,
@@ -156,13 +182,35 @@ class YedeklemeServisi {
         }),
         flush: true,
       );
-      if (hatalar.isNotEmpty)
+      if (hatalar.isNotEmpty) {
         throw Exception(
           '${hatalar.length} dosya yedeklenemedi. Ayrintilar: $hedefKlasorYolu/manifest.json',
         );
+      }
       // Yedekleme tamamlandı
-      await HomePreferences.recordBackup(DateTime.now());
+      final time = DateTime.now();
+      await HomePreferences.recordBackup(time);
       onProgress?.call(1.0, 'Yedekleme başarıyla tamamlandı!');
+      return BackupRecord(
+        time: time,
+        path: hedefKlasorYolu,
+        people: yedeklenecekKisiler.length,
+        categories:
+            kategoriSecimi == null
+                ? manifest
+                    .expand((b) {
+                      final ids = BelgeModeli.fromMap(b).tumKategoriIds;
+                      return ids.isEmpty ? [0] : ids;
+                    })
+                    .toSet()
+                    .length
+                : kategoriSecimi.values.expand((ids) => ids).toSet().length,
+        documents: manifest.map((b) => b['id']).toSet().length,
+        bytes: manifest.fold<int>(
+          0,
+          (sum, b) => sum + (b['dosya_boyutu'] as int),
+        ),
+      );
     } catch (e) {
       throw Exception('Yedekleme sırasında hata oluştu: $e');
     }
@@ -175,7 +223,7 @@ class YedeklemeServisi {
   ) async {
     // Kaynak dosya yolunu bul
     final kaynakDosyaYolu = belge.dosyaYolu;
-    if (kaynakDosyaYolu == null || kaynakDosyaYolu.isEmpty) {
+    if (kaynakDosyaYolu.isEmpty) {
       throw Exception('Belge dosya yolu bulunamadı: ${belge.baslik}');
     }
 

@@ -1,3 +1,4 @@
+import 'document_links.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../models/ana_sayfa_ozeti.dart';
 import '../models/document_filters.dart';
@@ -60,12 +61,13 @@ class DocumentRepository {
     List<int> sharedIds = const [],
   }) async {
     final db = await _database();
+    await DocumentLinks.prepare(db);
     final where = <String>['b.aktif=1'];
     final args = <Object?>[];
     if (filters.query.trim().isNotEmpty) {
       // SQLite LOWER yalnızca ASCII'yi dönüştürür; Türkçe harfleri de eşleştir.
-      const columns =
-          "COALESCE(b.baslik,'') || ' ' || b.orijinal_dosya_adi || ' ' || COALESCE(b.aciklama,'') || ' ' || COALESCE(b.etiketler,'') || ' ' || COALESCE(k.kategori_adi,'') || ' ' || COALESCE(p.ad,'') || ' ' || COALESCE(p.soyad,'') || ' ' || COALESCE(p.kullanici_adi,'')";
+      final columns =
+          "COALESCE(b.baslik,'') || ' ' || b.orijinal_dosya_adi || ' ' || COALESCE(b.aciklama,'') || ' ' || COALESCE(b.etiketler,'') || ' ' || COALESCE(k.kategori_adi,'') || ' ' || COALESCE(p.ad,'') || ' ' || COALESCE(p.soyad,'') || ' ' || COALESCE(p.kullanici_adi,'') || ' ' || COALESCE((SELECT GROUP_CONCAT(lp.ad || ' ' || lp.soyad || ' ' || COALESCE(lp.kullanici_adi,''), ' ') FROM kisiler lp WHERE lp.aktif=1 AND ${DocumentLinks.contains('kisi', 'lp.id')}),'') || ' ' || COALESCE((SELECT GROUP_CONCAT(lk.kategori_adi,' ') FROM kategoriler lk WHERE lk.aktif=1 AND ${DocumentLinks.contains('kategori', 'lk.id')}),'')";
       var normalized = columns;
       const upper = ['İ', 'I', 'Ş', 'Ğ', 'Ü', 'Ö', 'Ç'];
       const lower = ['i', 'ı', 'ş', 'ğ', 'ü', 'ö', 'ç'];
@@ -88,11 +90,11 @@ class DocumentRepository {
       args.add(filters.extension!.toLowerCase());
     }
     if (filters.categoryId != null) {
-      where.add('k.id=?');
+      where.add(DocumentLinks.contains('kategori', '?'));
       args.add(filters.categoryId);
     }
     if (filters.personId != null) {
-      where.add('p.id=?');
+      where.add(DocumentLinks.contains('kisi', '?'));
       args.add(filters.personId);
     }
     if (filters.from != null) {
@@ -133,6 +135,7 @@ class DocumentRepository {
 
   Future<DocumentOverview> overview({DateTime? now}) async {
     final db = await _database();
+    await DocumentLinks.prepare(db);
     final date = now ?? DateTime.now();
     final today = DateTime(date.year, date.month, date.day);
     final week = today.subtract(Duration(days: today.weekday - 1));
@@ -157,7 +160,7 @@ class DocumentRepository {
     );
     final categories = await db.rawQuery(
       '''SELECT k.id, k.kategori_adi AS label, COUNT(b.id) AS count
-      FROM kategoriler k LEFT JOIN belgeler b ON b.kategori_id=k.id AND b.aktif=1
+      FROM kategoriler k LEFT JOIN belgeler b ON ${DocumentLinks.contains('kategori', 'k.id')} AND b.aktif=1
       WHERE k.aktif=1 GROUP BY k.id ORDER BY label''',
     );
     final people = await db.rawQuery(

@@ -1,932 +1,489 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
-import 'dart:convert';
-import 'dart:async';
-import '../services/senkronizasyon_yonetici_servisi.dart';
-import '../widgets/senkronizasyon_kartlari.dart';
-import '../widgets/cihaz_baglanti_paneli.dart';
-import '../widgets/senkronizasyon_kontrolleri.dart';
-import '../widgets/qr_generator_widget.dart';
-import '../widgets/qr_scanner_widget.dart';
-import '../models/belge_modeli.dart';
-import '../screens/senkron_belgeler_ekrani.dart';
-import '../utils/screen_utils.dart';
-import '../models/kisi_modeli.dart';
-import '../models/kategori_modeli.dart';
+import 'package:flutter/material.dart';
+import '../models/sync_overview.dart';
+import '../providers/sync_controller.dart';
+import '../services/sync_gateway.dart';
+import '../services/sync_repository.dart';
+import '../theme/app_tones.dart';
+import '../widgets/common/metric_grid.dart';
+import '../widgets/common/workspace_layout.dart';
 import '../widgets/aktarim_kisi_secimi.dart';
 import '../widgets/yonetici_dogrulama_dialog.dart';
+import '../widgets/qr_scanner_widget.dart';
+import '../widgets/sync/sync_section.dart';
+import '../widgets/sync/sync_status.dart';
+import '../widgets/sync/sync_controls.dart';
+import '../widgets/sync/sync_devices.dart';
+import '../widgets/sync/sync_activity.dart';
+import '../widgets/sync/sync_statistics.dart';
 
 class SenkronizasyonEkrani extends StatefulWidget {
-  const SenkronizasyonEkrani({super.key, this.showHeading = true});
+  const SenkronizasyonEkrani({
+    super.key,
+    this.showHeading = true,
+    this.repository,
+    this.gateway,
+    this.verifyPairing,
+  });
   final bool showHeading;
-
+  final SyncRepository? repository;
+  final SyncGateway? gateway;
+  final Future<bool> Function(BuildContext)? verifyPairing;
   @override
   State<SenkronizasyonEkrani> createState() => _SenkronizasyonEkraniState();
 }
 
 class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
-    with TickerProviderStateMixin {
-  late final SenkronizasyonYoneticiServisi _yonetici;
-
-  // Animasyon controller'ları
-  late AnimationController _fadeAnimationController;
-  late AnimationController _pulseAnimationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _pulseAnimation;
-
-  bool _yukleniyor = false;
-  List<BelgeModeli> _bekleyenBelgeler = [];
-  List<KisiModeli> _bekleyenKisiler = [];
-  List<KategoriModeli> _bekleyenKategoriler = [];
-
-  // Anlık güncelleme için Timer
-  Timer? _refreshTimer;
-
-  // Platform kontrolü
-  bool get _pcPlatform =>
-      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-
+    with WidgetsBindingObserver {
+  late final SyncController _data;
+  final _search = TextEditingController();
+  String? _qr;
+  bool _pairing = false;
+  bool _qrOpen = false;
+  late final Future<int?> Function(String, List<Map<String, dynamic>>)
+  _choosePerson;
   @override
   void initState() {
     super.initState();
-    _yonetici = SenkronizasyonYoneticiServisi.instance;
-    _initAnimations();
-    _initServiceCallbacks();
-    _verileriYukle();
-    _startRefreshTimer();
+    _data = SyncController(
+      widget.repository ?? SyncRepository(),
+      widget.gateway ?? SyncGateway(),
+    );
+    _choosePerson =
+        (message, people) async =>
+            mounted ? aktarimKisiSecimi(context, message, people) : null;
+    if (widget.gateway == null) {
+      _data.gateway.manager.onKisiSecimi = _choosePerson;
+    }
+    WidgetsBinding.instance.addObserver(this);
+    _data.refresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _data.refresh();
   }
 
   @override
   void dispose() {
-    _fadeAnimationController.dispose();
-    _pulseAnimationController.dispose();
-    _refreshTimer?.cancel();
-    _yonetici.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    if (widget.gateway == null &&
+        _data.gateway.manager.onKisiSecimi == _choosePerson) {
+      _data.gateway.manager.onKisiSecimi = null;
+    }
+    _data.dispose();
+    _search.dispose();
     super.dispose();
   }
 
-  void _initAnimations() {
-    _fadeAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _pulseAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _fadeAnimationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
-      CurvedAnimation(
-        parent: _pulseAnimationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
-    _fadeAnimationController.forward();
-    _pulseAnimationController.repeat(reverse: true);
+  void _message(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
-  void _initServiceCallbacks() {
-    _yonetici.onKisiSecimi =
-        (mesaj, adaylar) async =>
-            mounted ? aktarimKisiSecimi(context, mesaj, adaylar) : null;
-    _yonetici.onStatusChanged = (status) {
-      if (mounted) setState(() {});
-    };
-
-    _yonetici.onDeviceListChanged = () {
-      if (mounted) setState(() {});
-    };
-
-    _yonetici.onSuccess = (message) {
-      if (mounted) _basariMesaji(message);
-    };
-
-    _yonetici.onError = (error) {
-      if (mounted) _hataGoster(error);
-    };
-  }
-
-  Future<void> _verileriYukle() async {
-    if (!mounted) return;
-    setState(() => _yukleniyor = true);
-
+  Future<void> _showQr() async {
+    if (_pairing || _qrOpen || _data.busy) return;
+    setState(() => _pairing = true);
     try {
-      await _yonetici.verileriYukle();
-
-      // Bekleyen senkronizasyonları yükle
-      final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
-
+      var code = _qr;
+      if (code == null || !_data.gateway.isQrValid(code)) {
+        setState(() => _qr = null);
+        final verify = widget.verifyPairing ?? yoneticiDogrulamaDialog;
+        if (!await verify(context) || !mounted) return;
+        code = await _data.gateway.createQr();
+        if (!mounted) return;
+        setState(() => _qr = code);
+        await _data.refresh();
+      }
       if (mounted) {
+        final qrCode = code;
         setState(() {
-          _bekleyenBelgeler =
-              (bekleyenler['bekleyen_belgeler'] as List<dynamic>?)
-                  ?.cast<BelgeModeli>() ??
-              [];
-          _bekleyenKisiler =
-              (bekleyenler['bekleyen_kisiler'] as List<dynamic>?)
-                  ?.cast<KisiModeli>() ??
-              [];
-          _bekleyenKategoriler =
-              (bekleyenler['bekleyen_kategoriler'] as List<dynamic>?)
-                  ?.cast<KategoriModeli>() ??
-              [];
+          _pairing = false;
+          _qrOpen = true;
         });
-      }
-    } catch (e) {
-      print('❌ Veriler yüklenirken hata: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _yukleniyor = false);
-      }
-    }
-  }
-
-  /// Anlık güncelleme timer'ını başlat
-  void _startRefreshTimer() {
-    // Mobilde daha az sıklıkla yenile (performans için)
-    final refreshInterval =
-        Platform.isAndroid || Platform.isIOS
-            ? const Duration(seconds: 15)
-            : const Duration(seconds: 10);
-
-    _refreshTimer = Timer.periodic(refreshInterval, (timer) {
-      if (mounted) {
-        _verileriYukle();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Theme.of(context).primaryColor.withOpacity(0.05),
-              Theme.of(context).scaffoldBackgroundColor,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _verileriYukle,
-            child:
-                _yukleniyor
-                    ? const Center(child: CircularProgressIndicator())
-                    : (_pcPlatform ? _buildPCLayout() : _buildMobileLayout()),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // PC Layout - Geniş ekran için optimize edilmiş
-  Widget _buildPCLayout() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeaderSection(),
-            const SizedBox(height: 32),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Sol panel - Durum ve kontroller
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    children: [
-                      SenkronizasyonKartlari.buildSunucuDurumKarti(
-                        context,
-                        _yonetici,
-                        _pulseAnimation,
-                      ),
-                      const SizedBox(height: 16),
-
-                      SenkronizasyonKartlari.buildHizliIstatistikler(
-                        context,
-                        _yonetici,
-                        _bekleyenBelgeleriGoster,
-                        bekleyenBelgeler: _bekleyenBelgeler,
-                        bekleyenKisiler: _bekleyenKisiler,
-                        bekleyenKategoriler: _bekleyenKategoriler,
-                        bekleyenKisileriGoster:
-                            null, // Kişiler senkronizasyonu kaldırıldı
-                        bekleyenKategorileriGoster:
-                            null, // Kategoriler senkronizasyonu kaldırıldı
-                      ),
-                      const SizedBox(height: 16),
-                      // PC için senkronizasyon kontrolleri
-                      SenkronizasyonKontrolleri(
-                        yonetici: _yonetici,
-                        onTumSistemSenkron: _tumSistemSenkronEt,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 24),
-                // Sağ panel - Bağlı cihazlar ve detaylar
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    children: [
-                      CihazBaglantiPaneli(
-                        yonetici: _yonetici,
-                        onQRKodGoster: _qrKodGoster,
-                        onQRKodTara: _qrKodTara,
-                        onTamEkranQR: _tamEkranQRGoster,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Mobile Layout - Mobil cihazlar için optimize edilmiş
-  Widget _buildMobileLayout() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeaderSection(),
-            const SizedBox(height: 24),
-            SenkronizasyonKartlari.buildSunucuDurumKarti(
-              context,
-              _yonetici,
-              _pulseAnimation,
-            ),
-            const SizedBox(height: 16),
-
-            SenkronizasyonKartlari.buildHizliIstatistikler(
-              context,
-              _yonetici,
-              _bekleyenBelgeleriGoster,
-              bekleyenBelgeler: _bekleyenBelgeler,
-              bekleyenKisiler: _bekleyenKisiler,
-              bekleyenKategoriler: _bekleyenKategoriler,
-              bekleyenKisileriGoster:
-                  null, // Kişiler senkronizasyonu kaldırıldı
-              bekleyenKategorileriGoster:
-                  null, // Kategoriler senkronizasyonu kaldırıldı
-            ),
-            const SizedBox(height: 16),
-            CihazBaglantiPaneli(
-              yonetici: _yonetici,
-              onQRKodGoster: _qrKodGoster,
-              onQRKodTara: _qrKodTara,
-              onTamEkranQR: _tamEkranQRGoster,
-            ),
-            const SizedBox(height: 16),
-            SenkronizasyonKontrolleri(
-              yonetici: _yonetici,
-              onTumSistemSenkron: _tumSistemSenkronEt,
-            ),
-            const SizedBox(height: 80), // Bottom padding
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            if (widget.showHeading) ...[
-              Icon(
-                Icons.sync_rounded,
-                size: _pcPlatform ? 32 : 28,
-                color: Theme.of(context).primaryColor,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Senkronizasyon',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                    Text(
-                      _pcPlatform
-                          ? 'Masaüstü Senkronizasyon Merkezi'
-                          : 'Mobil Senkronizasyon',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-            ] else
-              const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.fact_check_outlined),
-              tooltip: 'Son aktarım sonuçları',
-              onPressed: _aktarimSonuclariniGoster,
-            ),
-            // Durum indicator
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color:
-                    _yonetici.sunucuCalisiyorMu ? Colors.green : Colors.orange,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _yonetici.durum,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // Otomatik bağlantı kesme ayarı
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.settings_power_rounded,
-                color: Theme.of(context).primaryColor,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Otomatik Bağlantı Kesme',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      'Senkronizasyon bitince bağlantı otomatik kesilsin',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-              Switch(
-                value: _yonetici.otomatikBaglantiKes,
-                onChanged: (value) {
-                  setState(() {
-                    _yonetici.otomatikBaglantiKes = value;
-                  });
-                },
-                activeColor: Theme.of(context).primaryColor,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _aktarimSonuclariniGoster() {
-    final rows = _yonetici.sonAktarimSonuclari;
-    showDialog<void>(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('Son aktarım sonuçları'),
-            content: SizedBox(
-              width: 520,
-              height: 380,
-              child:
-                  rows.isEmpty
-                      ? const Text('Henüz dosya aktarımı yapılmadı.')
-                      : ListView.builder(
-                        itemCount: rows.length,
-                        itemBuilder: (_, i) {
-                          final row = rows[i];
-                          return ListTile(
-                            leading: Icon(
-                              row['durum'] == 'hata'
-                                  ? Icons.error_outline
-                                  : Icons.check_circle_outline,
-                            ),
-                            title: Text(row['dosya'] as String),
-                            subtitle: Text(
-                              row['mesaj'] as String? ??
-                                  (row['durum'] == 'zaten_var'
-                                      ? 'Hedefteki kopya doğrulandı'
-                                      : 'Kaydedildi ve doğrulandı'),
-                            ),
-                          );
-                        },
-                      ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Kapat'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  // QR kod işlemleri
-  void _qrKodGoster() async {
-    String connectionData;
-    try {
-      if (!await yoneticiDogrulamaDialog(context) || !mounted) return;
-      connectionData = await _yonetici.connectionDataOlustur();
-    } catch (e) {
-      if (mounted) _hataGoster(e.toString());
-      return;
-    }
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: _pcPlatform ? 450 : 350,
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: QRGeneratorWidget(
-                  connectionData: connectionData,
-                  title: 'PC Bağlantı QR Kodu',
-                  onRefresh: () {
-                    Navigator.of(context).pop();
-                    _qrKodGoster(); // Dialog'u yeniden aç
-                  },
-                ),
-              ),
-            ),
-          ),
-    );
-  }
-
-  void _qrKodTara() {
-    print('📱 QR kod tarayıcısı açılıyor...');
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (context) => QRScannerScreen(
-              onQRScanned: (qrData) {
-                // QR kod tarandığında hemen kapansın
-                Navigator.of(context).pop();
-                print('🔄 QR scanner hemen kapatıldı');
-
-                // Arka planda bağlantı işlemlerini yap
-                _processQRCode(qrData);
-              },
-            ),
-      ),
-    );
-  }
-
-  void _processQRCode(String qrData) async {
-    try {
-      if (!await hesapEslesmesiniOnayla(context, qrData) || !mounted) return;
-      // QR kod işlemini başlat
-      final baglantiBasarili = await _yonetici.qrKoduTarandi(qrData);
-      print('🔄 Bağlantı sonucu: $baglantiBasarili');
-
-      // Başarılı bağlantı durumunda bildirim göster
-      if (baglantiBasarili && _yonetici.bagliCihazlar.isNotEmpty) {
-        final sonBagliCihaz = _yonetici.bagliCihazlar.last;
-        print('🎉 Başarı dialogu gösteriliyor: ${sonBagliCihaz['name']}');
-        _cihazBaglantiBasarili(sonBagliCihaz['name'] ?? 'Bilinmeyen Cihaz');
-      }
-    } catch (e) {
-      print('❌ QR kod işleme hatası: $e');
-      _hataGoster('QR kod işleme hatası: $e');
-    }
-  }
-
-  void _tamEkranQRGoster() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (context) => const QRConnectionScreen()));
-  }
-
-  void _cihazBaglantiBasarili(String deviceName) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.green[100],
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    child: Icon(
-                      Icons.check_circle,
-                      color: Colors.green[600],
-                      size: 48,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Bağlantı Başarılı!',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green[700],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    deviceName,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _pcPlatform
-                        ? 'cihazı PC\'ye bağlandı'
-                        : 'PC\'ye başarıyla bağlandı',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Tamam'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            // Mobil cihaz bağlı cihazlar listesini göster
-                            if (!_pcPlatform) {
-                              // Mobil için bağlı cihazlar gösterme fonksiyonu çağrılacak
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Cihazları Gör'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  // Kişiler ve kategoriler senkronizasyon fonksiyonları kaldırıldı
-  // Sadece belgeler senkronizasyonu aktif
-
-  void _bekleyenBelgeleriGoster() async {
-    try {
-      final bekleyenler = await _yonetici.bekleyenSenkronlariGetir();
-      final bekleyenBelgeler =
-          bekleyenler['bekleyen_belgeler'] as List<dynamic>?;
-
-      if (bekleyenBelgeler != null) {
-        setState(() {
-          _bekleyenBelgeler = bekleyenBelgeler.cast<BelgeModeli>();
-        });
-      }
-
-      _showBekleyenBelgelerDialog();
-    } catch (e) {
-      _hataGoster('Bekleyen belgeler yüklenemedi: $e');
-    }
-  }
-
-  void _showBekleyenBelgelerDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: _pcPlatform ? 600 : 400,
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.sync_problem, color: Colors.orange[600]),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Senkronizasyon Bekleyen Belgeler',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Content
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: SenkronizasyonKartlari.buildBekleyenBelgeler(
-                          context,
-                          _bekleyenBelgeler,
-                          _belgeleriCihazaGonder,
-                          _yonetici,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  void _belgeleriCihazaGonder(List<BelgeModeli> belgeler) async {
-    if (_yonetici.bagliCihazlar.isEmpty) {
-      _hataGoster('Önce bir cihaz bağlanmalı');
-      return;
-    }
-
-    final hedefCihaz = _yonetici.bagliCihazlar.first;
-    final hedefIP = hedefCihaz['ip'] as String;
-
-    if (hedefIP == 'incoming') {
-      _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
-      return;
-    }
-
-    // Dialog kapatma ve progress gösterme
-    bool dialogAcik = false;
-
-    try {
-      // Ana dialog'u kapat
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      // Progress dialog göster
-      if (mounted) {
-        dialogAcik = true;
-        showDialog(
+        await showDialog<void>(
           context: context,
-          barrierDismissible: false,
           builder:
-              (BuildContext dialogContext) => PopScope(
-                canPop: false,
-                child: AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 20),
-                      Text(
-                        '${belgeler.length} belge senkronize ediliyor...',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Belgeler tüm metadata ile transfer ediliyor...',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
+              (ctx) => AlertDialog(
+                title: const Text('Cihaz bağlantı QR kodu'),
+                content: SizedBox(
+                  width: (MediaQuery.sizeOf(ctx).width - 112).clamp(160, 360),
+                  child: SingleChildScrollView(
+                    child: AnimatedBuilder(
+                      animation: _data.gateway.changes,
+                      builder:
+                          (context, _) =>
+                              _data.gateway.isQrValid(qrCode)
+                                  ? SyncPairingCode(
+                                    data: qrCode,
+                                    size: (MediaQuery.sizeOf(ctx).width - 112)
+                                        .clamp(160, 360),
+                                  )
+                                  : const Text(
+                                    'Bu QR kod artık geçerli değil. Pencereyi kapatıp yeni kod oluşturun.',
+                                  ),
+                    ),
                   ),
                 ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Kapat'),
+                  ),
+                ],
               ),
         );
       }
-
-      // Async olarak senkronize et
-      final basarili = await _yonetici.belgeleriSenkronEt(
-        hedefIP,
-        belgeler: belgeler,
-      );
-
-      // Progress dialog'u güvenli şekilde kapat
-      if (mounted && dialogAcik) {
-        Navigator.of(context, rootNavigator: true).pop();
-        dialogAcik = false;
-      }
-
-      if (basarili) {
-        _basariMesaji('${belgeler.length} belge başarıyla senkronize edildi');
-        // Verileri yenile
-        await _verileriYukle();
-      } else {
-        _hataGoster('Belge senkronizasyonu başarısız oldu');
-      }
-    } catch (e) {
-      // Progress dialog'u güvenli şekilde kapat
-      if (mounted && dialogAcik) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (navError) {
-          print('Navigation error: $navError');
-        }
-        dialogAcik = false;
-      }
-      _hataGoster('Belge senkronizasyon hatası: $e');
+    } catch (_) {
+      _message('QR kod oluşturulamadı. Hesap ve ağ bağlantınızı kontrol edin.');
     } finally {
-      // Son güvenlik kontrolü
-      if (mounted && dialogAcik) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (navError) {
-          print('Final navigation error: $navError');
-        }
-      }
-
-      // Loading durumunu kapat
       if (mounted) {
-        setState(() => _yukleniyor = false);
+        setState(() {
+          _pairing = false;
+          _qrOpen = false;
+        });
       }
     }
   }
 
-  // Mesaj gösterme fonksiyonları
-  void _hataGoster(String mesaj) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  void _basariMesaji(String mesaj) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(mesaj)),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  /// Tüm sistemi senkronize et
-  Future<void> _tumSistemSenkronEt() async {
-    if (_yonetici.bagliCihazlar.isEmpty) {
-      _hataGoster('Hiçbir cihaz bağlı değil! Önce bir cihaza bağlanın.');
-      return;
-    }
-
-    try {
-      // İlk bağlı cihazı al
-      final hedefCihaz = _yonetici.bagliCihazlar.first;
-      final hedefIP = hedefCihaz['ip'] as String;
-
-      if (hedefIP == 'incoming') {
-        _hataGoster('Gelen bağlantı cihazlarına dosya gönderilemez');
-        return;
-      }
-
-      // Onay dialog'u göster
-      final onay = await showDialog<bool>(
-        context: context,
+  Future<void> _scan() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
         builder:
-            (context) => AlertDialog(
-              title: const Text('Tüm Sistem Senkronizasyonu'),
-              content: Text(
-                'Tüm belgeler, kişiler ve kategoriler "${hedefCihaz['device_name']}" cihazına gönderilecek.\n\n'
-                'Bu işlem uzun sürebilir. Devam etmek istiyor musunuz?',
+            (ctx) => QRScannerScreen(
+              onQRScanned: (value) => Navigator.of(ctx).pop(value),
+            ),
+      ),
+    );
+    if (!mounted || code == null) return;
+    try {
+      if (!await hesapEslesmesiniOnayla(context, code) || !mounted) return;
+      final success = await _data.gateway.connect(code);
+      _message(
+        success
+            ? 'Cihaz bağlandı.'
+            : 'Cihaz bağlanamadı. Aynı ağı ve güncel QR kodunu kontrol edin.',
+      );
+      await _data.refresh();
+    } catch (_) {
+      _message('Bağlantı kurulamadı. Yeniden deneyin.');
+    }
+  }
+
+  Future<void> _transfer(SyncMode mode) async {
+    final targets = _data.targets(mode);
+    if (targets.isEmpty) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Belge aktarımı'),
+            content: SingleChildScrollView(
+              child: Text(
+                '${mode == SyncMode.pending ? 'Bekleyen yerel değişiklikler' : 'Tüm aktif belgeler'} şu cihazlara gönderilecek:\n\n'
+                '${targets.map((d) => d.name).join('\n')}\n\n'
+                '${mode == SyncMode.pending ? 'Yeni bağlanan cihazın eksik belgeleri için tüm belgeleri gönderin.' : 'Kişi ve kategori bilgileri belgelerle birlikte aktarılır.'}',
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('İptal'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('İptal'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Gönder'),
+              ),
+            ],
+          ),
+    );
+    if (approved == true && mounted) await _data.transfer(mode, targets);
+  }
+
+  Future<void> _disconnect(SyncDevice device) async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Bağlantıyı kes'),
+            content: Text('${device.name} cihazının bağlantısı kesilsin mi?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Vazgeç'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Bağlantıyı kes'),
+              ),
+            ],
+          ),
+    );
+    if (approved == true && mounted) await _data.disconnect(device.id);
+  }
+
+  void _history() => showDialog<void>(
+    context: context,
+    builder:
+        (ctx) => AlertDialog(
+          title: const Text('Son 30 aktarım kaydı'),
+          content: SizedBox(
+            width: 600,
+            height: MediaQuery.sizeOf(ctx).height * .55,
+            child:
+                (_data.overview?.events.isEmpty ?? true)
+                    ? const Text('Henüz kayıtlı aktarım yok.')
+                    : ListView.builder(
+                      itemCount: _data.overview!.events.length,
+                      itemBuilder:
+                          (_, i) =>
+                              SyncEventTile(event: _data.overview!.events[i]),
+                    ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Kapat'),
+            ),
+          ],
+        ),
+  );
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _data,
+    builder:
+        (context, _) => LayoutBuilder(
+          builder: (context, box) {
+            final compact = WorkspaceLayout.compact(context);
+            final wide =
+                box.maxWidth >= 1120 &&
+                MediaQuery.textScalerOf(context).scale(14) <= 18;
+            final overview = _data.overview;
+            final serverButton = FilledButton.icon(
+              key: const ValueKey('sync-server-button'),
+              onPressed:
+                  _data.busy || _data.transferring || _data.gateway.transferring
+                      ? null
+                      : _pairing
+                      ? null
+                      : () async {
+                        await _data.server();
+                        if (mounted && !_data.gateway.running) {
+                          setState(() => _qr = null);
+                        }
+                      },
+              icon: Icon(
+                _data.gateway.running
+                    ? Icons.stop_circle_outlined
+                    : Icons.play_circle_outline,
+                size: 19,
+              ),
+              label: Text(
+                _data.busy
+                    ? 'Bekleyin…'
+                    : _data.gateway.running
+                    ? 'Sunucuyu durdur'
+                    : 'Sunucuyu başlat',
+              ),
+            );
+            final search = TextField(
+              controller: _search,
+              onChanged: _data.search,
+              decoration: const InputDecoration(
+                hintText: 'Cihaz adı veya IP ara…',
+                prefixIcon: Icon(Icons.search),
+              ),
+            );
+            final heading = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.showHeading)
+                  Text(
+                    'Senkronizasyon',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (!compact)
+                  Text(
+                    'Cihazlarınızı bağlayın, belgelerinizi aktarın.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
+                  ),
+              ],
+            );
+            final toolbar =
+                wide
+                    ? Row(
+                      children: [
+                        Expanded(child: heading),
+                        const SizedBox(width: 16),
+                        SizedBox(width: 280, child: search),
+                        IconButton(
+                          tooltip: 'Senkronizasyonu yenile',
+                          onPressed: _data.loading ? null : _data.refresh,
+                          icon: const Icon(Icons.refresh),
+                        ),
+                        const SizedBox(width: 10),
+                        serverButton,
+                      ],
+                    )
+                    : Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 8 : 0,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (widget.showHeading || !compact) ...[
+                            heading,
+                            const SizedBox(height: 12),
+                          ],
+                          Row(
+                            children: [
+                              Expanded(child: search),
+                              IconButton(
+                                tooltip: 'Senkronizasyonu yenile',
+                                onPressed: _data.loading ? null : _data.refresh,
+                                icon: const Icon(Icons.refresh),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          serverButton,
+                        ],
+                      ),
+                    );
+            final summary = MetricGrid(
+              items: [
+                MetricData(
+                  'Bağlı cihaz',
+                  '${_data.devices.length}',
+                  'Etkin cihaz bağlantıları',
+                  Icons.devices,
+                  AppTone.primary,
                 ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Devam Et'),
+                MetricData(
+                  'Bekleyen belge',
+                  overview?.pending.toString() ?? '—',
+                  'Bekleyen yerel değişiklikler',
+                  Icons.description_outlined,
+                  AppTone.amber,
+                ),
+                MetricData(
+                  'Bugün senkronize',
+                  overview?.today.toString() ?? '—',
+                  'Doğrulanan farklı dosyalar',
+                  Icons.sync,
+                  AppTone.blue,
+                ),
+                MetricData(
+                  'Son yedekleme',
+                  syncDate(overview?.lastBackup),
+                  'Son başarılı yedek kaydı',
+                  Icons.cloud_outlined,
+                  AppTone.purple,
                 ),
               ],
-            ),
-      );
-
-      if (onay == true) {
-        setState(() => _yukleniyor = true);
-        final sonuc = await _yonetici.tumSistemiSenkronEt(hedefIP);
-
-        if (sonuc) {
-          _basariMesaji('Tüm sistem başarıyla senkronize edildi!');
-          _verileriYukle(); // Verileri yenile
-        } else {
-          _hataGoster('Tüm sistem senkronizasyonu başarısız oldu.');
-        }
-      }
-    } catch (e) {
-      _hataGoster('Tüm sistem senkronizasyon hatası: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _yukleniyor = false);
-      }
-    }
-  }
+            );
+            final stats = SyncStatistics(overview: overview);
+            final status = SyncStatus(controller: _data);
+            final controls = SyncControls(
+              controller: _data,
+              onTransfer: _transfer,
+            );
+            final devices = SyncDevices(
+              controller: _data,
+              qrData: _qr != null && _data.gateway.isQrValid(_qr!) ? _qr : null,
+              onQr: _showQr,
+              pairing: _pairing || _qrOpen,
+              onDisconnect: _disconnect,
+              onScan: Platform.isAndroid || Platform.isIOS ? _scan : null,
+            );
+            final activity = SyncActivity(
+              events: overview?.events ?? [],
+              onAll: _history,
+            );
+            return RefreshIndicator(
+              onRefresh: _data.refresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 0 : 22,
+                  vertical: compact ? 8 : 22,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    toolbar,
+                    const SizedBox(height: 18),
+                    if (_data.loading || _pairing)
+                      const LinearProgressIndicator(),
+                    if (_data.error != null)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(_data.error!),
+                      ),
+                    if (!compact) ...[summary, const SizedBox(height: 16)],
+                    SyncOptions(controller: _data, compact: compact),
+                    const SizedBox(height: 16),
+                    if (wide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 46,
+                            child: Column(
+                              children: [
+                                status,
+                                const SizedBox(height: 16),
+                                controls,
+                                const SizedBox(height: 16),
+                                stats,
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 54,
+                            child: Column(
+                              children: [
+                                devices,
+                                const SizedBox(height: 16),
+                                activity,
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else ...[
+                      status,
+                      const SizedBox(height: 12),
+                      controls,
+                      const SizedBox(height: 12),
+                      devices,
+                      const SizedBox(height: 12),
+                      activity,
+                      const SizedBox(height: 12),
+                      if (compact)
+                        ExpansionTile(
+                          title: const Text('İstatistikler'),
+                          children: [summary],
+                        )
+                      else
+                        stats,
+                    ],
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+  );
 }

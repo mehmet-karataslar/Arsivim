@@ -1,3 +1,4 @@
+import '../widgets/document_editor/editor_navigation.dart';
 import '../widgets/common/workspace_layout.dart';
 import 'package:flutter/material.dart';
 import '../models/belge_modeli.dart';
@@ -105,7 +106,12 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
 
   Future<void> _add() async {
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const YeniBelgeEkleEkrani()),
+      MaterialPageRoute(
+        builder:
+            (_) => YeniBelgeEkleEkrani(
+              navigation: EditorNavigationScope.maybeOf(context),
+            ),
+      ),
     );
     if (changed == true && mounted) await _changed();
   }
@@ -124,7 +130,13 @@ class _BelgelerEkraniState extends State<BelgelerEkrani> {
         await service.belgePaylas(file, context);
       case HomeDocumentAction.edit:
         final changed = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (_) => BelgeDuzenleEkrani(belge: file)),
+          MaterialPageRoute(
+            builder:
+                (_) => BelgeDuzenleEkrani(
+                  belge: file,
+                  navigation: EditorNavigationScope.maybeOf(context),
+                ),
+          ),
         );
         if (changed != true || !mounted) return;
         await DocumentActivityService.record(file, 'edit');

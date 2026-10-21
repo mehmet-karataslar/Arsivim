@@ -31,7 +31,7 @@ Future<Database> testDb(String path) async {
   await db.execute(
     '''CREATE TABLE belgeler(id INTEGER PRIMARY KEY AUTOINCREMENT,
     dosya_adi TEXT, orijinal_dosya_adi TEXT, dosya_yolu TEXT, dosya_boyutu INTEGER,
-    dosya_tipi TEXT, dosya_hash TEXT UNIQUE, kisi_id INTEGER, kategori_id INTEGER,
+    dosya_tipi TEXT, dosya_hash TEXT UNIQUE, kisi_id INTEGER, kategori_ids TEXT, kisi_ids TEXT, kategori_id INTEGER,
     baslik TEXT, aciklama TEXT, etiketler TEXT, olusturma_tarihi TEXT,
     guncelleme_tarihi TEXT, son_erisim_tarihi TEXT, aktif INTEGER, senkron_durumu INTEGER)''',
   );

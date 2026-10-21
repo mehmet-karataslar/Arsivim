@@ -1,3 +1,4 @@
+import 'document_links.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -11,6 +12,7 @@ import '../models/belge_modeli.dart';
 import '../utils/kimlik_normalizasyonu.dart';
 
 class AktarimHatasi implements Exception {
+  String? kisiEvrenselId;
   final String kod;
   final String mesaj;
   final List<Map<String, dynamic>> adaylar;
@@ -20,6 +22,7 @@ class AktarimHatasi implements Exception {
     'kod': kod,
     'error': mesaj,
     'adaylar': adaylar,
+    if (kisiEvrenselId != null) 'kisi_evrensel_id': kisiEvrenselId,
   };
   @override
   String toString() => mesaj;
@@ -28,7 +31,7 @@ class AktarimHatasi implements Exception {
 /// PC ve mobil ayni protokolu ve ayni kayit kurallarini kullanir.
 /// Yerel sayisal kimlikler karsi cihaza birincil anahtar olarak yazilmaz.
 class GuvenliAktarimServisi {
-  static const surum = 2;
+  static const surum = 3;
   static const azamiMetadata = 256 * 1024;
   static const azamiReferans = 8 * 1024 * 1024;
   static const azamiDosya = 16 * 1024 * 1024 * 1024;
@@ -47,6 +50,7 @@ class GuvenliAktarimServisi {
       (await sha256.bind(file.openRead()).first).toString();
 
   Future<void> hazirla() async {
+    await DocumentLinks.prepare(db);
     await db.execute('''CREATE TABLE IF NOT EXISTS aktarim_kimlikleri (
       tur TEXT NOT NULL, yerel_id INTEGER NOT NULL, evrensel_id TEXT NOT NULL,
       PRIMARY KEY(tur, evrensel_id))''');
@@ -136,6 +140,8 @@ class GuvenliAktarimServisi {
           .convert(
             utf8.encode(
               _json({
+                if (paket.containsKey('baglantilar'))
+                  'baglantilar': paket['baglantilar'],
                 for (final key in ['belge', 'kisi', 'kategori', 'profil'])
                   key: paket[key],
               }),
@@ -164,41 +170,54 @@ class GuvenliAktarimServisi {
       'surum': surum,
       'belge': belgeMetadata(row),
     };
+    final extra = <String, List<Map<String, dynamic>>>{
+      'kisi': [],
+      'kategori': [],
+    };
     for (final tur in ['kisi', 'kategori']) {
-      final id = row['${tur}_id'];
-      if (id == null) {
-        paket[tur] = null;
-        continue;
+      final ids =
+          {
+            ...[row['${tur}_id']].whereType<int>(),
+            ...BelgeModeli.idsCoz(row['${tur}_ids']),
+          }.toList();
+      paket[tur] = null;
+      for (final id in ids) {
+        final rows = await tx.query(
+          tur == 'kisi' ? 'kisiler' : 'kategoriler',
+          where: 'id = ? AND aktif = 1',
+          whereArgs: [id],
+        );
+        if (rows.length != 1)
+          throw AktarimHatasi('BAGIMLILIK_YOK', '$tur kaydi eksik veya pasif.');
+        final kaynak = rows.single;
+        final alanlar =
+            tur == 'kisi'
+                ? [
+                  'ad',
+                  'soyad',
+                  'kullanici_adi',
+                  'olusturma_tarihi',
+                  'guncelleme_tarihi',
+                ]
+                : [
+                  'kategori_adi',
+                  'renk_kodu',
+                  'simge_kodu',
+                  'aciklama',
+                  'olusturma_tarihi',
+                ];
+        final ref = <String, dynamic>{
+          for (final k in alanlar) k: kaynak[k],
+          'evrensel_id': await _evrenselId(tx, tur, id),
+        };
+        if (paket[tur] == null) {
+          paket[tur] = ref;
+        } else {
+          extra[tur]!.add(ref);
+        }
       }
-      final rows = await tx.query(
-        tur == 'kisi' ? 'kisiler' : 'kategoriler',
-        where: 'id = ? AND aktif = 1',
-        whereArgs: [id],
-      );
-      if (rows.length != 1)
-        throw AktarimHatasi('BAGIMLILIK_YOK', '$tur kaydi eksik veya pasif.');
-      final kaynak = rows.single;
-      final alanlar =
-          tur == 'kisi'
-              ? [
-                'ad',
-                'soyad',
-                'kullanici_adi',
-                'olusturma_tarihi',
-                'guncelleme_tarihi',
-              ]
-              : [
-                'kategori_adi',
-                'renk_kodu',
-                'simge_kodu',
-                'aciklama',
-                'olusturma_tarihi',
-              ];
-      paket[tur] = {
-        for (final k in alanlar) k: kaynak[k],
-        'evrensel_id': await _evrenselId(tx, tur, id as int),
-      };
     }
+    if (extra.values.any((v) => v.isNotEmpty)) paket['baglantilar'] = extra;
     paket['metadata_hash'] = metadataHash(paket);
     paket['evrensel_belge_id'] = await _evrenselId(tx, 'belge', belgeId);
     paket['aktarim_id'] =
@@ -434,7 +453,7 @@ class GuvenliAktarimServisi {
   }
 
   static void dogrula(Map<String, dynamic> paket) {
-    if (paket['surum'] != surum)
+    if (![2, surum].contains(paket['surum']))
       throw AktarimHatasi(
         'SURUM',
         'Iki cihazi da guncelleyin. Aktarim surumu desteklenmiyor.',
@@ -528,6 +547,34 @@ class GuvenliAktarimServisi {
         }
         if (ref['aciklama'] != null)
           _metin(ref['aciklama'], 'kategori aciklama', bos: true, max: 65536);
+      }
+    }
+    if (paket.containsKey('baglantilar')) {
+      if (paket['surum'] != surum)
+        throw AktarimHatasi(
+          'SURUM',
+          'Çoklu bağlantı için iki cihazı da güncelleyin.',
+        );
+      final links = _map(paket['baglantilar'], 'baglantilar');
+      if (links.keys.any((k) => !['kisi', 'kategori'].contains(k)))
+        throw AktarimHatasi('SEMA', 'Bağlantı türü geçersiz.');
+      for (final kind in ['kisi', 'kategori']) {
+        final refs = links[kind];
+        if (refs is! List || refs.length > 100)
+          throw AktarimHatasi('SEMA', 'Bağlantı listesi geçersiz.');
+        final seen = <String>{
+          if (paket[kind] != null) paket[kind]['evrensel_id'] as String,
+        };
+        for (final ref in refs) {
+          final copy = Map<String, dynamic>.from(paket)..remove('baglantilar');
+          copy[kind] = ref;
+          copy['metadata_hash'] = metadataHash(copy);
+          copy['aktarim_id'] =
+              '${copy['evrensel_belge_id']}:${copy['metadata_hash']}';
+          dogrula(copy);
+          if (!seen.add(ref['evrensel_id'] as String))
+            throw AktarimHatasi('SEMA', 'Tekrarlı bağlantı.');
+        }
       }
     }
     if (paket['metadata_hash'] != metadataHash(paket))
@@ -695,11 +742,48 @@ class GuvenliAktarimServisi {
     return id;
   }
 
+  Future<Map<String, List<int>>> _baglantilariCoz(
+    DatabaseExecutor tx,
+    Map<String, dynamic> paket, {
+    required bool yaz,
+  }) async {
+    final result = <String, List<int>>{'kisi': [], 'kategori': []};
+    for (final kind in result.keys) {
+      final refs = [
+        if (paket[kind] != null) paket[kind],
+        ...?paket['baglantilar']?[kind] as List?,
+      ];
+      for (final ref in refs) {
+        final single = <String, dynamic>{kind: ref};
+        final choices = paket['hedef_kisi_secimleri'];
+        if (kind == 'kisi') {
+          single['hedef_kisi_id'] =
+              choices is Map ? choices[ref['evrensel_id']] : null;
+          if (ref == paket[kind])
+            single['hedef_kisi_id'] ??= paket['hedef_kisi_id'];
+        }
+        try {
+          final id =
+              kind == 'kisi'
+                  ? await _kisi(tx, single, yaz: yaz)
+                  : await _kategori(tx, single, yaz: yaz);
+          if (id != null) result[kind]!.add(id);
+        } on AktarimHatasi catch (error) {
+          if (kind == 'kisi')
+            error.kisiEvrenselId = ref['evrensel_id'] as String;
+          rethrow;
+        }
+      }
+    }
+    return result;
+  }
+
   Future<Map<String, dynamic>?> _mevcut(
     DatabaseExecutor tx,
     Map<String, dynamic> paket,
     int? kisi,
     int? kategori,
+    Map<String, List<int>> links,
   ) async {
     final b = _map(paket['belge'], 'belge');
     final kimlikler = await tx.query(
@@ -730,7 +814,12 @@ class GuvenliAktarimServisi {
         Map<String, dynamic>.from(b)
           ..remove('son_erisim_tarihi')
           ..remove('guncelleme_tarihi');
-    if (row['kisi_id'] != kisi ||
+    final model = BelgeModeli.fromMap(row);
+    bool same(List<int> a, List<int> b) =>
+        a.toSet().length == b.toSet().length && a.toSet().containsAll(b);
+    if (!same(model.tumKisiIds, links['kisi']!) ||
+        !same(model.tumKategoriIds, links['kategori']!) ||
+        row['kisi_id'] != kisi ||
         row['kategori_id'] != kategori ||
         _json(local) != _json(remote)) {
       throw AktarimHatasi(
@@ -754,9 +843,10 @@ class GuvenliAktarimServisi {
     dogrula(paket);
     await hazirla();
     return db.transaction((tx) async {
-      final kisi = await _kisi(tx, paket, yaz: false);
-      final kategori = await _kategori(tx, paket, yaz: false);
-      await _mevcut(tx, paket, kisi, kategori);
+      final links = await _baglantilariCoz(tx, paket, yaz: false);
+      final kisi = links['kisi']!.firstOrNull;
+      final kategori = links['kategori']!.firstOrNull;
+      await _mevcut(tx, paket, kisi, kategori, links);
       return {
         'success': true,
         'durum': 'hazir',
@@ -804,9 +894,10 @@ class GuvenliAktarimServisi {
       );
       await yetkiKontrol?.call();
       final sonuc = await db.transaction((tx) async {
-        final kisi = await _kisi(tx, paket, yaz: true);
-        final kategori = await _kategori(tx, paket, yaz: true);
-        final mevcut = await _mevcut(tx, paket, kisi, kategori);
+        final links = await _baglantilariCoz(tx, paket, yaz: true);
+        final kisi = links['kisi']!.firstOrNull;
+        final kategori = links['kategori']!.firstOrNull;
+        final mevcut = await _mevcut(tx, paket, kisi, kategori, links);
         int? belgeId = mevcut?['id'] as int?;
         if (mevcut == null) {
           belgeId = await tx.insert('belgeler', {
@@ -815,6 +906,8 @@ class GuvenliAktarimServisi {
             'dosya_yolu': hedef.path,
             'kisi_id': kisi,
             'kategori_id': kategori,
+            'kisi_ids': jsonEncode(links['kisi']),
+            'kategori_ids': jsonEncode(links['kategori']),
             'senkron_durumu': SenkronDurumu.SENKRONIZE.index,
           });
           if (kategori != null)

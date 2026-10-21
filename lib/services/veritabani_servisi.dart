@@ -1,3 +1,4 @@
+import 'document_links.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
@@ -75,6 +76,7 @@ class VeriTabaniServisi {
           print('🔓 Veritabanı açıldı: $path');
           // Veritabanı bütünlüğünü kontrol et
           await _checkDatabaseIntegrity(db);
+          await DocumentLinks.prepare(db);
         },
       );
 
@@ -127,6 +129,8 @@ class VeriTabaniServisi {
         dosya_tipi TEXT NOT NULL,
         dosya_hash TEXT UNIQUE NOT NULL,
         kategori_id INTEGER,
+        kategori_ids TEXT,
+        kisi_ids TEXT,
         kisi_id INTEGER,
         baslik TEXT,
         aciklama TEXT,
@@ -204,6 +208,7 @@ class VeriTabaniServisi {
 
     // İndeksler
     await _createIndexes(db);
+    await DocumentLinks.prepare(db);
 
     // Varsayılan kategorileri ekle
     await _insertDefaultCategories(db);
@@ -661,6 +666,8 @@ class VeriTabaniServisi {
         dosya_tipi TEXT NOT NULL,
         dosya_hash TEXT UNIQUE NOT NULL,
         kategori_id INTEGER,
+        kategori_ids TEXT,
+        kisi_ids TEXT,
         kisi_id INTEGER,
         baslik TEXT,
         aciklama TEXT,
@@ -1031,7 +1038,7 @@ class VeriTabaniServisi {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
-      where: 'kategori_id = ? AND aktif = ?',
+      where: '${DocumentLinks.contains('kategori', '?', '')} AND aktif = ?',
       whereArgs: [kategoriId, 1],
       orderBy: 'guncelleme_tarihi DESC',
       limit: limit,
@@ -1054,7 +1061,8 @@ class VeriTabaniServisi {
     final db = await database;
 
     // WHERE clause'u dinamik olarak oluştur
-    String whereClause = 'b.kategori_id = ? AND b.aktif = 1';
+    String whereClause =
+        '${DocumentLinks.contains('kategori', '?')} AND b.aktif = 1';
     List<dynamic> parametreler = [kategoriId];
 
     // Tarih filtrelemesi ekle
@@ -1265,13 +1273,13 @@ class VeriTabaniServisi {
 
     // Kategori filtresi
     if (kategoriId != null) {
-      kosullar.add('b.kategori_id = ?');
+      kosullar.add(DocumentLinks.contains('kategori', '?'));
       parametreler.add(kategoriId);
     }
 
     // Kişi filtresi
     if (kisiId != null) {
-      kosullar.add('b.kisi_id = ?');
+      kosullar.add(DocumentLinks.contains('kisi', '?'));
       parametreler.add(kisiId);
     }
 
@@ -1486,7 +1494,7 @@ class VeriTabaniServisi {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
-      where: 'kisi_id = ? AND aktif = ?',
+      where: '${DocumentLinks.contains('kisi', '?', '')} AND aktif = ?',
       whereArgs: [kisiId, 1],
       orderBy: 'guncelleme_tarihi DESC',
     );
@@ -1624,55 +1632,46 @@ class VeriTabaniServisi {
   // Kategoriye ait kişileri sil
   Future<int> kategoriKisileriSil(int kategoriId) async {
     final db = await database;
-
-    // Önce kategoriye ait belgelerdeki kişi bağlantılarını al
-    final belgelerResult = await db.query(
-      'belgeler',
-      columns: ['kisi_id'],
-      where: 'kategori_id = ? AND aktif = ? AND kisi_id IS NOT NULL',
-      whereArgs: [kategoriId, 1],
-    );
-
-    // Kategoriye ait belgelerin kişi bağlantılarını kaldır
-    await db.update(
-      'belgeler',
-      {'kisi_id': null},
-      where: 'kategori_id = ? AND aktif = ?',
-      whereArgs: [kategoriId, 1],
-    );
-
-    // Başka belgelerde kullanılmayan kişileri sil
-    final kisiIdleri =
-        belgelerResult
-            .map((e) => e['kisi_id'] as int?)
-            .where((id) => id != null)
-            .toSet();
-
-    int silinenKisiSayisi = 0;
-    for (int? kisiId in kisiIdleri) {
-      if (kisiId != null) {
-        // Bu kişinin başka belgelerde kullanılıp kullanılmadığını kontrol et
-        final kullaniliyorMu = await db.query(
+    return db.transaction((tx) async {
+      final docs = await tx.query(
+        'belgeler',
+        where: '${DocumentLinks.contains('kategori', '?', '')} AND aktif=1',
+        whereArgs: [kategoriId],
+      );
+      final people = <int>{};
+      for (final row in docs) {
+        people.addAll(BelgeModeli.fromMap(row).tumKisiIds);
+      }
+      await tx.update(
+        'belgeler',
+        {
+          'kisi_id': null,
+          'kisi_ids': '[]',
+          'guncelleme_tarihi': DateTime.now().toIso8601String(),
+          'senkron_durumu': SenkronDurumu.YEREL_DEGISIM.index,
+        },
+        where: '${DocumentLinks.contains('kategori', '?', '')} AND aktif=1',
+        whereArgs: [kategoriId],
+      );
+      var count = 0;
+      for (final person in people) {
+        final used = await tx.query(
           'belgeler',
-          where: 'kisi_id = ? AND aktif = ?',
-          whereArgs: [kisiId, 1],
+          columns: ['id'],
+          where: '${DocumentLinks.contains('kisi', '?', '')} AND aktif=1',
+          whereArgs: [person],
           limit: 1,
         );
-
-        if (kullaniliyorMu.isEmpty) {
-          // Kişi başka yerde kullanılmıyorsa sil
-          await db.update(
+        if (used.isEmpty)
+          count += await tx.update(
             'kisiler',
             {'aktif': 0},
-            where: 'id = ?',
-            whereArgs: [kisiId],
+            where: 'id=?',
+            whereArgs: [person],
           );
-          silinenKisiSayisi++;
-        }
       }
-    }
-
-    return silinenKisiSayisi;
+      return count;
+    });
   }
 
   // Kategoriye ait belgeleri sil
@@ -1681,7 +1680,7 @@ class VeriTabaniServisi {
     return await db.update(
       'belgeler',
       {'aktif': 0},
-      where: 'kategori_id = ? AND aktif = ?',
+      where: '${DocumentLinks.contains('kategori', '?', '')} AND aktif = ?',
       whereArgs: [kategoriId, 1],
     );
   }
@@ -1703,10 +1702,10 @@ class VeriTabaniServisi {
   Future<Map<int, int>> kategoriBelgeSayilari() async {
     final db = await database;
     final List<Map<String, dynamic>> result = await db.rawQuery('''
-      SELECT kategori_id, COUNT(*) as belge_sayisi
-      FROM belgeler
-      WHERE aktif = 1
-      GROUP BY kategori_id
+      SELECT k.id AS kategori_id, COUNT(b.id) as belge_sayisi
+      FROM kategoriler k JOIN belgeler b ON ${DocumentLinks.contains('kategori', 'k.id')}
+      WHERE b.aktif = 1 AND k.aktif=1
+      GROUP BY k.id
     ''');
 
     return {
@@ -1853,7 +1852,7 @@ class VeriTabaniServisi {
         k.kategori_adi,
         COUNT(b.id) as belge_sayisi
       FROM kategoriler k
-      LEFT JOIN belgeler b ON k.id = b.kategori_id AND b.aktif = 1
+      LEFT JOIN belgeler b ON ${DocumentLinks.contains('kategori', 'k.id')} AND b.aktif = 1
       WHERE k.aktif = 1
       GROUP BY k.id, k.kategori_adi
       ORDER BY belge_sayisi DESC
@@ -2077,7 +2076,7 @@ class VeriTabaniServisi {
   Future<int> kisiBelgeSayisi(int kisiId) async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM belgeler WHERE kisi_id = ? AND aktif = ?',
+      'SELECT COUNT(*) as count FROM belgeler WHERE ${DocumentLinks.contains('kisi', '?', '')} AND aktif = ?',
       [kisiId, 1],
     );
     return result.first['count'] as int;
@@ -2088,7 +2087,7 @@ class VeriTabaniServisi {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'belgeler',
-      where: 'kisi_id = ? AND aktif = ?',
+      where: '${DocumentLinks.contains('kisi', '?', '')} AND aktif = ?',
       whereArgs: [kisiId, 1],
       orderBy: 'guncelleme_tarihi DESC',
     );

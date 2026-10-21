@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -161,6 +162,10 @@ class HttpSunucuServisi {
             'Aktarim tamamlanamadi. Disk, izin ve baglanti durumunu kontrol edin.',
       }, status: 500);
     } finally {
+      if (request.uri.path == '/sync/v2/file' ||
+          request.uri.path == '/sync/v2/entity') {
+        dataChanges.value++;
+      }
       final remaining = (_aktifIstekler[ip] ?? 1) - 1;
       if (remaining == 0) {
         _aktifIstekler.remove(ip);
@@ -188,6 +193,7 @@ class HttpSunucuServisi {
   Function(String)? onDeviceConnected;
   Function(String, Map<String, dynamic>)? onDeviceDisconnected;
 
+  final ValueNotifier<int> dataChanges = ValueNotifier(0);
   DateTime? startedAt;
   bool get calisiyorMu => _calisiyorMu;
   String? get cihazId => _cihazId;
@@ -271,6 +277,7 @@ class HttpSunucuServisi {
 
       _calisiyorMu = true;
       startedAt = DateTime.now();
+      dataChanges.value++;
       print('✅ Sunucu durumu: $_calisiyorMu');
 
       // Cleanup timer başlat
@@ -424,6 +431,7 @@ class HttpSunucuServisi {
 
       _calisiyorMu = false;
       startedAt = null;
+      dataChanges.value++;
       _bagliCihazlar.clear();
       eslesmisAnahtarlar.clear();
       hesapEslesmesi.temizle();

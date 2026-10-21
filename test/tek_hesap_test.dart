@@ -323,6 +323,7 @@ void main() {
     var now = DateTime.now();
     final host = HesapEslesmeServisi(pcAuth, saat: () => now);
     var ticket = await host.biletOlustur();
+    expect(host.biletGecerli(ticket['pair_ticket'] as String), true);
     final remote = await phoneAuth.hesapTanitim();
     Map<String, dynamic> body() => {
       'account_version': 1,
@@ -330,12 +331,14 @@ void main() {
       'account': remote,
     };
     now = now.add(const Duration(minutes: 6));
+    expect(host.biletGecerli(ticket['pair_ticket'] as String), false);
     await expectLater(
       host.kabulEt('phone', body()),
       throwsA(isA<HesapHatasi>()),
     );
     ticket = await host.biletOlustur();
     await host.kabulEt('phone', body());
+    expect(host.biletGecerli(ticket['pair_ticket'] as String), false);
     await expectLater(
       host.kabulEt('phone', body()),
       throwsA(isA<HesapHatasi>()),

@@ -1,3 +1,4 @@
+import 'workspace_layout.dart';
 import 'package:flutter/material.dart';
 import '../../models/ana_sayfa_ozeti.dart';
 import '../home/home_storage.dart';
@@ -86,7 +87,8 @@ class AppSidebar extends StatelessWidget {
                     (2, 'Kategoriler', Icons.category_outlined),
                     (4, 'Kişiler', Icons.people_outline),
                     (3, 'Senkronizasyon', Icons.sync),
-                    (6, 'Yedekleme', Icons.cloud_outlined),
+                    if (WorkspaceLayout.backupAvailable(context))
+                      (6, 'Yedekleme', Icons.cloud_outlined),
                   ])
                     _item(context, item.$1, item.$2, item.$3),
                   const Padding(

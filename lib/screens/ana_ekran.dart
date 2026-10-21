@@ -1,3 +1,5 @@
+import '../widgets/common/workspace_layout.dart';
+import '../widgets/document_editor/editor_navigation.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/ana_sayfa_ozeti.dart';
@@ -85,7 +87,18 @@ class _AnaEkranState extends State<AnaEkran> {
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_selectedTab == 6 && !WorkspaceLayout.backupAvailable(context)) {
+      _selectedTab = 0;
+    }
+  }
+
   void _navigate(int index) {
+    if (index == 6 && !WorkspaceLayout.backupAvailable(context)) {
+      return;
+    }
     if (index == _selectedTab) return;
     setState(() {
       _selectedTab = index;
@@ -106,6 +119,13 @@ class _AnaEkranState extends State<AnaEkran> {
         _selectedTab = 1;
       });
 
+  EditorNavigation get _editorNavigation => EditorNavigation(
+    onSelected: _navigate,
+    onStorage: _showStorage,
+    onLogout: _logout,
+    summary: _summary,
+  );
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -122,66 +142,69 @@ class _AnaEkranState extends State<AnaEkran> {
         onStorage: _showStorage,
         onLogout: _logout,
       );
-      return Scaffold(
-        key: _scaffoldKey,
-        appBar:
-            desktop
-                ? null
-                : AppBar(
-                  automaticallyImplyLeading: false,
-                  centerTitle: true,
-                  title: Text(
-                    AppNavigationBar.labelFor(_selectedTab),
-                    key: const ValueKey('mobile-page-title'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  actions: [
-                    PopupMenuButton<String>(
-                      tooltip: 'Oturum işlemleri',
-                      onSelected: (_) => _logout(),
-                      itemBuilder:
-                          (_) => [
-                            const PopupMenuItem(
-                              value: 'logout',
-                              child: Text('Çıkış yap'),
-                            ),
-                          ],
-                    ),
-                  ],
-                ),
-        bottomNavigationBar:
-            desktop
-                ? null
-                : AppNavigationBar(
-                  selectedIndex: _selectedTab,
-                  onSelected: _navigate,
-                ),
-        body: SafeArea(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (desktop) sidebar(),
-              Expanded(
-                key: const ValueKey('workspace'),
-                child: Column(
-                  children: [
-                    if (desktop && ![0, 1, 2, 3, 4].contains(_selectedTab))
-                      AppHeader(
-                        onSearch: () => _navigate(1),
-                        onRefresh: _refresh,
-                        onLogout: _logout,
-                        refreshing: _loading,
+      return EditorNavigationScope(
+        navigation: _editorNavigation,
+        child: Scaffold(
+          key: _scaffoldKey,
+          appBar:
+              desktop
+                  ? null
+                  : AppBar(
+                    automaticallyImplyLeading: false,
+                    centerTitle: true,
+                    title: Text(
+                      AppNavigationBar.labelFor(_selectedTab),
+                      key: const ValueKey('mobile-page-title'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                       ),
-                    Expanded(child: _tabContent(showPageHeading: desktop)),
-                  ],
+                    ),
+                    actions: [
+                      PopupMenuButton<String>(
+                        tooltip: 'Oturum işlemleri',
+                        onSelected: (_) => _logout(),
+                        itemBuilder:
+                            (_) => [
+                              const PopupMenuItem(
+                                value: 'logout',
+                                child: Text('Çıkış yap'),
+                              ),
+                            ],
+                      ),
+                    ],
+                  ),
+          bottomNavigationBar:
+              desktop
+                  ? null
+                  : AppNavigationBar(
+                    selectedIndex: _selectedTab,
+                    onSelected: _navigate,
+                  ),
+          body: SafeArea(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (desktop) sidebar(),
+                Expanded(
+                  key: const ValueKey('workspace'),
+                  child: Column(
+                    children: [
+                      if (desktop && ![0, 1, 2, 3, 4].contains(_selectedTab))
+                        AppHeader(
+                          onSearch: () => _navigate(1),
+                          onRefresh: _refresh,
+                          onLogout: _logout,
+                          refreshing: _loading,
+                        ),
+                      Expanded(child: _tabContent(showPageHeading: desktop)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -245,7 +268,9 @@ class _AnaEkranState extends State<AnaEkran> {
 
   Future<void> _addDocument() async {
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const YeniBelgeEkleEkrani()),
+      MaterialPageRoute(
+        builder: (_) => YeniBelgeEkleEkrani(navigation: _editorNavigation),
+      ),
     );
     if (changed == true && mounted) await _refresh();
   }
@@ -263,7 +288,11 @@ class _AnaEkranState extends State<AnaEkran> {
       case HomeDocumentAction.edit:
         final changed = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
-            builder: (_) => BelgeDuzenleEkrani(belge: document),
+            builder:
+                (_) => BelgeDuzenleEkrani(
+                  belge: document,
+                  navigation: _editorNavigation,
+                ),
           ),
         );
         if (changed == true && mounted) await _refresh();
