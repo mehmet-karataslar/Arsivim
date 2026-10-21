@@ -54,6 +54,7 @@ dependencies:
   # QR Code (senkronizasyon için)
   qr_flutter: ^4.1.0
   simple_barcode_scanner: ^0.6.0
+  mobile_scanner: 7.4.2
 
   # İzinler (Windows tarayıcı için gerekli)
   permission_handler: ^12.0.3

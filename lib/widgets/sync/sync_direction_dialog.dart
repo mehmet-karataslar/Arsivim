@@ -79,9 +79,9 @@ class _SyncDirectionDialogState extends State<SyncDirectionDialog> {
                           Text(state.error.toString()),
                           TextButton.icon(
                             onPressed:
-                                () => setState(
-                                  () => _comparison = widget.compare(),
-                                ),
+                                () => setState(() {
+                                  _comparison = widget.compare();
+                                }),
                             icon: const Icon(Icons.refresh),
                             label: const Text('Yeniden dene'),
                           ),
@@ -354,8 +354,9 @@ class _DocumentRow extends StatelessWidget {
   String _size(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024)
+    if (bytes < 1024 * 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 

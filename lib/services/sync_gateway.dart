@@ -46,6 +46,71 @@ class SyncGateway {
           .toList();
   Future<bool> reconnect(String trustId, String address) =>
       manager.taninanCihazaBaglan(trustId, adres: address);
+
+  Future<List<SyncComparisonTarget>> comparisonTargets() async {
+    final saved = await trustedDevices();
+    final targets = <String, SyncComparisonTarget>{};
+    for (final row in saved) {
+      final id = row['device_id'];
+      final trust = row['trust_id'];
+      if (id is! String || id.isEmpty || trust is! String || trust.isEmpty)
+        continue;
+      targets[id] = SyncComparisonTarget(
+        trustId: trust,
+        device: SyncDevice(
+          id: id,
+          name: row['device_name'] as String? ?? 'Tanınan cihaz',
+          ip: row['last_ip'] as String? ?? '',
+          platform: row['platform'] as String? ?? '',
+        ),
+      );
+    }
+    for (final device in devices.where((device) => device.canSend)) {
+      targets[device.id] = SyncComparisonTarget(
+        device: device,
+        trustId: targets[device.id]?.trustId,
+        connected: true,
+      );
+    }
+    return targets.values.toList();
+  }
+
+  Future<SyncDevice> prepareComparison(SyncComparisonTarget target) async {
+    if (transferring)
+      throw StateError('Aktarım devam ediyor. Bitmesini bekleyin.');
+    SyncDevice? current() =>
+        devices
+            .where((device) => device.id == target.device.id && device.canSend)
+            .firstOrNull;
+    final connected = current();
+    if (connected != null) return connected;
+    final trustId = target.trustId;
+    if (trustId == null)
+      throw StateError(
+        'Cihazın bağlantısı kesildi. QR koduyla yeniden eşleştirin.',
+      );
+    if (target.device.ip.isEmpty)
+      throw StateError(
+        'Cihazın ağ adresi kayıtlı değil. Tanınan cihazlar bölümünden adresini güncelleyin.',
+      );
+    if (!await reconnect(trustId, target.device.ip)) {
+      throw StateError(
+        connectionError ??
+            'Cihaza bağlanılamadı. Karşı cihazda uygulama ve sunucu açık olmalı. Tanınan cihazlar bölümünden ağ adresini kontrol edin.',
+      );
+    }
+    final result = current();
+    if (result == null)
+      throw StateError(
+        'Beklenen cihaz bağlantısı doğrulanamadı. Yeniden deneyin.',
+      );
+    if (transferring)
+      throw StateError(
+        'Aktarım başladı. Karşılaştırmadan önce bitmesini bekleyin.',
+      );
+    return result;
+  }
+
   String? get connectionError => manager.sonBaglantiHatasi;
   Future<void> forget(String trustId) => manager.cihaziUnut(trustId);
   Future<SyncComparison> compare(SyncDevice device) =>

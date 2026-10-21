@@ -45,6 +45,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   bool _qrOpen = false;
   bool _directionOpen = false;
   bool _trustedOpen = false;
+  bool _findingDifferences = false;
+  String _differenceStatus = '';
   final _seenConnections = <String>{};
   final _pendingConnections = <String>[];
   BuildContext? _qrDialogContext;
@@ -74,6 +76,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
         _qrOpen ||
         _directionOpen ||
         _trustedOpen ||
+        _findingDifferences ||
         _data.transferring ||
         _data.gateway.transferring)
       return;
@@ -112,7 +115,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _trustedDevices() async {
-    if (_trustedOpen || _directionOpen) return;
+    if (_trustedOpen || _directionOpen || _findingDifferences) return;
     _trustedOpen = true;
     try {
       await showDialog<void>(
@@ -122,6 +125,94 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     } finally {
       _trustedOpen = false;
       if (mounted) _offerNextConnection();
+    }
+  }
+
+  Future<void> _showDifferences() async {
+    if (_findingDifferences ||
+        _directionOpen ||
+        _trustedOpen ||
+        _pairing ||
+        _qrOpen ||
+        _data.busy ||
+        _data.transferring ||
+        _data.gateway.transferring)
+      return;
+    setState(() {
+      _findingDifferences = true;
+      _differenceStatus = 'Tanınan cihazlar kontrol ediliyor…';
+    });
+    try {
+      final targets = await _data.gateway.comparisonTargets();
+      if (!mounted) return;
+      if (targets.isEmpty) {
+        _message(
+          'Tanınan cihaz yok. Önce telefon ve bilgisayarı QR koduyla bir kez eşleştirin.',
+        );
+        return;
+      }
+      final target =
+          targets.length == 1
+              ? targets.single
+              : await showDialog<SyncComparisonTarget>(
+                context: context,
+                builder:
+                    (ctx) => AlertDialog(
+                      title: const Text('Karşılaştırılacak cihaz'),
+                      content: SizedBox(
+                        width: 480,
+                        height: MediaQuery.sizeOf(ctx).height * .5,
+                        child: ListView.builder(
+                          itemCount: targets.length,
+                          itemBuilder: (_, index) {
+                            final target = targets[index];
+                            return ListTile(
+                              key: ValueKey(
+                                'sync-difference-target-${target.device.id}',
+                              ),
+                              leading: Icon(
+                                target.connected ? Icons.link : Icons.devices,
+                              ),
+                              title: Text(target.device.name),
+                              subtitle: Text(
+                                '${target.device.ip}\n${target.connected ? 'Bağlı' : 'Tanınan cihaz'}',
+                              ),
+                              onTap: () => Navigator.pop(ctx, target),
+                            );
+                          },
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Vazgeç'),
+                        ),
+                      ],
+                    ),
+              );
+      if (!mounted || target == null) return;
+      setState(
+        () =>
+            _differenceStatus =
+                '${target.device.name} bağlantısı kontrol ediliyor…',
+      );
+      final device = await _data.gateway.prepareComparison(target);
+      if (!mounted) return;
+      // The explicit comparison owns the connection event, avoiding a second dialog.
+      _pendingConnections.removeWhere((id) => id == device.id);
+      _seenConnections.add(_connectionKey(device));
+      await _compare(device);
+    } catch (error) {
+      _message(
+        error is StateError
+            ? error.message.toString()
+            : 'Farklar alınamadı. Bağlantıyı kontrol edip yeniden deneyin.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _findingDifferences = false);
+        _offerNextConnection();
+      }
     }
   }
 
@@ -173,7 +264,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _showQr() async {
-    if (_pairing || _qrOpen || _data.busy) return;
+    if (_pairing || _qrOpen || _data.busy || _findingDifferences) return;
     setState(() => _pairing = true);
     try {
       var code = _qr;
@@ -242,6 +333,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _scan() async {
+    if (_findingDifferences) return;
     final code = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder:
@@ -257,7 +349,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       _message(
         success
             ? 'Cihaz bağlandı.'
-            : _data.gateway.connectionError ?? 'Cihaz bağlanamadı. Aynı ağı ve güncel QR kodunu kontrol edin.',
+            : _data.gateway.connectionError ??
+                'Cihaz bağlanamadı. Aynı ağı ve güncel QR kodunu kontrol edin.',
       );
       await _data.refresh();
     } catch (_) {
@@ -266,6 +359,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _transfer(SyncMode mode) async {
+    if (_findingDifferences) return;
     final targets = _data.targets(mode);
     if (targets.isEmpty) return;
     final approved = await showDialog<bool>(
@@ -296,6 +390,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
   }
 
   Future<void> _disconnect(SyncDevice device) async {
+    if (_findingDifferences) return;
     final approved = await showDialog<bool>(
       context: context,
       builder:
@@ -357,7 +452,10 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
             final serverButton = FilledButton.icon(
               key: const ValueKey('sync-server-button'),
               onPressed:
-                  _data.busy || _data.transferring || _data.gateway.transferring
+                  _data.busy ||
+                          _data.transferring ||
+                          _data.gateway.transferring ||
+                          _findingDifferences
                       ? null
                       : _pairing
                       ? null
@@ -387,6 +485,24 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               decoration: const InputDecoration(
                 hintText: 'Cihaz adı veya IP ara…',
                 prefixIcon: Icon(Icons.search),
+              ),
+            );
+            final differencesButton = OutlinedButton.icon(
+              key: const ValueKey('sync-show-differences'),
+              onPressed:
+                  _findingDifferences ||
+                          _pairing ||
+                          _qrOpen ||
+                          _directionOpen ||
+                          _trustedOpen ||
+                          _data.busy ||
+                          _data.transferring ||
+                          _data.gateway.transferring
+                      ? null
+                      : _showDifferences,
+              icon: const Icon(Icons.compare_arrows),
+              label: Text(
+                _findingDifferences ? 'Kontrol ediliyor…' : 'Farkları gör',
               ),
             );
             final heading = Column(
@@ -422,6 +538,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                           icon: const Icon(Icons.refresh),
                         ),
                         const SizedBox(width: 10),
+                        differencesButton,
+                        const SizedBox(width: 10),
                         serverButton,
                       ],
                     )
@@ -446,6 +564,8 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                               ),
                             ],
                           ),
+                          const SizedBox(height: 10),
+                          differencesButton,
                           const SizedBox(height: 10),
                           serverButton,
                         ],
@@ -493,9 +613,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
               controller: _data,
               qrData: _qr != null && _data.gateway.isQrValid(_qr!) ? _qr : null,
               onQr: _showQr,
-              pairing: _pairing || _qrOpen,
+              pairing: _pairing || _qrOpen || _findingDifferences,
               onDisconnect: _disconnect,
-              onCompare: _compare,
+              onCompare: _findingDifferences ? null : _compare,
               onTrusted: _trustedDevices,
               onScan: Platform.isAndroid || Platform.isIOS ? _scan : null,
             );
@@ -516,8 +636,13 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
                   children: [
                     toolbar,
                     const SizedBox(height: 18),
-                    if (_data.loading || _pairing)
+                    if (_data.loading || _pairing || _findingDifferences)
                       const LinearProgressIndicator(),
+                    if (_findingDifferences)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(_differenceStatus),
+                      ),
                     if (_data.error != null)
                       Padding(
                         padding: const EdgeInsets.all(12),

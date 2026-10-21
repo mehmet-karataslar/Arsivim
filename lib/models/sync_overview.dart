@@ -47,3 +47,14 @@ class SyncDevice {
 }
 
 enum SyncMode { selected, pending, all }
+
+class SyncComparisonTarget {
+  const SyncComparisonTarget({
+    required this.device,
+    this.trustId,
+    this.connected = false,
+  });
+  final SyncDevice device;
+  final String? trustId;
+  final bool connected;
+}

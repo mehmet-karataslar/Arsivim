@@ -187,6 +187,46 @@ void main() {
   });
 
   test(
+    'display details include all people and categories without credentials or business writes',
+    () async {
+      await seedLinks();
+      final before = await source.query('belgeler');
+      final item = _items(await local.page()).single;
+      expect(item['displayVersion'], 1);
+      expect(item['createdAt'], '2020-01-02T00:00:00.000Z');
+      expect(item['updatedAt'], '2021-01-02T00:00:00.000Z');
+      expect((item['links']['kisi'] as List).map((ref) => ref['name']), [
+        'Ali 1 Yilmaz',
+        'Ali 2 Yilmaz',
+        'Ali 3 Yilmaz',
+      ]);
+      expect((item['links']['kategori'] as List).map((ref) => ref['name']), [
+        'Category 1',
+        'Category 2',
+        'Category 3',
+      ]);
+      expect(jsonEncode(item), isNot(contains('NEVER-EXPOSE-THIS')));
+      expect(jsonEncode(item), isNot(contains('sifre')));
+      expect(await source.query('belgeler'), before);
+
+      // Old peers omit display fields; labels do not change matching decisions.
+      final legacy =
+          _copy(item)
+            ..remove('displayVersion')
+            ..remove('createdAt')
+            ..remove('updatedAt');
+      for (final refs in (legacy['links'] as Map).values) {
+        for (final ref in refs as List) {
+          (ref as Map).remove('name');
+        }
+      }
+      final result = AktarimEnvanterServisi.compare([item], [legacy]);
+      expect(result['same'], 1);
+      expect(result['conflicts'], isEmpty);
+    },
+  );
+
+  test(
     '1205 documents: keyset pagination, no file reads or business writes',
     () async {
       final batch = source.batch();
