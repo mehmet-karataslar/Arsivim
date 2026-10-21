@@ -184,12 +184,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(platform.flashes, 1);
       expect(find.byTooltip('Feneri kapat'), findsOneWidget);
-      await tester.binding.handleAppLifecycleStateChanged(
+      tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.paused,
       );
       await tester.pumpAndSettle();
       expect(platform.stops, greaterThan(0));
-      await tester.binding.handleAppLifecycleStateChanged(
+      tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.resumed,
       );
       await tester.pumpAndSettle();
@@ -221,10 +221,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Kamera izni gerekli'), findsOneWidget);
       expect(find.text('Ayarları aç'), findsOneWidget);
-      await tester.binding.handleAppLifecycleStateChanged(
+      tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.inactive,
       );
-      await tester.binding.handleAppLifecycleStateChanged(
+      tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.resumed,
       );
       await tester.pumpAndSettle();
