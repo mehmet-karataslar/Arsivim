@@ -85,6 +85,10 @@ class AktarimEnvanterServisi {
             links[kind]!.add({
               'ids': await _aliases(tx, kind, ref['evrensel_id'] as String),
               'signature': _hash(business),
+              'name':
+                  kind == 'kisi'
+                      ? '${ref['ad']} ${ref['soyad']}'.trim()
+                      : ref['kategori_adi'],
             });
           }
           // Primary link is significant. Additional links are an unordered
@@ -108,6 +112,9 @@ class AktarimEnvanterServisi {
           'size': packet['belge']['dosya_boyutu'],
           'title': packet['belge']['baslik'],
           'fileName': packet['belge']['orijinal_dosya_adi'],
+          'displayVersion': 1,
+          'createdAt': packet['belge']['olusturma_tarihi'],
+          'updatedAt': packet['belge']['guncelleme_tarihi'],
           'links': links,
         };
       });

@@ -674,7 +674,10 @@ class SenkronizasyonYoneticiServisi {
         },
       );
       asama = 'Karşı cihazın oturum onayı';
-      if (result['success'] == false) throw HesapHatasi(result['error'] as String? ?? 'Cihaz oturumu reddedildi.');
+      if (result['success'] == false)
+        throw HesapHatasi(
+          result['error'] as String? ?? 'Cihaz oturumu reddedildi.',
+        );
       final token = result['transfer_token'];
       if (result['success'] != true ||
           result['trust_version'] != 1 ||
@@ -974,23 +977,10 @@ class SenkronizasyonYoneticiServisi {
     final local = await read(false);
     final remote = await read(true);
     final compared = AktarimEnvanterServisi.compare(local, remote);
-    final titles = {
-      for (final item in local) item['id']: item['title'] ?? item['fileName'],
-    };
-    final remoteTitles = {
-      for (final item in remote) item['id']: item['title'] ?? item['fileName'],
-    };
-    return SyncComparison(
-      sendIds: List<int>.from(compared['localNewIds'] as List),
-      receiveIds: List<int>.from(compared['remoteNewIds'] as List),
-      same: compared['same'] as int,
-      conflicts: [
-        for (final conflict in compared['conflicts'] as List)
-          {
-            ...(conflict['localIds'] as List).map((id) => titles[id]),
-            ...(conflict['remoteIds'] as List).map((id) => remoteTitles[id]),
-          }.whereType<String>().join(', '),
-      ],
+    return SyncComparison.fromInventoryResult(
+      local: local,
+      remote: remote,
+      result: compared,
     );
   }
 

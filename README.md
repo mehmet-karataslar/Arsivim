@@ -101,9 +101,9 @@ doğrular; gerçek cihazda kare süresi ölçümü yerine geçmez.
 
 ### Referans tasarımlar ve mobil yerleşim
 
-#### Sayfa envanteri ve tasarım durumu — 21 Ekim 2026
+#### Sayfa envanteri ve tasarım durumu — 22 Ekim 2026
 
-Envanterde 18 sayfa girişi bulunuyor. Ekleme ve düzenleme girişleri ortak
+Envanterde 20 sayfa girişi bulunuyor. Ekleme ve düzenleme girişleri ortak
 `DocumentEditorScreen` ekranını kullanıyor. Ekleme/düzenleme modları ve ekran içi
 iletişim kutuları ayrı sayfa olarak sayılmadı. Yeni sayfanın ayrıntılı tasarımına
 kullanıcının seçimiyle geçilir; ortak mobil başlık ve gezinme düzeltmeleri tüm
@@ -122,7 +122,9 @@ ana sekmelere uygulanır.
 | Belge düzenle | `lib/screens/belge_duzenle_ekrani.dart` | Ortak form, mevcut dosyayı koruma ve çoklu bağlantılar uygulandı |
 | Kişi ekle / düzenle | `lib/screens/kisi_ekle_ekrani.dart` | İki mod aynı modüler form; mobil ve masaüstü güncellendi |
 | Kişinin belgeleri | `lib/screens/kisi_belgeleri_ekrani.dart` | Çağıran ekran kalmadı; Kişiler artık ortak Belgeler sayfasını kişi filtresiyle açıyor. Eski kod korunuyor |
-| Açılış | `lib/screens/splash_screen.dart` | Tema renkleri bağlı; tam tasarım denetimi bekliyor |
+| Açılış | `lib/screens/splash_screen.dart` | Yalnızca ilk kullanımda; sade tema uyumlu karşılama, sonraki açılışlarda doğrudan oturum yönlendirmesi |
+| Tarama kontrolü | `lib/screens/scan_review_screen.dart` | Sayfa ekleme, sıralama, döndürme, silme ve tek PDF oluşturma uygulandı |
+| Tarama önizlemesi | `lib/screens/scan_preview_screen.dart` | Yakınlaştırma ve sayfa geçişleri uygulandı |
 | Giriş | `lib/screens/auth/login_screen.dart` | Bekliyor |
 | Kayıt | `lib/screens/auth/register_screen.dart` | Bekliyor |
 | QR bağlantı | `lib/widgets/qr_generator_widget.dart` (`QRConnectionScreen`) | Çağıran ekran kalmadı; Senkronizasyon kendi süre kontrollü QR panelini ve büyütme penceresini kullanıyor. Eski kod korunuyor |
@@ -130,8 +132,8 @@ ana sekmelere uygulanır.
 | Belge tarayıcı | `lib/screens/tarayici_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
 | Senkron belgeler | `lib/screens/senkron_belgeler_ekrani.dart` | Kod var; `lib/` içinde ekranı açan çağrı bulunamadı |
 
-Güncel ayrım: 7 ana sayfa ve 2 belge formunun tasarımı yenilendi, 5 ekranın ayrıntılı tasarımı
-bekliyor. Kalan 4 eski ekran sınıfını açan bir çağrı bulunmuyor; bunlar aktif
+Güncel ayrım: 7 ana sayfa, 2 belge formu, kişi formu, açılış ve 2 tarama ekranı
+güncellendi. Giriş, Kayıt ve QR tarayıcı olmak üzere 3 ekranın ayrıntılı tasarımı bekliyor. Kalan 4 eski ekran sınıfını açan bir çağrı bulunmuyor; bunlar aktif
 ekranlarla aynı iş listesinde değerlendirilmemeli. Yeni ekran eklenmeden veya
 eski kod kaldırılmadan önce kullanım kararı verilmelidir.
 
@@ -839,3 +841,16 @@ Eski sürümden kalan derleme çıktılarında `DesktopDropPlugin` bulunamadığ
 `cd android` ardından `gradlew.bat :desktop_drop:clean` ile yalnızca eklenti
 çıktıları temizlenebilir; ardından proje kökünde `flutter build apk --debug` çalıştırılır.
 KGP geçiş uyarıları diğer mevcut eklentilerden gelmeye devam edebilir.
+
+### İlk kullanım ve sonraki açılışlar
+
+`AppLaunchService` uygulama çizilmeden önce kayıtlı oturumu doğrular ve hedefi
+belirler. `app_welcome_seen` cihaz tercihi yalnızca ilk karşılama gösterildiğinde
+saklanır; çıkış yapmak bu tercihi silmez. Eski sürümden gelen mevcut hesaplar ilk
+kullanım sayılmaz. Yeni kurulumda bir saniyelik karşılama gösterilir; sonraki
+başlangıçlarda geçerli oturum ana sayfayı, oturumsuz durum giriş formunu doğrudan
+açar. Sahte yükleme aşamaları, sürekli parçacık animasyonu ve her açılıştaki
+4,5 saniyelik bekleme kaldırıldı. İşletim sisteminin uygulama başlatma ekranı
+bu uygulama içi karşılamadan ayrıdır. Uygulama verisi temizlenirse ilk kullanım
+tercihi de sıfırlanır.
+Kontrol: `flutter test test/app_launch_test.dart test/tek_hesap_test.dart`.

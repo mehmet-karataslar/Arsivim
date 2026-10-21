@@ -63,3 +63,7 @@ key.properties
 .env
 .env.*
 !.env.example
+
+# Machine-specific editor and device configuration
+.vscode/
+/run.txt
