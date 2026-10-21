@@ -46,6 +46,7 @@ class SyncGateway {
           .toList();
   Future<bool> reconnect(String trustId, String address) =>
       manager.taninanCihazaBaglan(trustId, adres: address);
+  String? get connectionError => manager.sonBaglantiHatasi;
   Future<void> forget(String trustId) => manager.cihaziUnut(trustId);
   Future<SyncComparison> compare(SyncDevice device) =>
       manager.cihazlaKarsilastir(device.ip);

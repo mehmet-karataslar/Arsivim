@@ -257,7 +257,7 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
       _message(
         success
             ? 'Cihaz bağlandı.'
-            : 'Cihaz bağlanamadı. Aynı ağı ve güncel QR kodunu kontrol edin.',
+            : _data.gateway.connectionError ?? 'Cihaz bağlanamadı. Aynı ağı ve güncel QR kodunu kontrol edin.',
       );
       await _data.refresh();
     } catch (_) {

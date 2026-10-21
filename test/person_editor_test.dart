@@ -188,8 +188,13 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byType(BackButton), findsNothing);
         expect(find.byTooltip('Geri dön'), findsNothing);
-        if (size.width >= 1100 && scale == 1)
+        if (size.width >= 1100 && scale == 1) {
           expect(find.byType(AppSidebar), findsOneWidget);
+          expect(
+            tester.widget<AppSidebar>(find.byType(AppSidebar)).selectedIndex,
+            4,
+          );
+        }
         if (const bool.fromEnvironment('CAPTURE_PERSON') &&
             scale == 1 &&
             (size.width == 1672 || size.width == 390)) {

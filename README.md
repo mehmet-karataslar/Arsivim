@@ -120,7 +120,7 @@ ana sekmelere uygulanır.
 | Yedekleme | `lib/screens/yedekleme_ekrani.dart` | Referans düzen, kişi/kategori seçimi, canlı özet ve kalıcı işlem geçmişi uygulandı; yalnızca bilgisayarda |
 | Yeni belge ekle | `lib/screens/yeni_belge_ekle_ekrani.dart` | Referans form, canlı özet, taslak ve çoklu bağlantılar uygulandı |
 | Belge düzenle | `lib/screens/belge_duzenle_ekrani.dart` | Ortak form, mevcut dosyayı koruma ve çoklu bağlantılar uygulandı |
-| Kişi ekle / düzenle | `lib/screens/kisi_ekle_ekrani.dart` | İki mod aynı ekran; bekliyor |
+| Kişi ekle / düzenle | `lib/screens/kisi_ekle_ekrani.dart` | İki mod aynı modüler form; mobil ve masaüstü güncellendi |
 | Kişinin belgeleri | `lib/screens/kisi_belgeleri_ekrani.dart` | Çağıran ekran kalmadı; Kişiler artık ortak Belgeler sayfasını kişi filtresiyle açıyor. Eski kod korunuyor |
 | Açılış | `lib/screens/splash_screen.dart` | Tema renkleri bağlı; tam tasarım denetimi bekliyor |
 | Giriş | `lib/screens/auth/login_screen.dart` | Bekliyor |
@@ -820,3 +820,22 @@ altında tutulur; taslak kaydında sayfa sırası/yönü de saklanır. PDF oluş
 başarısız olduğunda kontrol ekranındaki sayfalar korunur ve yeniden denenebilir.
 Tarama verisi, PDF servisi, kontrol ekranı ve önizleme bileşenleri ayrıdır.
 Kontrol: `flutter test test/document_scan_test.dart test/scan_review_test.dart test/document_editor_test.dart test/document_editor_repository_test.dart`.
+
+### Kişi ekleme / düzenleme
+
+`PersonEditorController` form durumunu, `PersonEditorRepository` kayıt ve fotoğraf
+kopyalamayı yönetir. `FormPageShell`, `FormSection` ve `LabeledFormField` ortak
+bileşenlerdir. Masaüstünde sol sekmeler, mobilde alt sekmeler kullanılır; geri
+butonu yoktur. Kaydedilmemiş değişikliklerle çıkışta kullanıcıya sorulur.
+Ad ve soyad zorunlu; e-posta, telefon ve adres isteğe bağlıdır. İletişim alanları
+eski veritabanlarına sütun eklenerek hazırlanır, mevcut kayıtlar korunur.
+Düzenleme yalnızca kişi formundaki alanları yazar; kullanıcı adı, şifre ve rolü
+etkilemez. Başka işlemde değişmiş kayıt üzerine yazılmaz. Profil fotoğrafı
+seçme/kaldırma korunur ve fotoğraf kopyalanamazsa kayıt başarı sayılmaz.
+
+Android derlemesi için `desktop_drop` 0.7.1'e güncellendi (compileSdk 36).
+0.6.1'deki compileSdk 33 / AndroidX AAR metadata uyumsuzluğu giderildi.
+Eski sürümden kalan derleme çıktılarında `DesktopDropPlugin` bulunamadığında
+`cd android` ardından `gradlew.bat :desktop_drop:clean` ile yalnızca eklenti
+çıktıları temizlenebilir; ardından proje kökünde `flutter build apk --debug` çalıştırılır.
+KGP geçiş uyarıları diğer mevcut eklentilerden gelmeye devam edebilir.

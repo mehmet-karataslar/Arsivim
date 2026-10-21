@@ -187,6 +187,7 @@ class SyncController extends ChangeNotifier {
     stopping = false;
     actionMessage = null;
     progress = null;
+    final stopVersion = gateway.stopVersion;
     _notify();
     try {
       _progressSubscription = gateway.progress().listen((value) {
@@ -197,6 +198,7 @@ class SyncController extends ChangeNotifier {
           choice.direction == SyncDirection.send
               ? await gateway.sendIds(device, choice.comparison.sendIds)
               : await gateway.receive(device, choice.comparison.receiveIds);
+      if (stopVersion != gateway.stopVersion) stopping = true;
       actionMessage =
           stopping
               ? 'Aktarım durduruldu. Tamamlanan belgeler korundu.'

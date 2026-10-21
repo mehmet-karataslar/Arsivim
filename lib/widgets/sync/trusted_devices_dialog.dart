@@ -39,7 +39,7 @@ class _TrustedDevicesDialogState extends State<TrustedDevicesDialog> {
         setState(
           () =>
               _error =
-                  'Bağlanılamadı. Karşı cihazda uygulama ve sunucu açık, iki cihaz aynı ağda olmalı. Cihaz unutulduysa yeniden eşleştirin.',
+                  widget.gateway.connectionError ?? 'Bağlanılamadı. Karşı cihazda uygulama ve sunucu açık, iki cihaz aynı ağda olmalı. Cihaz unutulduysa yeniden eşleştirin.',
         );
       }
     } catch (_) {

@@ -21,6 +21,7 @@ import 'arsiv_hesap_servisi.dart';
 import 'aktarim_envanter_servisi.dart';
 import '../models/sync_comparison.dart';
 import 'guvenilir_cihaz_servisi.dart';
+import 'baglanti_tanisi.dart';
 
 class SenkronizasyonYoneticiServisi {
   static final SenkronizasyonYoneticiServisi _instance =
@@ -33,6 +34,13 @@ class SenkronizasyonYoneticiServisi {
   final LogServisi _logServisi = LogServisi.instance;
   final NetworkOptimizer _networkOptimizer = NetworkOptimizer.instance;
   bool _baglantiSuruyor = false;
+  String? sonBaglantiHatasi;
+
+  void _baglantiHatasi(Object error, String asama) {
+    sonBaglantiHatasi = BaglantiTanisi.mesaj(error, asama);
+    _logServisi.warning('BAGLANTI: $sonBaglantiHatasi');
+    onError?.call(sonBaglantiHatasi!);
+  }
 
   final ValueNotifier<int> changes = ValueNotifier(0);
   void _changed() => changes.value++;
@@ -342,10 +350,14 @@ class SenkronizasyonYoneticiServisi {
   }
 
   Future<bool> yeniCihazBagla(Map<String, dynamic> connectionInfo) async {
+    sonBaglantiHatasi = null;
     if (_baglantiSuruyor || transferRunning) return false;
     _baglantiSuruyor = true;
-    try { return await _yeniCihazBagla(connectionInfo); }
-    finally { _baglantiSuruyor = false; }
+    try {
+      return await _yeniCihazBagla(connectionInfo);
+    } finally {
+      _baglantiSuruyor = false;
+    }
   }
 
   Future<bool> _yeniCihazBagla(Map<String, dynamic> connectionInfo) async {
@@ -441,8 +453,10 @@ class SenkronizasyonYoneticiServisi {
         }
       } catch (e) {
         _httpSunucu.eslesmisAnahtarlar.remove(ip);
+        _httpSunucu.gelenAnahtarlar.remove(ip);
+        _httpSunucu.guvenBaglantilari.remove(ip);
         _httpSunucu.hesapEslesmesi.baglantiKes(ip);
-        onError?.call('Bağlantı hatası: $e');
+        _baglantiHatasi(e, 'İlk eşleştirme');
         return false;
       }
     } else {
@@ -537,8 +551,10 @@ class SenkronizasyonYoneticiServisi {
     }
     await _httpSunucu.hesapEslesmesi.karsiCihazaBaglanildi(ip, remote);
     final incoming = result['transfer_token'];
-    if (result['session_version'] != 1 || incoming is! String ||
-        !RegExp(r'^[a-f0-9]{48}$').hasMatch(incoming)) throw HesapHatasi('Cihaz oturum anahtarı doğrulanamadı.');
+    if (result['session_version'] != 1 ||
+        incoming is! String ||
+        !RegExp(r'^[a-f0-9]{48}$').hasMatch(incoming))
+      throw HesapHatasi('Cihaz oturum anahtarı doğrulanamadı.');
     _httpSunucu.eslesmisAnahtarlar[ip] = incoming;
     _httpSunucu.gelenAnahtarlar[ip] = reverseToken;
     if (remember) {
@@ -593,16 +609,21 @@ class SenkronizasyonYoneticiServisi {
   }
 
   Future<bool> taninanCihazaBaglan(String trustId, {String? adres}) async {
+    sonBaglantiHatasi = null;
     if (_baglantiSuruyor || transferRunning) return false;
     _baglantiSuruyor = true;
-    try { return await _taninanCihazaBaglan(trustId, adres: adres); }
-    finally { _baglantiSuruyor = false; }
+    try {
+      return await _taninanCihazaBaglan(trustId, adres: adres);
+    } finally {
+      _baglantiSuruyor = false;
+    }
   }
 
   Future<bool> _taninanCihazaBaglan(String trustId, {String? adres}) async {
     if (transferRunning) return false;
     initializeConnections();
     String? ip;
+    var asama = 'Yerel hesap ve kayıtlı cihaz';
     try {
       final session = AuthServisi.instance.sessionGeneration;
       await AuthServisi.instance.hesapTanitim();
@@ -627,6 +648,7 @@ class SenkronizasyonYoneticiServisi {
         'owner_id': trust.yoneticiId,
       };
       final reverseToken = GuvenliAktarimServisi.kimlik();
+      asama = 'Karşı cihazın kimlik doğrulaması';
       final challenge = await AktarimHttp.jsonIstek(
         Uri.parse('http://$ip:8080/sync/v2/trust-challenge'),
         trust.gizliAnahtar,
@@ -651,6 +673,8 @@ class SenkronizasyonYoneticiServisi {
           'reverse_token': reverseToken,
         },
       );
+      asama = 'Karşı cihazın oturum onayı';
+      if (result['success'] == false) throw HesapHatasi(result['error'] as String? ?? 'Cihaz oturumu reddedildi.');
       final token = result['transfer_token'];
       if (result['success'] != true ||
           result['trust_version'] != 1 ||
@@ -663,6 +687,7 @@ class SenkronizasyonYoneticiServisi {
         throw HesapHatasi('Tanınan cihaz bağlantısı doğrulanamadı.');
       }
       final remote = Map<String, dynamic>.from(result['account'] as Map);
+      asama = 'Yerel cihaz oturumunun kaydı';
       await _httpSunucu.hesapEslesmesi.guvenilirBaglanti(ip, remote);
       await service.kaydet(
         guvenId: trustId,
@@ -678,6 +703,7 @@ class SenkronizasyonYoneticiServisi {
       _httpSunucu.eslesmisAnahtarlar[ip] = token;
       _httpSunucu.gelenAnahtarlar[ip] = reverseToken;
       _httpSunucu.guvenBaglantilari[ip] = trustId;
+      asama = 'Bağlantının tamamlanma bildirimi';
       final ready = await AktarimHttp.jsonIstek(
         Uri.parse('http://$ip:8080/sync/v2/ready'),
         token,
@@ -708,7 +734,7 @@ class SenkronizasyonYoneticiServisi {
         _httpSunucu.guvenBaglantilari.remove(ip);
         _httpSunucu.hesapEslesmesi.baglantiKes(ip);
       }
-      onError?.call('Cihaz bağlanamadı: $error');
+      _baglantiHatasi(error, asama);
       return false;
     }
   }

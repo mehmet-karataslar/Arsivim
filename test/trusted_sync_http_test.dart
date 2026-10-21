@@ -30,6 +30,39 @@ class _Vault implements GuvenilirCihazDeposu {
   Future<void> yaz(String deger) async => value = deger;
 }
 
+/// Real trust persistence with an injected post-save delay/failure to exercise
+/// overlapping HTTP connection attempts and lock cleanup deterministically.
+class _DelayedTrust extends GuvenilirCihazServisi {
+  Future<void> Function()? afterSave;
+  _DelayedTrust(super.db, {required super.depo});
+
+  @override
+  Future<void> kaydet({
+    required String guvenId,
+    required String gizliAnahtar,
+    required Map<String, dynamic> hesap,
+    required String cihazId,
+    required String cihazAdi,
+    String? platform,
+    String? sonIp,
+    int port = 8080,
+  }) async {
+    final hook = afterSave;
+    afterSave = null;
+    await super.kaydet(
+      guvenId: guvenId,
+      gizliAnahtar: gizliAnahtar,
+      hesap: hesap,
+      cihazId: cihazId,
+      cihazAdi: cihazAdi,
+      platform: platform,
+      sonIp: sonIp,
+      port: port,
+    );
+    await hook?.call();
+  }
+}
+
 /// Only the header signing is reproduced: production encryption/decryption and
 /// dispatch still run on real sockets. Needed for Origin and exact nonce replay,
 /// which the normal client intentionally does not expose.
@@ -147,12 +180,16 @@ void main() {
     String? credential,
   }) => AktarimHttp.jsonIstek(
     uri(endpoint),
-    key ?? (endpoint == 'pair' ? handler.aktarimAnahtari : transportToken ?? handler.aktarimAnahtari),
+    key ??
+        (endpoint == 'pair'
+            ? handler.aktarimAnahtari
+            : transportToken ?? handler.aktarimAnahtari),
     body: body,
     guvenId: credential,
   ).timeout(const Duration(seconds: 15));
 
   Future<Map<String, dynamic>> pairBody() async {
+    reverseToken = GuvenliAktarimServisi.kimlik();
     final ticket = await handler.hesapEslesmesi.biletOlustur();
     return {
       'account_version': 1,
@@ -204,16 +241,17 @@ void main() {
     String nonce, {
     Map<String, dynamic>? overrides,
   }) async {
+    reverseToken = GuvenliAktarimServisi.kimlik();
     final response = await request(
-    'trust-resume',
-    key: secret,
-    credential: trustId,
-    body: {
-      ...trustBody(),
-      'challenge': nonce,
-      'reverse_token': reverseToken,
-      ...?overrides,
-    },
+      'trust-resume',
+      key: secret,
+      credential: trustId,
+      body: {
+        ...trustBody(),
+        'challenge': nonce,
+        'reverse_token': reverseToken,
+        ...?overrides,
+      },
     );
     if (response['success'] == true) {
       transportToken = response['transfer_token'] as String;
@@ -222,8 +260,11 @@ void main() {
   }
 
   Future<void> inventoryDenied({String? key}) async {
-    final response = await _raw(uri('inventory'),
-      key: key ?? transportToken ?? handler.aktarimAnahtari, body: {});
+    final response = await _raw(
+      uri('inventory'),
+      key: key ?? transportToken ?? handler.aktarimAnahtari,
+      body: {},
+    );
     expect(response.status, anyOf(401, 409));
     expect(response.body['success'], false);
     expect(response.body, isNot(contains('items')));
@@ -535,6 +576,120 @@ void main() {
       await expectLater(challenge(), throwsA(isA<AktarimHatasi>()));
       expect(await trust.bul(trustId), isNull);
       expect(vault.value, isNot(contains(secret)));
+    },
+  );
+
+  test(
+    'old connection key cannot authorize or decrypt a replacement session',
+    () async {
+      await pair();
+      final qrKey = handler.aktarimAnahtari;
+      final pairedKey = transportToken!;
+      await disconnect();
+      expect((await resume(await challenge()))['success'], true);
+      final resumedKey = transportToken!;
+      expect(resumedKey, isNot(pairedKey));
+      await inventoryDenied(key: pairedKey);
+      await inventoryDenied(key: qrKey);
+
+      final revokedId = trustId;
+      final revokedSecret = secret;
+      final captured = await challenge();
+      final revokedBody = {
+        ...trustBody(),
+        'challenge': captured,
+        'reverse_token': GuvenliAktarimServisi.kimlik(),
+      };
+      await trust.unut(revokedId);
+      await inventoryDenied(key: resumedKey);
+      trustId = GuvenilirCihazServisi.yeniGuvenId();
+      secret = GuvenilirCihazServisi.yeniGuvenAnahtari();
+      await pair();
+      final newKey = transportToken!;
+      expect(newKey, isNot(resumedKey));
+      await inventoryDenied(key: resumedKey);
+      final nonce = GuvenliAktarimServisi.kimlik();
+      final current = await _raw(
+        uri('inventory'),
+        key: newKey,
+        nonce: nonce,
+        body: {'after': 200},
+      );
+      expect(current.status, 200);
+      expect(current.body['items'], hasLength(5));
+      await expectLater(
+        AktarimHttp.jsonOku(
+          AktarimHttp.coz(
+            Stream.value(current.wire),
+            resumedKey,
+            '$nonce:response',
+          ),
+        ),
+        throwsA(anything),
+      );
+      await expectLater(
+        request(
+          'trust-resume',
+          key: revokedSecret,
+          credential: revokedId,
+          body: revokedBody,
+        ),
+        throwsA(isA<AktarimHatasi>()),
+      );
+      expect(handler.gelenAnahtarlar['127.0.0.1'], newKey);
+      expect(
+        (await request('inventory', body: {'after': 200}))['success'],
+        true,
+      );
+    },
+  );
+
+  test(
+    'overlapping pair and resume are rejected; failure releases connection lock',
+    () async {
+      await closeServer();
+      final delayed = _DelayedTrust(db, depo: vault);
+      trust = delayed;
+      await startServer();
+      await pair();
+      await disconnect();
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      delayed.afterSave = () async {
+        entered.complete();
+        await release.future;
+        throw StateError('Injected late old-resume failure');
+      };
+      final pending = resume(await challenge());
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        await pending;
+      });
+      await entered.future.timeout(const Duration(seconds: 5));
+      final oldSession = handler.hesapEslesmesi.baglantiKimligi('127.0.0.1');
+      final overlapping = await request('pair', body: await pairBody());
+      expect(overlapping['success'], false);
+      expect(overlapping['kod'], 'HESAP');
+      await expectLater(
+        resume(await challenge()),
+        throwsA(isA<AktarimHatasi>()),
+      );
+      expect(handler.hesapEslesmesi.baglantiKimligi('127.0.0.1'), oldSession);
+      release.complete();
+      expect((await pending)['success'], false);
+      expect(handler.eslesmisAnahtarlar, isEmpty);
+      expect(handler.gelenAnahtarlar, isEmpty);
+      await pair();
+      final newSession = handler.hesapEslesmesi.baglantiKimligi('127.0.0.1');
+      final newKey = transportToken;
+      expect(newSession, isNot(oldSession));
+      expect(handler.hesapEslesmesi.baglantiKimligi('127.0.0.1'), newSession);
+      expect(handler.gelenAnahtarlar['127.0.0.1'], newKey);
+      expect(handler.guvenBaglantilari['127.0.0.1'], trustId);
+      expect(
+        (await request('inventory', body: {'after': 200}))['success'],
+        true,
+      );
     },
   );
 

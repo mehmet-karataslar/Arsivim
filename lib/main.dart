@@ -11,7 +11,8 @@ import 'dart:io' show Platform;
 
 // Screens
 import 'screens/ana_ekran.dart';
-import 'screens/splash_screen.dart';
+import 'screens/app_entry_screen.dart';
+import 'services/app_launch_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/belge_duzenle_ekrani.dart';
 
@@ -58,6 +59,8 @@ void main() async {
     await _initializeServices();
 
     final themeController = await ThemeController.load();
+    final launchService = AppLaunchService();
+    final launch = await launchService.prepare();
 
     runApp(
       MultiProvider(
@@ -67,7 +70,7 @@ void main() async {
             create: (_) => themeController,
           ),
         ],
-        child: const ArsivimApp(),
+        child: ArsivimApp(launch: launch, launchService: launchService),
       ),
     );
   } catch (e, stackTrace) {
@@ -252,7 +255,13 @@ Future<void> _initializeServices() async {
 }
 
 class ArsivimApp extends StatelessWidget {
-  const ArsivimApp({super.key});
+  const ArsivimApp({
+    super.key,
+    required this.launch,
+    required this.launchService,
+  });
+  final AppLaunchState launch;
+  final AppLaunchService launchService;
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +282,7 @@ class ArsivimApp extends StatelessWidget {
       theme: context.watch<ThemeController>().theme,
 
       // Home screen
-      home: const SplashScreen(),
+      home: AppEntryScreen(launch: launch, service: launchService),
 
       // Route configuration
       onGenerateRoute: _generateRoute,

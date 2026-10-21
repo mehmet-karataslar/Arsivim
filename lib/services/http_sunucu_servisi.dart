@@ -15,6 +15,7 @@ import 'hesap_eslesme_servisi.dart';
 import 'aktarim_envanter_servisi.dart';
 import 'guvenilir_cihaz_servisi.dart';
 import 'uzak_aktarim_isleri.dart';
+import 'log_servisi.dart';
 
 class HttpSunucuServisi {
   static const int SUNUCU_PORTU = 8080;
@@ -59,9 +60,13 @@ class HttpSunucuServisi {
   void _yetkiKontrolunuBagla() {
     hesapEslesmesi.ekYetkiKontrol = (ip) async {
       final id = guvenBaglantilari[ip];
+      final connection = hesapEslesmesi.baglantiKimligi(ip);
       if (id != null && await (await guvenServisi).bul(id) == null) {
-        hesapEslesmesi.baglantiKes(ip);
-        eslesmisAnahtarlar.remove(ip);
+        if (_ayniBaglanti(ip, connection) && guvenBaglantilari[ip] == id) {
+          hesapEslesmesi.baglantiKes(ip);
+          eslesmisAnahtarlar.remove(ip);
+          gelenAnahtarlar.remove(ip);
+        }
         throw HesapHatasi('Cihaz güveni kaldırıldı. Yeniden eşleştirin.');
       }
     };
@@ -73,6 +78,7 @@ class HttpSunucuServisi {
   final Map<String, String> gelenAnahtarlar = {};
   late final hesapEslesmesi = HesapEslesmeServisi(_auth);
   final Map<String, int> _aktifIstekler = {};
+  final Set<String> _baglantiDenemeleri = {};
   final Set<String> aktifAktarimCihazlari = {};
   final Map<String, String> guvenBaglantilari = {};
   final Map<String, Map<String, dynamic>> _bekleyenCihazlar = {};
@@ -122,13 +128,21 @@ class HttpSunucuServisi {
     String? key;
     final ip = request.connectionInfo!.remoteAddress.address;
     var resumed = false;
+    var ownsAttempt = false;
     String? resumedConnection;
+    var stage = 'yerel yönetici oturumu';
     try {
       if (request.method != 'POST' || request.headers.value('Origin') != null) {
         throw HesapHatasi('Geçersiz bağlantı isteği.');
       }
+      if (request.uri.path == '/sync/v2/trust-resume') {
+        if (!_baglantiDenemeleri.add(ip))
+          throw HesapHatasi('Cihaz bağlantısı zaten sürüyor.');
+        ownsAttempt = true;
+      }
       final session = _auth.sessionGeneration;
       final account = await _auth.hesapTanitim();
+      stage = 'kayıtlı cihaz anahtarı';
       final service = await guvenServisi;
       final trustId = request.headers.value('x-arsiv-trust') ?? '';
       final trust = await service.bul(trustId);
@@ -136,6 +150,7 @@ class HttpSunucuServisi {
         throw HesapHatasi('Cihaz tanınmadı. Yeni QR ile eşleştirin.');
       }
       key = trust.gizliAnahtar;
+      stage = 'cihaz ve arşiv kimliği';
       final body = await AktarimHttp.jsonOku(
         AktarimHttp.istekOku(request, key),
       );
@@ -157,6 +172,7 @@ class HttpSunucuServisi {
           'owner_id': trust.yoneticiId,
         };
       } else {
+        stage = 'tek kullanımlık bağlantı kanıtı';
         final token = body['reverse_token'];
         if (body['challenge'] is! String ||
             token is! String ||
@@ -184,6 +200,8 @@ class HttpSunucuServisi {
         );
         if (session != _auth.sessionGeneration)
           throw HesapHatasi('Oturum değişti.');
+        if (!_ayniBaglanti(ip, resumedConnection))
+          throw HesapHatasi('Cihaz oturumu değişti.');
         eslesmisAnahtarlar[ip] = token;
         final inboundToken = GuvenliAktarimServisi.kimlik();
         gelenAnahtarlar[ip] = inboundToken;
@@ -201,7 +219,8 @@ class HttpSunucuServisi {
       if (session != _auth.sessionGeneration)
         throw HesapHatasi('Oturum değişti.');
       await AktarimHttp.yanit(request, key, response);
-    } catch (_) {
+    } catch (error) {
+      LogServisi.instance.warning('BAGLANTI SUNUCU: $stage (${error.runtimeType})');
       if (resumed && _ayniBaglanti(ip, resumedConnection)) {
         hesapEslesmesi.baglantiKes(ip);
         eslesmisAnahtarlar.remove(ip);
@@ -221,35 +240,56 @@ class HttpSunucuServisi {
       } else {
         await AktarimHttp.yanit(request, key, {
           'success': false,
-          'error': 'Cihaz güveni doğrulanamadı. Yeni QR ile eşleştirin.',
+          'error': error is HesapHatasi ? '$stage: ${error.mesaj}' : '$stage: Cihaz doğrulanamadı (${error.runtimeType}).',
         }, status: 409);
       }
+    } finally {
+      if (ownsAttempt) _baglantiDenemeleri.remove(ip);
     }
   }
 
   bool _ayniBaglanti(String ip, String? connection) {
-    try { return hesapEslesmesi.baglantiKimligi(ip) == connection; }
-    catch (_) { return false; }
+    try {
+      return hesapEslesmesi.baglantiKimligi(ip) == connection;
+    } catch (_) {
+      return false;
+    }
   }
 
-  Future<GuvenliAktarimServisi> _aktarimServisi(String ip) async {
-    final connection = hesapEslesmesi.baglantiKimligi(ip);
+  Future<GuvenliAktarimServisi> _aktarimServisi(
+    String ip, {
+    String? beklenenBaglanti,
+  }) async {
+    final connection = beklenenBaglanti ?? hesapEslesmesi.baglantiKimligi(ip);
     return GuvenliAktarimServisi(
-        await _database,
-        _testDocuments ??
-            await DepolamaKonumuServisi.instance.belgelerKlasoru(),
-        yetkiKontrol: () async {
-          await hesapEslesmesi.yetkiKontrol(ip);
-          if (!_ayniBaglanti(ip, connection)) throw HesapHatasi('Aktarım sırasında cihaz oturumu değişti.');
-        },
-      );
+      await _database,
+      _testDocuments ?? await DepolamaKonumuServisi.instance.belgelerKlasoru(),
+      yetkiKontrol: () async {
+        await hesapEslesmesi.yetkiKontrol(ip);
+        if (!_ayniBaglanti(ip, connection))
+          throw HesapHatasi('Aktarım sırasında cihaz oturumu değişti.');
+      },
+    );
   }
 
-  Future<void> _guvenliAktarim(HttpRequest request, String aktarimAnahtari) async {
+  Future<void> _guvenliAktarim(
+    HttpRequest request,
+    String aktarimAnahtari,
+  ) async {
     final ip = request.connectionInfo!.remoteAddress.address;
+    var ownsAttempt = false;
     _aktifIstekler[ip] = (_aktifIstekler[ip] ?? 0) + 1;
     try {
+      if (request.uri.path == '/sync/v2/pair') {
+        if (!_baglantiDenemeleri.add(ip))
+          throw HesapHatasi('Cihaz bağlantısı zaten sürüyor.');
+        ownsAttempt = true;
+      }
       final uzakIP = request.connectionInfo!.remoteAddress.address;
+      final connection =
+          request.uri.path == '/sync/v2/pair'
+              ? null
+              : hesapEslesmesi.baglantiKimligi(ip);
       if (request.uri.path != '/sync/v2/pair' &&
           !eslesmisAnahtarlar.containsKey(uzakIP)) {
         throw AktarimHatasi(
@@ -259,7 +299,26 @@ class HttpSunucuServisi {
       }
       if (request.uri.path != '/sync/v2/pair') {
         await hesapEslesmesi.yetkiKontrol(uzakIP);
+        if (!_ayniBaglanti(ip, connection) ||
+            gelenAnahtarlar[ip] != aktarimAnahtari)
+          throw HesapHatasi('Cihaz oturumu değişti.');
       }
+      Future<Map<String, dynamic>> oku({
+        int max = GuvenliAktarimServisi.azamiMetadata,
+      }) async {
+        final data = await AktarimHttp.jsonOku(
+          AktarimHttp.istekOku(request, aktarimAnahtari),
+          max: max,
+        );
+        if (connection != null) {
+          await hesapEslesmesi.yetkiKontrol(ip);
+          if (!_ayniBaglanti(ip, connection) ||
+              gelenAnahtarlar[ip] != aktarimAnahtari)
+            throw HesapHatasi('Cihaz oturumu değişti.');
+        }
+        return data;
+      }
+
       Map<String, dynamic> result;
       switch (request.uri.path) {
         case '/sync/v2/capabilities':
@@ -276,9 +335,7 @@ class HttpSunucuServisi {
           if (request.method != 'POST') {
             throw AktarimHatasi('METHOD', 'POST gerekli.');
           }
-          final query = await AktarimHttp.jsonOku(
-            AktarimHttp.istekOku(request, aktarimAnahtari),
-          );
+          final query = await oku();
           if (query['after'] != null && query['after'] is! int) {
             throw AktarimHatasi('ENVANTER', 'Envanter sayfasi gecersiz.');
           }
@@ -291,9 +348,7 @@ class HttpSunucuServisi {
         case '/sync/v2/send-stop':
           if (request.method != 'POST')
             throw AktarimHatasi('METHOD', 'POST gerekli.');
-          final command = await AktarimHttp.jsonOku(
-            AktarimHttp.istekOku(request, aktarimAnahtari),
-          );
+          final command = await oku();
           final owner = hesapEslesmesi.baglantiKimligi(uzakIP);
           if (request.uri.path == '/sync/v2/send-request') {
             if (command['ids'] is! List ||
@@ -322,11 +377,12 @@ class HttpSunucuServisi {
         case '/sync/v2/pair':
           if (request.method != 'POST')
             throw AktarimHatasi('METHOD', 'POST gerekli.');
-          final data = await AktarimHttp.jsonOku(
-            AktarimHttp.istekOku(request, aktarimAnahtari),
-          );
+          final data = await oku();
           final token = data['reverse_token'];
-          if (data['session_version'] != 1) throw HesapHatasi('Güvenli cihaz oturumu için iki cihazı da güncelleyin.');
+          if (data['session_version'] != 1)
+            throw HesapHatasi(
+              'Güvenli cihaz oturumu için iki cihazı da güncelleyin.',
+            );
           if (token is! String || !RegExp(r'^[a-f0-9]{48}$').hasMatch(token)) {
             throw AktarimHatasi('ESLESME', 'Karsi cihaz anahtari gecersiz.');
           }
@@ -379,9 +435,7 @@ class HttpSunucuServisi {
         case '/sync/v2/ready':
           if (request.method != 'POST')
             throw AktarimHatasi('METHOD', 'POST gerekli.');
-          await AktarimHttp.jsonOku(
-            AktarimHttp.istekOku(request, aktarimAnahtari),
-          );
+          await oku();
           final waiting = _bekleyenCihazlar.remove(uzakIP);
           if (waiting != null) _cihazBaglandi(uzakIP, waiting);
           result = {'success': true};
@@ -389,18 +443,15 @@ class HttpSunucuServisi {
         case '/sync/v2/prepare':
           if (request.method != 'POST')
             throw AktarimHatasi('METHOD', 'POST gerekli.');
-          result = await (await _aktarimServisi(uzakIP)).onKontrol(
-            await AktarimHttp.jsonOku(
-              AktarimHttp.istekOku(request, aktarimAnahtari),
-            ),
-          );
+          result = await (await _aktarimServisi(
+            uzakIP,
+            beklenenBaglanti: connection,
+          )).onKontrol(await oku());
           break;
         case '/sync/v2/disconnect':
           if (request.method != 'POST')
             throw AktarimHatasi('METHOD', 'POST gerekli.');
-          await AktarimHttp.jsonOku(
-            AktarimHttp.istekOku(request, aktarimAnahtari),
-          );
+          await oku();
           eslesmisAnahtarlar.remove(uzakIP);
           gelenAnahtarlar.remove(uzakIP);
           guvenBaglantilari.remove(uzakIP);
@@ -419,19 +470,17 @@ class HttpSunucuServisi {
             throw AktarimHatasi('METHOD', 'POST gerekli.');
           result = await AktarimHttp.al(
             request,
-            await _aktarimServisi(uzakIP),
+            await _aktarimServisi(uzakIP, beklenenBaglanti: connection),
             aktarimAnahtari,
           );
           break;
         case '/sync/v2/entity':
           if (request.method != 'POST')
             throw AktarimHatasi('METHOD', 'POST gerekli.');
-          result = await (await _aktarimServisi(uzakIP)).referansAl(
-            await AktarimHttp.jsonOku(
-              AktarimHttp.istekOku(request, aktarimAnahtari),
-              max: GuvenliAktarimServisi.azamiReferans,
-            ),
-          );
+          result = await (await _aktarimServisi(
+            uzakIP,
+            beklenenBaglanti: connection,
+          )).referansAl(await oku(max: GuvenliAktarimServisi.azamiReferans));
           break;
         default:
           throw AktarimHatasi('ENDPOINT', 'Aktarim adresi bulunamadi.');
@@ -453,6 +502,7 @@ class HttpSunucuServisi {
             'Aktarim tamamlanamadi. Disk, izin ve baglanti durumunu kontrol edin.',
       }, status: 500);
     } finally {
+      if (ownsAttempt) _baglantiDenemeleri.remove(ip);
       if (request.uri.path == '/sync/v2/file' ||
           request.uri.path == '/sync/v2/entity') {
         dataChanges.value++;
@@ -479,8 +529,12 @@ class HttpSunucuServisi {
       return;
     }
     final ip = request.connectionInfo!.remoteAddress.address;
-    final key = request.uri.path == '/sync/v2/pair' ? aktarimAnahtari : gelenAnahtarlar[ip];
-    if (key == null || request.headers.value('Origin') != null ||
+    final key =
+        request.uri.path == '/sync/v2/pair'
+            ? aktarimAnahtari
+            : gelenAnahtarlar[ip];
+    if (key == null || (request.uri.path != '/sync/v2/pair' && _baglantiDenemeleri.contains(ip)) ||
+        request.headers.value('Origin') != null ||
         !AktarimHttp.yetkili(request, key)) {
       await _sendResponse(
         request.response,
