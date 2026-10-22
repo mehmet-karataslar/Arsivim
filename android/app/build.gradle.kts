@@ -6,6 +6,17 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// An old debug key is a valid update key too. When supplied, use that exact
+// keystore for both build modes; never replace it with a newly generated key.
+val updateKeyFile = rootProject.file("key.properties")
+val updateKey = Properties()
+if (updateKeyFile.exists()) {
+    FileInputStream(updateKeyFile).use { updateKey.load(it) }
+    listOf("storeFile", "storePassword", "keyAlias", "keyPassword").forEach {
+        require(!updateKey.getProperty(it).isNullOrBlank()) { "key.properties: missing $it" }
+    }
+}
+
 android {
     namespace = "com.example.arsiv_uygulamasi"
     compileSdk = 36
@@ -20,18 +31,28 @@ android {
         applicationId = "com.example.arsiv_uygulamasi"
         minSdk = flutter.minSdkVersion
         targetSdk = 35
-        versionCode = 25
-        versionName = "2.5.2"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
         multiDexEnabled = true
+    }
+
+    signingConfigs {
+        if (updateKeyFile.exists()) {
+            create("existingInstall") {
+                storeFile = rootProject.file(updateKey.getProperty("storeFile"))
+                storePassword = updateKey.getProperty("storePassword")
+                keyAlias = updateKey.getProperty("keyAlias")
+                keyPassword = updateKey.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
-            // En basit release - debug keystore ile
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (updateKeyFile.exists()) "existingInstall" else "debug")
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (updateKeyFile.exists()) "existingInstall" else "debug")
         }
     }
 }

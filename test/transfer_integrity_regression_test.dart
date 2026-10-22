@@ -356,6 +356,14 @@ void main() {
       final bytes = await File(row['dosya_yolu'] as String).readAsBytes();
       expect(bytes, await File(scan.file.path!).readAsBytes());
       expect(
+        await GuvenliAktarimServisi.hash(File(row['dosya_yolu'] as String)),
+        data['belge']['dosya_hash'],
+      );
+      final pdf = latin1.decode(bytes);
+      expect(pdf, contains('/DCTDecode'));
+      expect(pdf, isNot(contains('/Font')));
+      expect(pdf, isNot(contains('/ToUnicode')));
+      expect(
         RegExp(r'/Type\s*/Page\b').allMatches(latin1.decode(bytes)).length,
         2,
       );

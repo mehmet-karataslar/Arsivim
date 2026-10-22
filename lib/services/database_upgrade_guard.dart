@@ -1,3 +1,4 @@
+import 'sqlite_snapshot.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -43,7 +44,7 @@ abstract final class DatabaseUpgradeGuard {
     final folder = await parent.createTemp('sema-$version-$targetVersion-');
     final snapshot = File(p.join(folder.path, 'arsiv.db'));
     // VACUUM includes committed WAL data. Copying just arsiv.db would not.
-    await db.execute('VACUUM INTO ?', [snapshot.path]);
+    await SqliteSnapshot.create(db, snapshot.path, factory: factory);
     final copy = await factory.openDatabase(
       snapshot.path,
       options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
@@ -103,10 +104,10 @@ abstract final class DatabaseUpgradeGuard {
         'SELECT (SELECT COUNT(*) FROM $before) = (SELECT COUNT(*) FROM $after) AS equal_count',
       );
       final missing = await db.rawQuery(
-        'SELECT $columns FROM $before EXCEPT SELECT $columns FROM $after LIMIT 1',
+        'SELECT $columns, COUNT(*) FROM $before GROUP BY $columns EXCEPT SELECT $columns, COUNT(*) FROM $after GROUP BY $columns LIMIT 1',
       );
       final changed = await db.rawQuery(
-        'SELECT $columns FROM $after EXCEPT SELECT $columns FROM $before LIMIT 1',
+        'SELECT $columns, COUNT(*) FROM $after GROUP BY $columns EXCEPT SELECT $columns, COUNT(*) FROM $before GROUP BY $columns LIMIT 1',
       );
       if (counts.single['equal_count'] != 1 ||
           missing.isNotEmpty ||

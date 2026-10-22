@@ -100,7 +100,15 @@ class VeriTabaniServisi {
         ),
       );
 
-      return database;
+      try {
+        if (_testPath == null) {
+          await DepolamaKonumuServisi.instance.veritabaniAcilisiniOnayla();
+        }
+        return database;
+      } catch (_) {
+        await database.close();
+        rethrow;
+      }
     } catch (e) {
       print('❌ Veritabanı başlatma hatası: $e');
       rethrow;

@@ -1,3 +1,4 @@
+import 'sqlite_snapshot.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -53,7 +54,7 @@ class ArsivHesapServisi {
         ).create(recursive: true);
         final folder = await dir.createTemp('hesap-gecisi-');
         final snapshot = File(p.join(folder.path, 'arsiv.db'));
-        await db.execute('VACUUM INTO ?', [snapshot.path]);
+        await SqliteSnapshot.create(db, snapshot.path);
         if (!await snapshot.exists() || await snapshot.length() < 512) {
           throw HesapHatasi(
             'Hesap gecisi yedegi olusturulamadi; mevcut kayitlar degistirilmedi.',

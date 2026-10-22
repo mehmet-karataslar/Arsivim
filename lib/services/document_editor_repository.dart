@@ -7,6 +7,7 @@ import '../models/kategori_modeli.dart';
 import '../models/kisi_modeli.dart';
 import 'auth_servisi.dart';
 import 'document_links.dart';
+import 'document_scan_service.dart';
 import 'dosya_servisi.dart';
 import 'veritabani_servisi.dart';
 
@@ -149,6 +150,10 @@ class DocumentEditorRepository {
   }
 
   String _key(int? id) => id == null ? 'new' : 'edit:$id';
+
+  Future<void> releaseScanDraft(String pdfPath) =>
+      DocumentScanService.releaseDraft(pdfPath);
+
   Future<Map<String, dynamic>?> draft(int? id) async {
     final db = await _draftDatabase();
     final rows = await db.query(

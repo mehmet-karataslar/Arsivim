@@ -28,6 +28,7 @@ class DocumentEditorController extends ChangeNotifier {
       tagInput = TextEditingController();
   final List<PlatformFile> files = [];
   final Map<String, List<ScanPage>> scanPages = {};
+  final Set<String> _obsoleteScans = {};
   final Set<int> categories = {}, people = {};
   final List<String> tags = [];
   EditorOptions options = const EditorOptions([], []);
@@ -97,7 +98,7 @@ class DocumentEditorController extends ChangeNotifier {
       addFiles([scan.file]);
     } else {
       files[index] = scan.file;
-      scanPages.remove(replacing);
+      if (scanPages.remove(replacing) != null) _obsoleteScans.add(replacing!);
     }
     scanPages[scan.file.path!] = List.of(scan.pages);
     changed();
@@ -105,7 +106,7 @@ class DocumentEditorController extends ChangeNotifier {
 
   void removeFile(PlatformFile file) {
     files.remove(file);
-    scanPages.remove(file.path);
+    if (scanPages.remove(file.path) != null) _obsoleteScans.add(file.path!);
     changed();
   }
 
@@ -168,6 +169,7 @@ class DocumentEditorController extends ChangeNotifier {
       savedDraft = null;
       dirty = false;
       message = 'Taslak kaydedildi.';
+      await _releaseObsoleteScans();
     } catch (_) {
       error = 'Taslak kaydedilemedi. Tekrar deneyin.';
     } finally {
@@ -265,6 +267,22 @@ class DocumentEditorController extends ChangeNotifier {
     guncellemeTarihi: DateTime.now(),
     senkronDurumu: SenkronDurumu.YEREL_DEGISIM,
   );
+
+  // Called only after saved draft references have been updated/deleted. Old
+  // revisions remain recoverable until that point, including on save failures.
+  Future<void> _releaseObsoleteScans() async {
+    for (final path in List.of(_obsoleteScans)) {
+      if (files.any((file) => file.path == path)) continue;
+      try {
+        await repository.releaseScanDraft(path);
+        _obsoleteScans.remove(path);
+      } catch (_) {
+        // Cleanup must never turn a committed import into a duplicate retry.
+        message = 'Kayıt tamamlandı; tarama taslağı temizlenemedi.';
+      }
+    }
+  }
+
   Future<bool> save() async {
     if (busy) return false;
     if (!ready) {
@@ -287,7 +305,9 @@ class DocumentEditorController extends ChangeNotifier {
           try {
             await repository.import(file, (doc) => _edited(doc, batch: batch));
             files.remove(file);
-            scanPages.remove(file.path);
+            if (scanPages.remove(file.path) != null) {
+              _obsoleteScans.add(file.path!);
+            }
             anySaved = true;
           } catch (e) {
             failures.add('${file.name}: $e');
@@ -301,6 +321,7 @@ class DocumentEditorController extends ChangeNotifier {
           title.text = paths.basenameWithoutExtension(files.first.name);
           try {
             await repository.saveDraft(null, _draft());
+            await _releaseObsoleteScans();
           } catch (_) {
             /* Retry remains available in the open form. */
           }
@@ -313,6 +334,7 @@ class DocumentEditorController extends ChangeNotifier {
       dirty = false;
       try {
         await repository.deleteDraft(original?.id);
+        await _releaseObsoleteScans();
       } catch (_) {
         message = 'Belge kaydedildi; eski taslak temizlenemedi.';
       }

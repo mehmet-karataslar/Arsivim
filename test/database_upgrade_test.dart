@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:arsiv_uygulamasi/models/belge_modeli.dart';
 import 'package:arsiv_uygulamasi/services/database_upgrade_guard.dart';
 import 'package:arsiv_uygulamasi/services/veritabani_servisi.dart';
+import 'package:arsiv_uygulamasi/services/sqlite_snapshot.dart';
+import 'package:arsiv_uygulamasi/services/depolama_konumu_servisi.dart';
 import 'package:arsiv_uygulamasi/utils/sabitler.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -238,4 +240,198 @@ void main() {
     expect(await db.query('belgeler'), isEmpty);
     expect(await db.query('kategoriler'), isNotEmpty);
   });
+
+  test(
+    'Already-used v11 schema retains account, multi-links and trust records',
+    () async {
+      final db = await legacy(version: 11);
+      await db.execute('ALTER TABLE belgeler ADD COLUMN kisi_ids TEXT');
+      await db.execute('ALTER TABLE belgeler ADD COLUMN kategori_ids TEXT');
+      await db.update('belgeler', {'kisi_ids': '[3,7]', 'kategori_ids': '[8]'});
+      await db.execute(
+        'CREATE TABLE arsiv_hesabi (id INTEGER PRIMARY KEY, arsiv_id TEXT, yerel_kisi_id INTEGER)',
+      );
+      await db.insert('arsiv_hesabi', {
+        'id': 1,
+        'arsiv_id': 'existing-archive',
+        'yerel_kisi_id': 3,
+      });
+      await db.execute(
+        'CREATE TABLE guvenilir_cihazlar_v1 (trust_id TEXT PRIMARY KEY, device_id TEXT)',
+      );
+      await db.insert('guvenilir_cihazlar_v1', {
+        'trust_id': 'trust',
+        'device_id': 'phone',
+      });
+      final documents = await db.query('belgeler');
+      await db.close();
+      final upgraded = await service.database;
+      expect(await upgraded.query('belgeler'), documents);
+      expect(
+        (await upgraded.query('arsiv_hesabi')).single['arsiv_id'],
+        'existing-archive',
+      );
+      expect(
+        (await upgraded.query('guvenilir_cihazlar_v1')).single['device_id'],
+        'phone',
+      );
+    },
+  );
+
+  const localCopy = String.fromEnvironment('LOCAL_ARCHIVE_COPY');
+  if (localCopy.isNotEmpty) {
+    test(
+      'An isolated copy of the actual archive preserves all existing rows',
+      () async {
+        // Opt-in audit accepts only an already exported copy in ignored artifacts.
+        final supplied = p.canonicalize(localCopy);
+        expect(
+          p.isWithin(p.canonicalize('artifacts/upgrade-audit'), supplied),
+          true,
+        );
+        final source = await databaseFactoryFfi.openDatabase(
+          supplied,
+          options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+        );
+        final before = <String, List<Map<String, Object?>>>{};
+        try {
+          final tables = await source.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+          );
+          for (final table in tables) {
+            final name = table['name'] as String;
+            before[name] = await source.query(
+              '"${name.replaceAll('"', '""')}"',
+              orderBy: 'rowid',
+            );
+          }
+          await SqliteSnapshot.create(
+            source,
+            dbPath,
+            factory: databaseFactoryFfi,
+          );
+        } finally {
+          await source.close();
+        }
+        final upgraded = await service.database;
+        for (final entry in before.entries) {
+          final rows = await upgraded.query(
+            '"${entry.key.replaceAll('"', '""')}"',
+            columns:
+                entry.value.isEmpty ? null : entry.value.first.keys.toList(),
+            orderBy: 'rowid',
+          );
+          // Do not print personal data if the audit fails.
+          expect(
+            jsonEncode(rows) == jsonEncode(entry.value),
+            true,
+            reason: 'Existing rows must be unchanged in ${entry.key}',
+          );
+        }
+        expect(await upgraded.getVersion(), Sabitler.VERITABANI_VERSIYONU);
+      },
+    );
+  }
+
+  test(
+    'Portable snapshot preserves WAL, triggers and autoincrement sequence',
+    () async {
+      final db = await legacy();
+      await db.rawQuery('PRAGMA journal_mode=WAL');
+      await db.execute(
+        "CREATE TRIGGER protect_person BEFORE DELETE ON kisiler BEGIN SELECT RAISE(ABORT, 'protected'); END",
+      );
+      await db.execute(
+        "UPDATE sqlite_sequence SET seq = 999 WHERE name = 'kisiler'",
+      );
+      await db.update('belgeler', {'baslik': 'WAL snapshot'});
+      final destination = p.join(root.path, 'portable.db');
+      final readOnly = await databaseFactoryFfi.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
+      );
+      try {
+        await SqliteSnapshot.create(
+          readOnly,
+          destination,
+          factory: databaseFactoryFfi,
+          forcePortable: true,
+        );
+        final backup = await databaseFactoryFfi.openDatabase(destination);
+        try {
+          expect(await backup.getVersion(), 10);
+          expect(await backup.query('belgeler'), await db.query('belgeler'));
+          expect(
+            await backup.query('sqlite_sequence'),
+            await db.query('sqlite_sequence'),
+          );
+          await expectLater(
+            backup.delete('kisiler'),
+            throwsA(isA<DatabaseException>()),
+          );
+        } finally {
+          await backup.close();
+        }
+      } finally {
+        await readOnly.close();
+        await db.close();
+      }
+    },
+  );
+
+  test(
+    'Fresh public storage does not leave a marker for a nonexistent DB',
+    () async {
+      final private = await Directory(p.join(root.path, 'private')).create();
+      final public = Directory(p.join(root.path, 'public'));
+      DepolamaKonumuServisi storage() => DepolamaKonumuServisi.test(
+        gizli: private,
+        acik: public,
+        factory: databaseFactoryFfi,
+      );
+      final first = storage();
+      final target = await first.veritabaniYoluHazirla();
+      expect(
+        await File(p.join(private.path, '.arsiv-acik-konum.json')).exists(),
+        false,
+      );
+      final retry = storage();
+      expect(await retry.veritabaniYoluHazirla(), target);
+      final db = await databaseFactoryFfi.openDatabase(target);
+      await db.close();
+      await retry.veritabaniAcilisiniOnayla();
+      expect(
+        await File(p.join(private.path, '.arsiv-acik-konum.json')).exists(),
+        true,
+      );
+    },
+  );
+
+  test(
+    'Existing public DB without permission cannot silently create private archive; retry works',
+    () async {
+      final private = await Directory(p.join(root.path, 'private')).create();
+      final public = await Directory(p.join(root.path, 'public')).create();
+      await File(
+        p.join(public.path, 'arsiv.db'),
+      ).writeAsString('existing archive');
+      var allowed = false;
+      final storage = DepolamaKonumuServisi.test(
+        gizli: private,
+        acik: public,
+        factory: databaseFactoryFfi,
+        yazmaKontrolu: (_) async => allowed,
+      );
+      await expectLater(
+        storage.veritabaniYoluHazirla(),
+        throwsA(isA<StateError>()),
+      );
+      expect(await File(p.join(private.path, 'arsiv.db')).exists(), false);
+      allowed = true;
+      expect(
+        await storage.veritabaniYoluHazirla(),
+        p.join(public.path, 'arsiv.db'),
+      );
+    },
+  );
 }

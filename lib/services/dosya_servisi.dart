@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/belge_modeli.dart';
 import 'depolama_konumu_servisi.dart';
+import 'scan_image_compression.dart';
 import '../utils/sabitler.dart';
 import '../utils/yardimci_fonksiyonlar.dart';
 
@@ -253,19 +254,30 @@ class DosyaServisi {
     String pdfAdi, {
     Directory? outputDirectory,
     List<int>? quarterTurns,
+    List<bool>? compressedPages,
+    Directory? pageCopiesDirectory,
   }) async {
     try {
       if (quarterTurns != null &&
           quarterTurns.length != fotografYollari.length) {
         throw ArgumentError('Sayfa yönleri eksik.');
       }
+      if (compressedPages != null &&
+          compressedPages.length != fotografYollari.length) {
+        throw ArgumentError('Sayfa sıkıştırma bilgisi eksik.');
+      }
       final pdfBytes = await compute(_scanPdfBytes, {
         'paths': fotografYollari,
         'turns': quarterTurns ?? List.filled(fotografYollari.length, 0),
+        'compressed':
+            compressedPages ?? List.filled(fotografYollari.length, false),
+        'copies': pageCopiesDirectory?.path,
       });
 
       // Hedef klasörü oluştur
       Directory belgelerKlasoru = outputDirectory ?? await _belgelerKlasorunu();
+
+      await belgelerKlasoru.create(recursive: true);
 
       // Benzersiz PDF dosya adı oluştur
       String temelAd = path.basenameWithoutExtension(pdfAdi);
@@ -398,12 +410,19 @@ class DosyaServisi {
 Future<Uint8List> _scanPdfBytes(Map<String, dynamic> request) async {
   final paths = request['paths'] as List<String>;
   final turns = request['turns'] as List<int>;
-  final pdf = pw.Document();
+  final compressed = request['compressed'] as List<bool>;
+  final copies = request['copies'] as String?;
+  final pdf = pw.Document(compress: true);
   for (var i = 0; i < paths.length; i++) {
     final path = paths[i];
     final file = File(path);
     if (!await file.exists()) throw StateError('Taranan sayfa bulunamadı.');
-    final bytes = await file.readAsBytes();
+    final source = await file.readAsBytes();
+    final bytes =
+        compressed[i] ? source : ScanImageCompression.compress(source);
+    if (copies != null) {
+      await File('$copies/page-$i.jpg').writeAsBytes(bytes, flush: true);
+    }
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,

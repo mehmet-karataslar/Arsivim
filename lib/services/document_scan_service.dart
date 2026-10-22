@@ -26,6 +26,26 @@ class DocumentScanService {
     return root.createTemp('scan-');
   }
 
+  /// Call only after importing the PDF and removing its saved draft reference.
+  /// Never delete camera sources, imported archive files or arbitrary folders.
+  static Future<void> releaseDraft(
+    String pdfPath, {
+    Directory? supportDirectory,
+  }) async {
+    final support = supportDirectory ?? await getApplicationSupportDirectory();
+    final root = Directory(paths.join(support.path, 'scan_drafts'));
+    final folder = File(pdfPath).parent;
+    if (!await root.exists() || !await folder.exists()) return;
+    final realRoot = await root.resolveSymbolicLinks();
+    final realFolder = await folder.resolveSymbolicLinks();
+    if (!paths.equals(paths.dirname(realFolder), realRoot) ||
+        !paths.basename(realFolder).startsWith('scan-') ||
+        paths.extension(pdfPath).toLowerCase() != '.pdf') {
+      return;
+    }
+    await Directory(realFolder).delete(recursive: true);
+  }
+
   Future<List<String>?> capturePages() => CunningDocumentScanner.getPictures(
     noOfPages: 100,
     isGalleryImportAllowed: false,
@@ -50,34 +70,42 @@ class DocumentScanService {
       }
     }
     final dir = await createOutputDirectory();
-    final stored = <ScanPage>[];
-    for (var i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final copy = await File(
-        page.path,
-      ).copy(paths.join(dir.path, 'page-$i${paths.extension(page.path)}'));
-      stored.add(ScanPage(copy.path, quarterTurns: page.quarterTurns));
+    try {
+      final title =
+          name == null || name.trim().isEmpty
+              ? 'Tarama_${DateTime.now().millisecondsSinceEpoch}'
+              : paths
+                  .basename(name.trim())
+                  .replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '');
+      final document = await DosyaServisi().tarananFotograflariPdfYap(
+        pages.map((p) => p.path).toList(),
+        '$title.pdf',
+        quarterTurns: pages.map((p) => p.quarterTurns).toList(),
+        compressedPages: pages.map((p) => p.isCompressed).toList(),
+        pageCopiesDirectory: dir,
+        outputDirectory: dir,
+      );
+      return ScannedPdf(
+        PlatformFile(
+          name: document.orijinalDosyaAdi,
+          path: document.dosyaYolu,
+          size: document.dosyaBoyutu,
+        ),
+        pages.length,
+        pages: List.generate(
+          pages.length,
+          (i) => ScanPage(
+            paths.join(dir.path, 'page-$i.jpg'),
+            quarterTurns: pages[i].quarterTurns,
+            isCompressed: true,
+          ),
+        ),
+      );
+    } catch (_) {
+      // Only this attempt's private draft directory is removed. Originals stay
+      // available in the review screen so the user can retry a failed page.
+      if (await dir.exists()) await dir.delete(recursive: true);
+      rethrow;
     }
-    final title =
-        name == null || name.trim().isEmpty
-            ? 'Tarama_${DateTime.now().millisecondsSinceEpoch}'
-            : paths
-                .basename(name.trim())
-                .replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '');
-    final document = await DosyaServisi().tarananFotograflariPdfYap(
-      stored.map((p) => p.path).toList(),
-      '$title.pdf',
-      quarterTurns: stored.map((p) => p.quarterTurns).toList(),
-      outputDirectory: dir,
-    );
-    return ScannedPdf(
-      PlatformFile(
-        name: document.orijinalDosyaAdi,
-        path: document.dosyaYolu,
-        size: document.dosyaBoyutu,
-      ),
-      stored.length,
-      pages: stored,
-    );
   }
 }

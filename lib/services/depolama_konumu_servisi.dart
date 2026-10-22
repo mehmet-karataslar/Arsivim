@@ -1,3 +1,4 @@
+import 'sqlite_snapshot.dart';
 import 'dart:io';
 import 'dart:convert';
 
@@ -39,7 +40,14 @@ class DepolamaKonumuServisi {
 
   bool get acikKlasorKullaniliyor => _acikKlasorKullaniliyor;
 
-  Future<Directory> aktifKokKlasor() => _hazirlik ??= _konumuSec();
+  Future<Directory> aktifKokKlasor() async {
+    try {
+      return await (_hazirlik ??= _konumuSec());
+    } catch (_) {
+      _hazirlik = null;
+      rethrow;
+    }
+  }
 
   Future<Directory> _konumuSec() async {
     if (_aktifKokKlasor != null) return _aktifKokKlasor!;
@@ -80,6 +88,13 @@ class DepolamaKonumuServisi {
         _aktifKokKlasor = acikKlasor;
         _acikKlasorKullaniliyor = true;
       } else {
+        if (await File(
+          path.join(acikKlasor.path, Sabitler.VERITABANI_ADI),
+        ).exists()) {
+          throw StateError(
+            'Acik arsiv var ancak yazma izni yok. Izin verin; bos gizli arsiv olusturulmadi.',
+          );
+        }
         _aktifKokKlasor = _gizliKokKlasor;
         _acikKlasorKullaniliyor = false;
         tasimaUyarisi =
@@ -121,8 +136,14 @@ class DepolamaKonumuServisi {
     return klasor;
   }
 
-  Future<String> veritabaniYoluHazirla() =>
-      _veritabaniHazirlik ??= _veritabaniYolunuHazirla();
+  Future<String> veritabaniYoluHazirla() async {
+    try {
+      return await (_veritabaniHazirlik ??= _veritabaniYolunuHazirla());
+    } catch (_) {
+      _veritabaniHazirlik = null;
+      rethrow;
+    }
+  }
 
   Future<String> _veritabaniYolunuHazirla() async {
     final aktifKok = await aktifKokKlasor();
@@ -146,20 +167,36 @@ class DepolamaKonumuServisi {
           return gizliDb.path;
         }
       }
-      final isaret = File(path.join(gizliKok.path, '.arsiv-acik-konum.json'));
-      if (!await isaret.exists()) {
-        final klasor = await gizliKok.createTemp('konum-');
-        final gecici = File(path.join(klasor.path, 'konum.json'));
-        await gecici.writeAsString(
-          jsonEncode({'konum': aktifKok.path}),
-          flush: true,
-        );
-        await gecici.rename(isaret.path);
-        await klasor.delete();
-      }
+      // A fresh installation must not publish a marker before SQLite exists.
+      // If its first open fails, it can retry instead of being locked out forever.
+      if (await aktifDb.exists()) await veritabaniAcilisiniOnayla();
     }
 
     return aktifDb.path;
+  }
+
+  Future<void> veritabaniAcilisiniOnayla() async {
+    if (!_android || !_acikKlasorKullaniliyor) return;
+    final aktifKok = await aktifKokKlasor();
+    if (!await File(
+      path.join(aktifKok.path, Sabitler.VERITABANI_ADI),
+    ).exists()) {
+      throw StateError('Aktif arsiv olusmadan konum kaydedilemez.');
+    }
+    final gizliKok = _gizliKokKlasor ?? await _gizliKlasor();
+    final isaret = File(path.join(gizliKok.path, '.arsiv-acik-konum.json'));
+    if (await isaret.exists()) return;
+    final klasor = await gizliKok.createTemp('konum-');
+    try {
+      final gecici = File(path.join(klasor.path, 'konum.json'));
+      await gecici.writeAsString(
+        jsonEncode({'konum': aktifKok.path}),
+        flush: true,
+      );
+      await gecici.rename(isaret.path);
+    } finally {
+      await klasor.delete(recursive: true);
+    }
   }
 
   Future<Map<String, String>> eskiVeYeniBelgeKlasorleri() async {
@@ -225,7 +262,7 @@ class DepolamaKonumuServisi {
     );
     try {
       // WAL dahil tutarli SQLite snapshot'i; dosya sisteminden canli DB kopyalanmaz.
-      await source.execute('VACUUM INTO ?', [snapshot.path]);
+      await SqliteSnapshot.create(source, snapshot.path, factory: factory);
     } finally {
       await source.close();
     }

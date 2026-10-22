@@ -1,15 +1,22 @@
 # 📁 Arşivim - Kişisel Belge Arşiv Uygulaması
 
-## 📦 Hemen İndir (v2.5.1)
+> **22 Ekim 2026 — güncelleme denetimi:** Geliştirme sürümü `2.6.0+26`, veritabanı şeması `12`.
+> Aşağıdaki eski indirme açıklamaları tarihsel bilgilerdir; bütün APK'lar birbiriyle güncelleme uyumlu değildir.
+> Debug anahtarı kullanılabilir, ancak telefondaki sürümle aynı anahtar olmalıdır.
+> Kurulum öncesi [geçiş incelemesini ve uygulanacak sırayı](docs/SURUM_GECIS_DENETIMI.md) okuyun.
+> Eski uygulamayı kaldırmayın. Yeni paket henüz yayımlanmadı.
+
+
+## 📦 Arşivlenmiş son paketler (v2.5.2-debug)
 
 <div align="center">
 
-[![Android APK](https://img.shields.io/badge/Android-APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/Arsivim-v2.5.1-Android-SIGNED.apk)
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/Arsivim-v2.5.1-Windows.zip)
+[![Android APK](https://img.shields.io/badge/Android-APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/v2.5.2-debug/Arsivcim-v2.5.2-DEBUG-COMPATIBLE.apk)
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/v2.5.2-debug/Arsivcim-v2.5.2-DEBUG-windows-x64.zip)
 
-**📱 Android APK: 44 MB** | **💻 Windows ZIP: 37 MB**
+**📱 Android APK: yaklaşık 31 MB** | **💻 Windows ZIP: yaklaşık 15 MB**
 
-[📋 Tüm Sürümler](https://github.com/mehmet-karataslar/Arsivim/releases) | [📖 Kurulum Rehberi](arsiv_uygulamasi/releases/README.md)
+[📋 Arşivlenmiş paketler](https://github.com/mehmet-karataslar/Arsivim/tree/master/arsiv_uygulamasi/releases) | [📖 Güvenli geçiş rehberi](docs/SURUM_GECIS_DENETIMI.md)
 
 </div>
 
@@ -550,14 +557,14 @@ CREATE TABLE senkron_logları (
 ## 📱 Son Kullanıcı Kurulumu
 
 ### **📱 Android**
-1. **[Arsivim-v2.5.1-Android-SIGNED.apk](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/Arsivim-v2.5.1-Android-SIGNED.apk)** dosyasını indirin
+1. **[Arsivim-v2.5.1-Android-SIGNED.apk](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/v2.5.2-debug/Arsivcim-v2.5.2-DEBUG-COMPATIBLE.apk)** dosyasını indirin
 2. **Bilinmeyen kaynaklardan kurulum**u etkinleştirin
 3. APK dosyasına dokunarak kurulumu başlatın
 4. ⚠️ **v2.5.0'dan güncelleme:** Eski sürümü kaldırın, yeni APK'yı kurun
 5. ✅ **v2.5.1+ güncellemeler:** Direkt APK ile güncellenebilir
 
 ### **💻 Windows**
-1. **[Arsivim-v2.5.1-Windows.zip](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/Arsivim-v2.5.1-Windows.zip)** dosyasını indirin
+1. **[Arsivim-v2.5.1-Windows.zip](https://github.com/mehmet-karataslar/Arsivim/blob/master/arsiv_uygulamasi/releases/v2.5.2-debug/Arsivcim-v2.5.2-DEBUG-windows-x64.zip)** dosyasını indirin
 2. ZIP'i istediğiniz klasöre çıkartın  
 3. `Arsivim-v2.5.1.exe` dosyasına çift tıklayın
 4. Windows Defender uyarısı: "Daha fazla bilgi" → "Yine de çalıştır"
@@ -821,6 +828,16 @@ Tarama PDF'leri ve sayfa görselleri uygulamanın destek klasöründeki `scan_dr
 altında tutulur; taslak kaydında sayfa sırası/yönü de saklanır. PDF oluşturma
 başarısız olduğunda kontrol ekranındaki sayfalar korunur ve yeniden denenebilir.
 Tarama verisi, PDF servisi, kontrol ekranı ve önizleme bileşenleri ayrıdır.
+Fotoğraflar PDF öncesinde JPEG kalite 85 ve 4:4:4 renk örneklemesiyle sıkıştırılır;
+uzun kenar en fazla 3508 piksel (A4 için yaklaşık 300 dpi) olur, küçük görseller
+büyütülmez. EXIF yönü uygulanır, şeffaf alanlar beyaza çevrilir. Taslakta da bu
+sıkıştırılmış sayfalar tutulur; yeniden düzenlemede tekrar kayıplı kodlama yapılmaz.
+Arşive başarıyla kaydedilen taramanın taslak kaydı kaldırıldıktan sonra geçici
+PDF ve sayfaları temizlenir. Hatalı PDF üretiminde yalnızca o deneme temizlenir.
+PDF yalnızca fotoğraflardan oluşur; OCR/metin katmanı üretilmez. Transfer mevcut
+PDF baytlarını boyut ve SHA-256 doğrulamasıyla aynen taşır; yeniden PDF oluşturmaz.
+Sistem PDF görüntüleyicisinin kendi metin tanıma özelliği uygulamadan bağımsızdır.
+Sıkıştırma kontrolü: `flutter test test/scan_image_compression_test.dart test/transfer_integrity_regression_test.dart`.
 Kontrol: `flutter test test/document_scan_test.dart test/scan_review_test.dart test/document_editor_test.dart test/document_editor_repository_test.dart`.
 
 ### Kişi ekleme / düzenleme
