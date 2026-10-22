@@ -1,3 +1,4 @@
+import 'log_servisi.dart';
 import 'database_upgrade_guard.dart';
 import 'person_contact_schema.dart';
 import 'document_links.dart';
@@ -33,12 +34,10 @@ class VeriTabaniServisi {
   /// Veritabanını manuel olarak başlat (uygulama başlangıcında kullanılabilir)
   Future<void> baslat() async {
     try {
-      print('🚀 Veritabanı servisi başlatılıyor...');
       await database; // Bu, veritabanını otomatik olarak başlatır
       await acikKlasoreBelgeTasimasiniTamamla();
-      print('✅ Veritabanı servisi başarıyla başlatıldı!');
     } catch (e) {
-      print('❌ Veritabanı servisi başlatma hatası: $e');
+      LogServisi.instance.error('❌ Veritabanı servisi başlatma hatası: $e');
       rethrow;
     }
   }
@@ -59,17 +58,6 @@ class VeriTabaniServisi {
         _testPath ??
         await DepolamaKonumuServisi.instance.veritabaniYoluHazirla();
 
-    // Veritabanı dosyasının varlığını kontrol et
-    bool databaseExists = await File(path).exists();
-
-    if (databaseExists) {
-      print('✅ Mevcut veritabanı bulundu: $path');
-      print('📂 Mevcut veritabanı kullanılıyor...');
-    } else {
-      print('🆕 Veritabanı bulunamadı: $path');
-      print('🔧 Yeni veritabanı oluşturuluyor...');
-    }
-
     try {
       final factory = _testFactory ?? databaseFactory;
       final database = await factory.openDatabase(
@@ -83,17 +71,12 @@ class VeriTabaniServisi {
               ),
           version: Sabitler.VERITABANI_VERSIYONU,
           onCreate: (db, version) async {
-            print('🎯 Yeni veritabanı oluşturuluyor (versiyon: $version)');
             await _onCreate(db, version);
-            print('✅ Veritabanı başarıyla oluşturuldu!');
           },
           onUpgrade: (db, oldVersion, newVersion) async {
-            print('🔄 Veritabanı güncelleniyor ($oldVersion -> $newVersion)');
             await _onUpgrade(db, oldVersion, newVersion);
-            print('✅ Veritabanı başarıyla güncellendi!');
           },
           onOpen: (db) async {
-            print('🔓 Veritabanı açıldı: $path');
             // Veritabanı bütünlüğünü kontrol et
             await _checkDatabaseIntegrity(db);
           },
@@ -110,7 +93,7 @@ class VeriTabaniServisi {
         rethrow;
       }
     } catch (e) {
-      print('❌ Veritabanı başlatma hatası: $e');
+      LogServisi.instance.error('❌ Veritabanı başlatma hatası: $e');
       rethrow;
     }
   }
@@ -428,12 +411,9 @@ class VeriTabaniServisi {
     Set<String> existingNames =
         existingMaps.map((map) => map['kategori_adi'] as String).toSet();
 
-    print('Mevcut kategori adları: $existingNames');
-
     // Eksik kategorileri ekle
     for (KategoriModeli kategori in defaultCategories) {
       if (!existingNames.contains(kategori.kategoriAdi)) {
-        print('Eksik kategori ekleniyor: ${kategori.kategoriAdi}');
         await db.insert('kategoriler', kategori.toMap());
       }
     }
@@ -658,14 +638,10 @@ class VeriTabaniServisi {
       }
     }
 
-    print('DEBUG: Kategori sorgusu: $sorgu');
-    print('DEBUG: Parametreler: $parametreler');
-
     final List<Map<String, dynamic>> results = await db.rawQuery(
       sorgu,
       parametreler,
     );
-    print('DEBUG: Kategori sorgusu sonucu: ${results.length} belge');
 
     return results;
   }
@@ -1061,7 +1037,6 @@ class VeriTabaniServisi {
   Future<int> kategoriEkle(KategoriModeli kategori) async {
     final db = await database;
     final map = kategori.toMap();
-    print('DEBUG: Veritabanına eklenecek map: $map');
     return await db.insert('kategoriler', map);
   }
 
@@ -1115,11 +1090,8 @@ class VeriTabaniServisi {
       orderBy: 'kategori_adi ASC',
     );
 
-    print('Veritabanından ${maps.length} kategori bulundu');
-
     // Eğer kategori yoksa veya 16'dan azsa default kategorileri ekle
     if (maps.length < 16) {
-      print('Eksik kategoriler var, default kategoriler kontrol ediliyor...');
       await _ensureDefaultCategories(db);
 
       // Tekrar sorgula
@@ -1130,9 +1102,6 @@ class VeriTabaniServisi {
         orderBy: 'kategori_adi ASC',
       );
 
-      print(
-        'Default kategoriler eklendikten sonra: ${newMaps.length} kategori',
-      );
       return List.generate(newMaps.length, (i) {
         return KategoriModeli.fromMap(newMaps[i]);
       });
@@ -1508,12 +1477,14 @@ class VeriTabaniServisi {
           }
         }
       } catch (e) {
-        print('Belge acik klasore tasinamadi: $mevcutYol - $e');
+        LogServisi.instance.error(
+          'Belge acik klasore tasinamadi: $mevcutYol - $e',
+        );
         atlanan++;
       }
     }
 
-    print(
+    LogServisi.instance.info(
       'Acik klasor belge tasima tamamlandi: tasinan=$tasinan, duzeltilen=$duzeltilen, atlanan=$atlanan',
     );
   }

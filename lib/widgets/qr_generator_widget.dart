@@ -1,3 +1,4 @@
+import '../services/log_servisi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -758,7 +759,6 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
   }
 
   void _qrKoduTara() {
-    print('📱 QR kod tarayıcısı açılıyor (QR Connection)...');
     Navigator.of(context).push(
       MaterialPageRoute(
         builder:
@@ -766,7 +766,6 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
               onQRScanned: (qrData) {
                 // QR kod tarandığında hemen kapansın
                 Navigator.of(context).pop();
-                print('🔄 QR scanner hemen kapatıldı (QR Connection)');
 
                 // Arka planda bağlantı işlemlerini yap
                 _processQRCodeConnection(qrData);
@@ -787,11 +786,10 @@ class _QRConnectionScreenState extends State<QRConnectionScreen>
             .qrKoduTarandi(qrData);
         if (connected && mounted) _cihazBagla(connectionInfo);
       } else {
-        print('❌ Geçersiz QR kod formatı');
         _hataGoster('Geçersiz QR kod');
       }
     } catch (e) {
-      print('❌ QR kod işleme hatası: $e');
+      LogServisi.instance.error('❌ QR kod işleme hatası: $e');
       _hataGoster('QR kod okunamadı: $e');
     }
   }

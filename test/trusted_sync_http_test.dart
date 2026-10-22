@@ -147,6 +147,8 @@ void main() {
   late Map<String, dynamic> account;
   late List<Map<String, dynamic>> connected;
   late List<Map<String, dynamic>> disconnected;
+  var reverseChecks = 0;
+  var reverseFails = false;
 
   Uri uri(String endpoint) =>
       Uri.parse('http://127.0.0.1:${listener!.port}/sync/v2/$endpoint');
@@ -164,6 +166,12 @@ void main() {
       auth: auth,
       guven: trust,
       belgeler: Directory(p.join(root.path, 'documents')),
+      reverseCheck: (ip, token) async {
+        reverseChecks++;
+        expect(ip, '127.0.0.1');
+        expect(token, reverseToken);
+        if (reverseFails) throw const SocketException('reverse refused');
+      },
     );
     handler.setOnDeviceConnected((device) => connected.add(Map.from(device)));
     handler.setOnDeviceDisconnected(
@@ -316,6 +324,8 @@ void main() {
   });
 
   setUp(() async {
+    reverseChecks = 0;
+    reverseFails = false;
     SharedPreferences.setMockInitialValues(savedPreferences);
     auth = loggedInAuth;
     vault = _Vault();
@@ -341,6 +351,43 @@ void main() {
     await db.close();
     await root.delete(recursive: true);
   });
+
+  test(
+    'Reverse connection failure prevents connected status and preserves archive',
+    () async {
+      await pair(ready: false);
+      reverseFails = true;
+      final failed = await request('ready', body: {'reverse_check': 1});
+      expect(failed['success'], false);
+      expect(failed['kod'], 'TERS_BAGLANTI');
+      expect(connected, isEmpty);
+      expect(handler.bagliCihazlar, isEmpty);
+      reverseFails = false;
+      expect(
+        (await request('ready', body: {'reverse_check': 1}))['success'],
+        true,
+      );
+      expect(reverseChecks, 2);
+      expect(connected.single['device_id'], peerId);
+    },
+  );
+
+  test(
+    'Trusted resume also verifies the reverse direction before announcing connection',
+    () async {
+      await pair();
+      await disconnect();
+      connected.clear();
+      expect((await resume(await challenge()))['success'], true);
+      expect(connected, isEmpty);
+      expect(
+        (await request('ready', body: {'reverse_check': 1}))['success'],
+        true,
+      );
+      expect(reverseChecks, 1);
+      expect(connected.single['device_id'], peerId);
+    },
+  );
 
   test(
     'encrypted QR enrollment persists secret; ready callback fires exactly once',

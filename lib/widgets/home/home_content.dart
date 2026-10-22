@@ -2,6 +2,7 @@ import '../common/workspace_layout.dart';
 import 'package:flutter/material.dart';
 import '../../models/ana_sayfa_ozeti.dart';
 import '../../models/belge_modeli.dart';
+import '../../services/document_repository.dart';
 import '../common/app_card.dart';
 import '../common/mobile_workspace.dart';
 import 'recent_document_filters.dart';
@@ -9,6 +10,7 @@ import '../common/workspace_toolbar.dart';
 import 'home_actions.dart';
 import 'home_overview.dart';
 import 'home_storage.dart';
+import 'home_search_results.dart';
 import 'recent_documents.dart';
 
 class HomeContent extends StatefulWidget {
@@ -26,8 +28,10 @@ class HomeContent extends StatefulWidget {
     this.onSearch,
     this.onAddPerson,
     this.showHeading = true,
+    this.repository,
   });
   final AnaSayfaOzeti? summary;
+  final DocumentRepository? repository;
   final bool showHeading;
   final bool loading;
   final String? error;
@@ -123,7 +127,14 @@ class _HomeContentState extends State<HomeContent> {
         ],
       );
       final recent =
-          widget.summary == null
+          _search.text.trim().isNotEmpty
+              ? HomeSearchResults(
+                query: _search.text,
+                repository: widget.repository,
+                summary: widget.summary,
+                onAction: widget.onDocumentAction,
+              )
+              : widget.summary == null
               ? AppCard(
                 child: Text(
                   widget.loading
@@ -161,7 +172,7 @@ class _HomeContentState extends State<HomeContent> {
                 MobileWorkspaceToolbar(
                   controller: _search,
                   onSearch: widget.onSearch ?? (_) => widget.onNavigate(1),
-                  onChanged: (_) {},
+                  onChanged: (_) => setState(() {}),
                   filtersOpen: _filtersOpen,
                   hasFilters: _type != null,
                   onToggleFilters:

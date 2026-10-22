@@ -1,5 +1,11 @@
 # 📁 Arşivim - Kişisel Belge Arşiv Uygulaması
 
+## 2.6.2 — güncel Android ve Windows paketleri
+
+[APK ve Windows ZIP indirmeleri](https://github.com/mehmet-karataslar/Arsivim/releases/tag/v2.6.2) · [Güncelleme rehberi](docs/YAYIN_2_6_2.md)
+
+Ana sayfada tüm arşivde canlı arama, Türkçe/Almanca arama eşleştirmeleri, yerel ağ ve QR bağlantı kontrolleri, Android depolama izinleri ve hata kayıtları güncellendi. Android APK, aynı imzayla **Arşivim Yeni 2.6.0/2.6.1 üzerine** kurulur. Windows'ta ZIP'in tamamını çıkarıp içindeki EXE'yi kullanın. Bağlantı değişikliklerinden yararlanmak için iki cihazı da 2.6.2'ye güncelleyin.
+
 ## 2.6.1 — Android ilk açılış düzeltmesi
 
 [Güncel Android APK](https://github.com/mehmet-karataslar/Arsivim/releases/tag/v2.6.1) · [Güncelleme rehberi](docs/YAYIN_2_6_1.md)

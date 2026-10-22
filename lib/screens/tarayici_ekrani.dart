@@ -1,3 +1,4 @@
+import '../services/log_servisi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
@@ -25,7 +26,6 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
   final BelgeIslemleriServisi _belgeIslemleri = BelgeIslemleriServisi();
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final DosyaServisi _dosyaServisi = DosyaServisi();
-
 
   List<String> _bulunanTarayicilar = [];
   String? _secilenTarayici;
@@ -97,7 +97,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
           _secilenTarayici = tarayicilar.first;
         }
       });
-      
+
       // Ağ tarayıcısı bağlantı durumunu kontrol et
       if (tarayicilar.isNotEmpty) {
         _agTarayiciDurumKontrol();
@@ -120,7 +120,9 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
   Future<void> _agTarayiciDurumKontrol() async {
     for (String tarayici in _bulunanTarayicilar) {
       try {
-        final bool durum = await _tarayiciServisi.tarayiciBaglantiTest(tarayici);
+        final bool durum = await _tarayiciServisi.tarayiciBaglantiTest(
+          tarayici,
+        );
         if (!durum) {
           // Ağ tarayıcısı çevrim dışı uyarısı
           _showNetworkScannerWarning(tarayici);
@@ -134,7 +136,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
   /// Ağ tarayıcısı uyarısını göster
   void _showNetworkScannerWarning(String tarayiciAdi) {
     if (!mounted) return;
-    
+
     ScreenUtils.showWarningSnackBar(
       context,
       'Ağ tarayıcısı "$tarayiciAdi" çevrim dışı. Wi-Fi bağlantınızı kontrol edin.',
@@ -232,7 +234,7 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
         await tempFile.delete();
       } catch (e) {
         // Temp dosya silinemezse loglayalım ama devam edelim
-        print('Temp dosya silinemedi: $e');
+        LogServisi.instance.error('Temp dosya silinemedi: $e');
       }
 
       // Dosya bilgilerini al
@@ -267,11 +269,12 @@ class _TarayiciEkraniState extends State<TarayiciEkrani> {
         await NotificationService.instance.showNotification(
           id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
           title: '📄 Belge Başarıyla Tarandı',
-          body: 'Yeni belge eklendi: ${belge.baslik ?? belge.dosyaAdi}. Takvimde görüntülenebilir.',
+          body:
+              'Yeni belge eklendi: ${belge.baslik ?? belge.dosyaAdi}. Takvimde görüntülenebilir.',
           payload: 'document_${belge.id}',
         );
       } catch (e) {
-        print('Calendar activity tracking hatası: $e');
+        LogServisi.instance.error('Calendar activity tracking hatası: $e');
         // Don't show error to user, just log it
       }
 

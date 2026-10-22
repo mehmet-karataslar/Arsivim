@@ -164,6 +164,157 @@ void main() {
     },
   );
   test(
+    'Arama başlık, dosya, açıklama, etiket ve uzantıda harf farkını yok sayar',
+    () async {
+      await db.update(
+        'belgeler',
+        {
+          'baslik': 'IŞIK ÇİZELGESİ',
+          'orijinal_dosya_adi': 'ÖZGÜN EVRAK',
+          'dosya_adi': 'SAKLANAN KOPYA',
+          'dosya_tipi': '.XLSX',
+          'aciklama': 'YILLIK BÜTÇE AÇIKLAMASI',
+          'etiketler': 'ÖNEMLİ,ŞİRKET',
+        },
+        where: 'id=?',
+        whereArgs: [30],
+      );
+      for (final query in [
+        'ışık çizelgesi',
+        'IŞIK ÇİZELGESİ',
+        'iŞiK çİzElGeSı',
+        'özgün evrak',
+        'Özgün Evrak',
+        'saklanan kopya',
+        'xlsx',
+        'XlSx',
+        '.xlsx',
+        '.XLSX',
+        'yıllık bütçe açıklaması',
+        'YILLIK BÜTÇE AÇIKLAMASI',
+        'önemli',
+        'ÖNEMLI',
+        'şirket',
+        'ŞIRKET',
+      ]) {
+        final page = await repository.fetch(DocumentFilters(query: query));
+        expect(page.total, 1, reason: query);
+        expect(page.documents.single.belge.id, 30, reason: query);
+      }
+    },
+  );
+  test(
+    'Kişi adı, soyadı ve kullanıcı adı farklı harf biçimleriyle bulunur',
+    () async {
+      await db.update(
+        'kisiler',
+        {'ad': 'İPEK', 'soyad': 'IŞIK', 'kullanici_adi': 'IPEK.ARŞİV'},
+        where: 'id=?',
+        whereArgs: [1],
+      );
+      for (final query in [
+        'ipek',
+        'İpek',
+        'ıpek',
+        'ışık',
+        'IŞIK',
+        'işik',
+        'ipek.arşiv',
+      ]) {
+        expect(
+          (await repository.fetch(DocumentFilters(query: query))).total,
+          30,
+          reason: query,
+        );
+      }
+      await db.insert('kisiler', {
+        'id': 2,
+        'ad': 'ÇAĞRI',
+        'soyad': null,
+        'kullanici_adi': 'EK.KİŞİ',
+        'aktif': 1,
+      });
+      await db.update(
+        'belgeler',
+        {'kisi_ids': '[1,2]'},
+        where: 'id=?',
+        whereArgs: [30],
+      );
+      for (final query in ['çağrı', 'ÇAĞRI', 'çağri', 'ek.kişi']) {
+        final page = await repository.fetch(DocumentFilters(query: query));
+        expect(page.total, 1, reason: query);
+        expect(page.documents.single.belge.id, 30, reason: query);
+      }
+    },
+  );
+  test(
+    'Almanca harfler ve ae/oe/ue/ss yazımları her iki yönde eşleşir',
+    () async {
+      for (final ascii in [false, true]) {
+        await db.update(
+          'belgeler',
+          {
+            'baslik':
+                ascii ? 'AERZTLICHE BESCHEINIGUNG' : 'ÄRZTLICHE BESCHEINIGUNG',
+            'orijinal_dosya_adi': ascii ? 'GROESSE.PDF' : 'GRÖẞE.PDF',
+            'aciklama': ascii ? 'STRASSE UND GEBUEHREN' : 'Straße und Gebühren',
+            'etiketler': ascii ? 'KUENDIGUNG' : 'KÜNDIGUNG',
+          },
+          where: 'id=?',
+          whereArgs: [30],
+        );
+        for (final query in [
+          'ärztliche',
+          'ÄrZtLiChE',
+          'aerztliche',
+          'AERZTLICHE',
+          'größe.pdf',
+          'GRÖSSE.pdf',
+          'GROESSE.PDF',
+          'straße',
+          'STRAẞE',
+          'STRASSE',
+          'Strasse',
+          'gebühren',
+          'GEBÜHREN',
+          'GEBUEHREN',
+          'kündigung',
+          'Kündigung',
+          'KUENDIGUNG',
+        ]) {
+          final page = await repository.fetch(DocumentFilters(query: query));
+          expect(page.total, 1, reason: '$query (ascii: $ascii)');
+          expect(page.documents.single.belge.id, 30, reason: query);
+        }
+        await db.update(
+          'kisiler',
+          {
+            'ad': 'Jörg',
+            'soyad': ascii ? 'MUELLER' : 'MÜLLER',
+            'kullanici_adi': ascii ? 'WEISS' : 'WEIẞ',
+          },
+          where: 'id=?',
+          whereArgs: [1],
+        );
+        for (final query in [
+          'jörg',
+          'JOERG',
+          'müller',
+          'MÜLLER',
+          'Mueller',
+          'weiß',
+          'WEISS',
+        ]) {
+          expect(
+            (await repository.fetch(DocumentFilters(query: query))).total,
+            30,
+            reason: '$query (ascii: $ascii)',
+          );
+        }
+      }
+    },
+  );
+  test(
     'Tür, kişi, kategori, boyut ve tarih filtreleri birlikte uygulanır',
     () async {
       final page = await repository.fetch(

@@ -135,6 +135,39 @@ void _noTransfer(_Gateway gateway) {
 }
 
 void main() {
+  test(
+    'Stale connected entries require a verified reconnect before comparing',
+    () async {
+      final gateway =
+          _Gateway()
+            ..devices = [_device]
+            ..connectionAlive = false;
+      addTearDown(() => _dispose(gateway));
+      final target = (await gateway.comparisonTargets()).single;
+      final connected = await gateway.prepareComparison(target);
+      expect(gateway.connectionChecks, 1);
+      expect(gateway.reconnects, [('trust-phone', _device.ip)]);
+      expect(connected.id, _device.id);
+      _noTransfer(gateway);
+    },
+  );
+
+  test(
+    'A stale connection and failed reconnect never become a successful comparison',
+    () async {
+      final gateway =
+          _Gateway()
+            ..devices = [_device]
+            ..connectionAlive = false
+            ..accepted = false;
+      addTearDown(() => _dispose(gateway));
+      final target = (await gateway.comparisonTargets()).single;
+      await expectLater(gateway.prepareComparison(target), throwsStateError);
+      expect(gateway.connectionChecks, 1);
+      expect(gateway.compared, isEmpty);
+      _noTransfer(gateway);
+    },
+  );
   final capture = Platform.environment['ARSIV_CAPTURE_PREVIEWS'] == '1';
   if (capture) {
     setUpAll(() async {
@@ -176,6 +209,10 @@ void main() {
           isNotNull,
         );
         expect(find.byKey(_button), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('sync-mobile-listener')),
+          findsOneWidget,
+        );
         expect(find.text('Telefonda bekleyen'), findsOneWidget);
         expect(tester.takeException(), isNull);
         if (capture && size == const Size(390, 844) && scale == 1) {

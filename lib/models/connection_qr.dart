@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../services/arsiv_hesap_servisi.dart';
 import '../services/guvenli_aktarim_servisi.dart';
+import '../services/yerel_ag_servisi.dart';
 
 class QrReadException implements Exception {
   const QrReadException(this.message);
@@ -54,6 +55,7 @@ class ConnectionQr {
         throw invalid;
       }
       final account = Map<String, dynamic>.from(data['account']);
+      YerelAgServisi.qrAdresleri(data);
       ArsivHesapServisi.tanitimDogrula(account);
       final result = ConnectionQr(
         raw: raw,

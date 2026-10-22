@@ -16,6 +16,7 @@ import 'aktarim_envanter_servisi.dart';
 import 'guvenilir_cihaz_servisi.dart';
 import 'uzak_aktarim_isleri.dart';
 import 'log_servisi.dart';
+import 'yerel_ag_servisi.dart';
 
 class HttpSunucuServisi {
   static const int SUNUCU_PORTU = 8080;
@@ -43,10 +44,12 @@ class HttpSunucuServisi {
     required AuthServisi auth,
     required GuvenilirCihazServisi guven,
     required Directory belgeler,
+    Future<void> Function(String ip, String token)? reverseCheck,
   }) {
     _testAuth = auth;
     _testDb = guven.db;
     _testDocuments = belgeler;
+    _testReverseCheck = reverseCheck;
     _guvenServisi = Future.value(guven);
     _yetkiKontrolunuBagla();
   }
@@ -54,6 +57,7 @@ class HttpSunucuServisi {
   AuthServisi? _testAuth;
   Database? _testDb;
   Directory? _testDocuments;
+  Future<void> Function(String ip, String token)? _testReverseCheck;
   AuthServisi get _auth => _testAuth ?? AuthServisi.instance;
   Future<Database> get _database async => _testDb ?? await _veriTabani.database;
 
@@ -220,7 +224,9 @@ class HttpSunucuServisi {
         throw HesapHatasi('Oturum değişti.');
       await AktarimHttp.yanit(request, key, response);
     } catch (error) {
-      LogServisi.instance.warning('BAGLANTI SUNUCU: $stage (${error.runtimeType})');
+      LogServisi.instance.warning(
+        'BAGLANTI SUNUCU: $stage (${error.runtimeType})',
+      );
       if (resumed && _ayniBaglanti(ip, resumedConnection)) {
         hesapEslesmesi.baglantiKes(ip);
         eslesmisAnahtarlar.remove(ip);
@@ -240,7 +246,10 @@ class HttpSunucuServisi {
       } else {
         await AktarimHttp.yanit(request, key, {
           'success': false,
-          'error': error is HesapHatasi ? '$stage: ${error.mesaj}' : '$stage: Cihaz doğrulanamadı (${error.runtimeType}).',
+          'error':
+              error is HesapHatasi
+                  ? '$stage: ${error.mesaj}'
+                  : '$stage: Cihaz doğrulanamadı (${error.runtimeType}).',
         }, status: 409);
       }
     } finally {
@@ -435,7 +444,36 @@ class HttpSunucuServisi {
         case '/sync/v2/ready':
           if (request.method != 'POST')
             throw AktarimHatasi('METHOD', 'POST gerekli.');
-          await oku();
+          final readiness = await oku();
+          if (readiness['reverse_check'] == 1) {
+            try {
+              final reverseToken = eslesmisAnahtarlar[uzakIP]!;
+              if (_testReverseCheck != null) {
+                await _testReverseCheck!(uzakIP, reverseToken);
+              } else {
+                final reverse = await AktarimHttp.jsonIstek(
+                  Uri.parse(
+                    'http://$uzakIP:$SUNUCU_PORTU/sync/v2/capabilities',
+                  ),
+                  reverseToken,
+                );
+                if (reverse['success'] != true ||
+                    reverse['surum'] != GuvenliAktarimServisi.surum) {
+                  throw HesapHatasi('Ters yön oturumu doğrulanamadı.');
+                }
+              }
+              await hesapEslesmesi.yetkiKontrol(uzakIP);
+              if (!_ayniBaglanti(ip, connection) ||
+                  gelenAnahtarlar[ip] != aktarimAnahtari) {
+                throw HesapHatasi('Kontrol sırasında cihaz oturumu değişti.');
+              }
+            } catch (_) {
+              throw AktarimHatasi(
+                'TERS_BAGLANTI',
+                'İlk bağlantı kuruldu ancak karşı yöndeki 8080 bağlantısı doğrulanamadı. İki cihazda sunucuyu açık ve uygulamayı ön planda tutun; güvenlik duvarını ve güncel Wi-Fi/hotspot adreslerini kontrol edin.',
+              );
+            }
+          }
           final waiting = _bekleyenCihazlar.remove(uzakIP);
           if (waiting != null) _cihazBaglandi(uzakIP, waiting);
           result = {'success': true};
@@ -533,7 +571,9 @@ class HttpSunucuServisi {
         request.uri.path == '/sync/v2/pair'
             ? aktarimAnahtari
             : gelenAnahtarlar[ip];
-    if (key == null || (request.uri.path != '/sync/v2/pair' && _baglantiDenemeleri.contains(ip)) ||
+    if (key == null ||
+        (request.uri.path != '/sync/v2/pair' &&
+            _baglantiDenemeleri.contains(ip)) ||
         request.headers.value('Origin') != null ||
         !AktarimHttp.yetkili(request, key)) {
       await _sendResponse(
@@ -575,7 +615,6 @@ class HttpSunucuServisi {
   // Manuel IP ayarlama
   void setManuelIP(String? ip) {
     _manuelIP = ip;
-    print('🔧 Manuel IP ayarlandı: $ip');
   }
 
   String? get manuelIP => _manuelIP;
@@ -603,7 +642,6 @@ class HttpSunucuServisi {
         onDeviceDisconnected(deviceId, deviceInfo);
       };
     }
-    print('📡 HTTP sunucu callback\'leri ayarlandı');
   }
 
   // Callback ayarlama metodlari
@@ -617,40 +655,23 @@ class HttpSunucuServisi {
 
   Future<void> sunucuyuBaslat() async {
     if (_calisiyorMu) {
-      print('⚠️ Sunucu zaten çalışıyor');
       return;
     }
 
     try {
-      print('🚀 HTTP Sunucusu başlatılıyor...');
-
       // Cihaz bilgilerini al
       await _cihazBilgileriniAl();
       _cihazId = await (await guvenServisi).cihazKimligi();
-      print('✅ Cihaz bilgileri alındı: $_cihazAdi ($_platform)');
 
       // Sunucuyu başlat
-      print('🔌 Port $SUNUCU_PORTU dinlenmeye başlanıyor...');
       _sunucu = await HttpServer.bind(InternetAddress.anyIPv4, SUNUCU_PORTU);
 
       // Sunucu timeout ayarları
       _sunucu!.idleTimeout = KEEPALIVE_TIMEOUT;
 
-      print(
-        '✅ Arsivim HTTP Sunucusu başlatıldı: http://localhost:$SUNUCU_PORTU',
-      );
-
-      // IP adresi alındı
-      final realIP = await getRealIPAddress();
-      print('🌐 Gerçek IP adresi: $realIP');
-
-      print('🆔 Cihaz ID: $_cihazId');
-      print('💻 Platform: $_platform');
-
       _calisiyorMu = true;
       startedAt = DateTime.now();
       dataChanges.value++;
-      print('✅ Sunucu durumu: $_calisiyorMu');
 
       // Cleanup timer başlat
       _startCleanupTimer();
@@ -699,7 +720,6 @@ class HttpSunucuServisi {
             );
             return;
           }
-          print('📨 HTTP İstek: ${request.method} ${request.uri.path}');
 
           // Request timeout kontrolü (HttpServer kendi timeout yönetimi yapıyor)
 
@@ -768,10 +788,8 @@ class HttpSunucuServisi {
 
           // Response gönder
           await _sendResponse(request.response, responseBody, statusCode);
-          print('✅ HTTP Yanıt gönderildi: $statusCode');
         } catch (e, stackTrace) {
-          print('❌ İstek işleme hatası: $e');
-          print('📍 Stack trace: $stackTrace');
+          LogServisi.instance.error('İstek işleme hatası', e, stackTrace);
           await _sendErrorResponse(
             request.response,
             'Sunucu hatası',
@@ -780,16 +798,13 @@ class HttpSunucuServisi {
         }
       });
     } catch (e, stackTrace) {
-      print('❌ Sunucu başlatma hatası: $e');
-      print('📍 Stack trace: $stackTrace');
+      LogServisi.instance.error('Sunucu başlatma hatası', e, stackTrace);
       throw Exception('HTTP sunucusu başlatılamadı: $e');
     }
   }
 
   Future<void> sunucuyuDurdur() async {
     try {
-      print('🛑 HTTP Sunucusu durduruluyor...');
-
       // Cleanup timer'ı durdur
       _cleanupTimer?.cancel();
       _cleanupTimer = null;
@@ -812,10 +827,8 @@ class HttpSunucuServisi {
       _bekleyenCihazlar.clear();
       if (_guvenServisi != null) (await _guvenServisi!).challengeTemizle();
       hesapEslesmesi.temizle();
-
-      print('✅ Arsivim HTTP Sunucusu durduruldu');
     } catch (e) {
-      print('❌ Sunucu durdurma hatası: $e');
+      LogServisi.instance.error('❌ Sunucu durdurma hatası: $e');
     }
   }
 
@@ -865,7 +878,6 @@ class HttpSunucuServisi {
           _bekleyenCihazlar.remove(ip);
           hesapEslesmesi.baglantiKes(ip);
         }
-        print('⏰ Cihaz timeout nedeniyle kaldırıldı: ${device['device_name']}');
         if (_onDeviceDisconnected != null) {
           final disconnectionInfo = {
             'device_id': device['device_id'],
@@ -877,7 +889,7 @@ class HttpSunucuServisi {
         }
       }
     } catch (e) {
-      print('❌ Cleanup hatası: $e');
+      LogServisi.instance.error('❌ Cleanup hatası: $e');
     }
   }
 
@@ -933,7 +945,7 @@ class HttpSunucuServisi {
         ..add(responseBytes);
       await response.close();
     } catch (e) {
-      print('❌ Response gönderme hatası: $e');
+      LogServisi.instance.error('❌ Response gönderme hatası: $e');
     }
   }
 
@@ -947,7 +959,7 @@ class HttpSunucuServisi {
       final errorResponse = _createErrorResponse(error, message);
       await _sendResponse(response, errorResponse, 500);
     } catch (e) {
-      print('❌ Error response gönderme hatası: $e');
+      LogServisi.instance.error('❌ Error response gönderme hatası: $e');
     }
   }
 
@@ -991,7 +1003,7 @@ class HttpSunucuServisi {
       final digest = sha256.convert(bytes);
       _cihazId = digest.toString().substring(0, 16);
     } catch (e) {
-      print('❌ Cihaz bilgisi alınamadı: $e');
+      LogServisi.instance.error('❌ Cihaz bilgisi alınamadı: $e');
       _cihazAdi = 'Arsivim Cihazı';
       _platform = Platform.operatingSystem;
       _cihazId = 'fallback-${DateTime.now().millisecondsSinceEpoch}';
@@ -1033,7 +1045,7 @@ class HttpSunucuServisi {
         'max_file_size': GuvenliAktarimServisi.azamiDosya,
       });
     } catch (e) {
-      print('❌ Info endpoint hatası: $e');
+      LogServisi.instance.error('❌ Info endpoint hatası: $e');
       return json.encode({
         'success': false,
         'error': 'Info alınamadı',
@@ -1051,8 +1063,6 @@ class HttpSunucuServisi {
   // Connection handler methods
   Future<String> _handleConnect(HttpRequest request) async {
     try {
-      print('🔗 Bağlantı isteği alındı');
-
       final bodyBytes = await request.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
@@ -1087,11 +1097,9 @@ class HttpSunucuServisi {
           'ip': clientIP,
           'platform': platform ?? _bagliCihazlar[mevcutCihazIndex]['platform'],
         });
-        print('🔄 Mevcut cihaz bilgileri güncellendi: $deviceName ($deviceId)');
 
         // Güncelleme için UI bildirimini gönder
         if (_onDeviceConnected != null) {
-          print('🔄 UI\'ya cihaz güncelleme bildirimi gönderiliyor...');
           Future.microtask(
             () => _onDeviceConnected!(_bagliCihazlar[mevcutCihazIndex]),
           );
@@ -1111,11 +1119,9 @@ class HttpSunucuServisi {
         };
 
         _bagliCihazlar.add(yeniCihaz);
-        print('➕ Yeni cihaz eklendi: $deviceName ($deviceId)');
 
         // UI'ya bildirim gönder
         if (_onDeviceConnected != null) {
-          print('📱 UI\'ya yeni cihaz bağlantı bildirimi gönderiliyor...');
           Future.microtask(() => _onDeviceConnected!(yeniCihaz));
         }
       }
@@ -1139,15 +1145,13 @@ class HttpSunucuServisi {
         'timestamp': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('❌ Connect handler hatası: $e');
+      LogServisi.instance.error('❌ Connect handler hatası: $e');
       return _createErrorResponse('Bağlantı hatası', e.toString());
     }
   }
 
   Future<String> _handleDisconnect(HttpRequest request) async {
     try {
-      print('🔌 Bağlantı kesme isteği alındı');
-
       final bodyBytes = await request.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
@@ -1170,10 +1174,6 @@ class HttpSunucuServisi {
 
       if (removedDevice.isNotEmpty) {
         _bagliCihazlar.removeWhere((device) => device['device_id'] == deviceId);
-        print(
-          '🔌 Cihaz bağlantısı kesildi: ${removedDevice['device_name']} ($deviceId)',
-        );
-        print('📝 Sebep: ${reason ?? 'Belirtilmedi'}');
 
         // UI'ya bildirim gönder
         if (_onDeviceDisconnected != null) {
@@ -1183,7 +1183,6 @@ class HttpSunucuServisi {
             'reason': reason ?? 'Bağlantı kesildi',
             'timestamp': DateTime.now().toIso8601String(),
           };
-          print('📢 UI\'ya bağlantı kesme bildirimi gönderiliyor...');
           Future.microtask(() => _onDeviceDisconnected!(disconnectionInfo));
         }
 
@@ -1199,7 +1198,7 @@ class HttpSunucuServisi {
         );
       }
     } catch (e) {
-      print('❌ Disconnect handler hatası: $e');
+      LogServisi.instance.error('❌ Disconnect handler hatası: $e');
       return _createErrorResponse('Bağlantı kesme hatası', e.toString());
     }
   }
@@ -1227,7 +1226,7 @@ class HttpSunucuServisi {
         'timestamp': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('❌ Status handler hatası: $e');
+      LogServisi.instance.error('❌ Status handler hatası: $e');
       return _createErrorResponse('Status alınamadı', e.toString());
     }
   }
@@ -1254,7 +1253,6 @@ class HttpSunucuServisi {
 
       // Timeout olan cihazlar için bildirim gönder
       for (final device in removedDevices) {
-        print('⏰ Cihaz timeout nedeniyle kaldırıldı: ${device['device_name']}');
         if (_onDeviceDisconnected != null) {
           final disconnectionInfo = {
             'device_id': device['device_id'],
@@ -1273,15 +1271,13 @@ class HttpSunucuServisi {
         'timestamp': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('❌ Devices handler hatası: $e');
+      LogServisi.instance.error('❌ Devices handler hatası: $e');
       return _createErrorResponse('Cihaz listesi alınamadı', e.toString());
     }
   }
 
   Future<String> _handleDeviceConnected(HttpRequest request) async {
     try {
-      print('📱 Cihaz bağlantı bildirimi alındı');
-
       final bodyBytes = await request.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
@@ -1302,11 +1298,6 @@ class HttpSunucuServisi {
         );
       }
 
-      print('🆕 YENİ CİHAZ BAĞLANDI!');
-      print('📱 Cihaz: $deviceName ($deviceId)');
-      print('💻 Platform: $platform');
-      print('🌐 IP: $clientIP');
-
       // UI'ya bildirim gönder
       final deviceInfo = {
         'device_id': deviceId,
@@ -1319,10 +1310,7 @@ class HttpSunucuServisi {
 
       // Callback'i çağır
       if (_onDeviceConnected != null) {
-        print('📢 UI\'ya bağlantı bildirimi gönderiliyor...');
         Future.microtask(() => _onDeviceConnected!(deviceInfo));
-      } else {
-        print('⚠️ Device connected callback tanımlanmamış!');
       }
 
       return json.encode({
@@ -1333,15 +1321,13 @@ class HttpSunucuServisi {
         'timestamp': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('❌ Device connected handler hatası: $e');
+      LogServisi.instance.error('❌ Device connected handler hatası: $e');
       return _createErrorResponse('Bağlantı bildirimi hatası', e.toString());
     }
   }
 
   Future<String> _handleDeviceDisconnected(HttpRequest request) async {
     try {
-      print('📱 Cihaz bağlantı kesme bildirimi alındı');
-
       final bodyBytes = await request.fold<List<int>>(
         <int>[],
         (previous, element) => previous..addAll(element),
@@ -1356,9 +1342,6 @@ class HttpSunucuServisi {
         return _createErrorResponse('Missing parameter', 'device_id gerekli');
       }
 
-      print('🔌 Cihaz bağlantısı kesildi: $deviceId');
-      print('📝 Mesaj: $message');
-
       // UI'ya bildirim gönder
       final disconnectionInfo = {
         'device_id': deviceId,
@@ -1368,10 +1351,7 @@ class HttpSunucuServisi {
 
       // Callback'i çağır
       if (_onDeviceDisconnected != null) {
-        print('📢 UI\'ya bağlantı kesme bildirimi gönderiliyor...');
         Future.microtask(() => _onDeviceDisconnected!(disconnectionInfo));
-      } else {
-        print('⚠️ Device disconnected callback tanımlanmamış!');
       }
 
       return json.encode({
@@ -1380,7 +1360,7 @@ class HttpSunucuServisi {
         'timestamp': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('❌ Device disconnected handler hatası: $e');
+      LogServisi.instance.error('❌ Device disconnected handler hatası: $e');
       return _createErrorResponse(
         'Bağlantı kesme bildirimi hatası',
         e.toString(),
@@ -1391,98 +1371,24 @@ class HttpSunucuServisi {
   // IP adresini gerçek zamanlı al
   Future<String?> getRealIPAddress() async {
     try {
-      print('🔍 Network interface\'leri taranıyor...');
-      final interfaces = await NetworkInterface.list();
-
-      String? bestIP;
-      int bestPriority = 0;
-
-      for (final interface in interfaces) {
-        print(
-          '🔗 Interface: ${interface.name}, addresses: ${interface.addresses.length}',
-        );
-
-        for (final addr in interface.addresses) {
-          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
-            print('📍 Address: ${addr.address}, Interface: ${interface.name}');
-
-            int priority = 0;
-            final interfaceName = interface.name.toLowerCase();
-
-            // Virtual interface'leri atla
-            if (interfaceName.contains('virtual') ||
-                interfaceName.contains('vmware') ||
-                interfaceName.contains('vbox') ||
-                interfaceName.contains('virtualbox') ||
-                interfaceName.contains('docker') ||
-                interfaceName.contains('hyper-v')) {
-              print('⚠️ Virtual interface atlandı: ${interface.name}');
-              continue;
-            }
-
-            // Wi-Fi interface'leri en yüksek öncelik
-            if (interfaceName.contains('wi-fi') ||
-                interfaceName.contains('wlan') ||
-                interfaceName.contains('wireless')) {
-              priority = 100;
-            }
-            // Ethernet ikinci öncelik
-            else if (interfaceName.contains('ethernet') ||
-                interfaceName.contains('eth')) {
-              priority = 80;
-            }
-            // Diğer interface'ler
-            else {
-              priority = 50;
-            }
-
-            // 192.168.x.x ağları extra puan (ev/ofis ağları)
-            if (addr.address.startsWith('192.168.')) {
-              priority += 30;
-            }
-            // 10.x.x.x ağları da geçerli ama daha az puan
-            else if (addr.address.startsWith('10.')) {
-              priority += 20;
-            }
-            // 172.16-31.x.x ağları
-            else if (addr.address.startsWith('172.')) {
-              final parts = addr.address.split('.');
-              if (parts.length >= 2) {
-                final second = int.tryParse(parts[1]);
-                if (second != null && second >= 16 && second <= 31) {
-                  priority += 15;
-                }
-              }
-            }
-
-            if (priority > bestPriority) {
-              bestPriority = priority;
-              bestIP = addr.address;
-              print(
-                '✅ Yeni en iyi IP: ${addr.address} (Öncelik: $priority, Interface: ${interface.name})',
-              );
-            }
-          }
-        }
-      }
-
-      if (bestIP != null) {
-        print('🌐 En iyi IP seçildi: $bestIP (Öncelik: $bestPriority)');
-        return bestIP;
-      }
-
-      print('❌ Uygun IP adresi bulunamadı');
+      return (await getLocalIPAddresses()).firstOrNull;
     } catch (e) {
-      print('❌ IP adresi alınamadı: $e');
+      LogServisi.instance.error('❌ IP adresi alınamadı: $e');
     }
 
     return null;
   }
 
+  Future<List<String>> getLocalIPAddresses() async {
+    final addresses = await YerelAgServisi.adresler();
+    final manual = _manuelIP;
+    if (manual != null && addresses.remove(manual)) addresses.insert(0, manual);
+    return addresses;
+  }
+
   // Utility metodları
   void clearConnectedDevices() {
     _bagliCihazlar.clear();
-    print('🧹 Bağlı cihazlar listesi temizlendi');
   }
 
   void updateDeviceLastSeen(String deviceId) {
@@ -1493,7 +1399,6 @@ class HttpSunucuServisi {
 
     if (device.isNotEmpty) {
       device['last_seen'] = DateTime.now().toIso8601String();
-      print('⏰ Cihaz son görülme zamanı güncellendi: $deviceId');
     }
   }
 }

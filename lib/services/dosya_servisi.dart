@@ -1,3 +1,4 @@
+import 'log_servisi.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'dart:io';
 import 'dart:math' as math;
@@ -135,7 +136,7 @@ class DosyaServisi {
       }
       return false;
     } catch (e) {
-      print('Dosya silinirken hata: $e');
+      LogServisi.instance.error('Dosya silinirken hata: $e');
       return false;
     }
   }
@@ -158,7 +159,7 @@ class DosyaServisi {
       }
       return null;
     } catch (e) {
-      print('Hash arama hatası: $e');
+      LogServisi.instance.error('Hash arama hatası: $e');
       return null;
     }
   }
@@ -397,10 +398,9 @@ class DosyaServisi {
       File hedefDosya = File(hedefYol);
       await hedefDosya.writeAsBytes(dosyaBytes);
 
-      print('✅ Senkronizasyon dosyası kaydedildi: $hedefYol');
       return hedefYol;
     } catch (e) {
-      print('❌ Senkronizasyon dosyası kaydetme hatası: $e');
+      LogServisi.instance.error('❌ Senkronizasyon dosyası kaydetme hatası: $e');
       throw Exception('Senkronizasyon dosyası kaydedilemedi: $e');
     }
   }

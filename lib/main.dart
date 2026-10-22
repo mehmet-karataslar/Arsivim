@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-// import 'package:shared_preferences/shared_preferences.dart'; // Gerekli değil
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -13,19 +11,15 @@ import 'dart:io' show Platform;
 import 'screens/ana_ekran.dart';
 import 'screens/app_entry_screen.dart';
 import 'services/app_launch_service.dart';
-import 'screens/auth/login_screen.dart';
 import 'screens/belge_duzenle_ekrani.dart';
 
 // Services
-import 'services/http_sunucu_servisi.dart';
 import 'services/notification_service.dart';
 import 'services/veritabani_servisi.dart';
-import 'services/dosya_servisi.dart';
-import 'services/senkronizasyon_yonetici_servisi.dart';
 import 'services/log_servisi.dart';
 import 'services/error_handler_servisi.dart';
-import 'services/auth_servisi.dart';
 import 'services/cache_servisi.dart';
+import 'services/depolama_izni.dart';
 
 // Providers
 import 'providers/app_state_manager.dart';
@@ -34,18 +28,16 @@ import 'providers/theme_controller.dart';
 // Models
 import 'models/belge_modeli.dart';
 
-// Utils
-import 'utils/sabitler.dart';
-import 'utils/network_optimizer.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Crash handling setup
   FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    print('🔥 Flutter Crash: ${details.exception}');
-    print('📍 Stack: ${details.stack}');
+    LogServisi.instance.error(
+      'Flutter hatası',
+      details.exception,
+      details.stack,
+    );
   };
 
   try {
@@ -74,8 +66,7 @@ void main() async {
       ),
     );
   } catch (e, stackTrace) {
-    print('🔥 App initialization failed: $e');
-    print('📍 Stack: $stackTrace');
+    LogServisi.instance.error('Uygulama başlatılamadı', e, stackTrace);
 
     // Show error screen
     runApp(
@@ -108,13 +99,10 @@ void main() async {
 
 /// Platform-specific initialization
 Future<void> _platformInit() async {
-  print('🔧 Platform initialization starting...');
-
   // Windows/Linux/macOS için SQLite FFI başlatma
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
-    print('✅ SQLite FFI initialized for desktop platform');
   }
 
   // Status bar ayarları
@@ -134,123 +122,33 @@ Future<void> _platformInit() async {
       DeviceOrientation.landscapeRight,
     ],
   ]);
-
-  print('✅ Platform initialization completed');
 }
 
 /// Request necessary permissions
 Future<void> _requestPermissions() async {
-  print('🔐 Requesting permissions...');
+  if (!Platform.isAndroid && !Platform.isIOS) return;
 
-  if (Platform.isAndroid || Platform.isIOS) {
-    final permissions = [
-      Permission.camera,
-      Permission.storage,
-      Permission.notification,
-      if (Platform.isAndroid) Permission.manageExternalStorage,
-    ];
-
-    for (final permission in permissions) {
-      final status = await permission.request();
-      print('📋 Permission ${permission.toString()}: ${status.toString()}');
-    }
+  await Permission.camera.request();
+  if (Platform.isAndroid) {
+    final android = await DeviceInfoPlugin().androidInfo;
+    await androidDepolamaIzniIste(android.version.sdkInt);
   }
-
-  print('✅ Permission requests completed');
+  // Bildirim izni NotificationService tarafından tek noktadan istenir.
 }
 
-/// Initialize all services in correct order
+/// Initialize core services without opening a network listener at startup.
 Future<void> _initializeServices() async {
-  print('🚀 Services initialization starting...');
+  await LogServisi.instance.init();
+  await ErrorHandlerServisi.instance.init();
+  await CacheServisi().initialize();
+  await VeriTabaniServisi().baslat();
 
-  try {
-    // 1. Log Service (must be first for error tracking)
-    print('📝 Initializing log service...');
-    final logServisi = LogServisi.instance;
-    await logServisi.init();
-    print('✅ Log service initialized');
-
-    // 2. Error Handler Service
-    print('🚨 Initializing error handler...');
-    final errorHandler = ErrorHandlerServisi.instance;
-    await errorHandler.init();
-    print('✅ Error handler initialized');
-
-    // 3. Cache Service
-    print('💾 Initializing cache service...');
-    final cacheServisi = CacheServisi();
-    await cacheServisi.initialize();
-    print('✅ Cache service initialized');
-
-    // 4. Network Optimizer
-    print('🌐 Initializing network optimizer...');
-    final networkOptimizer = NetworkOptimizer.instance;
-    // await networkOptimizer.initialize(); // Yavaşlığa neden olan kısım
-    print('✅ Network optimizer initialized');
-
-    // 5. Database Service
-    print('📁 Initializing database service...');
-    final veriTabani = VeriTabaniServisi();
-
-    // Veritabanını başlat (otomatik oluşturma dahil)
-    await veriTabani.baslat();
-    print('✅ Database service initialized');
-
-    // 6. File Service
-    print('📂 Initializing file service...');
-    final dosyaServisi = DosyaServisi();
-    // File service is ready to use (singleton pattern)
-    print('✅ File service initialized');
-
-    // 7. HTTP Server Service
-    print('🌐 Initializing HTTP server...');
-    final httpSunucu = HttpSunucuServisi.instance;
-
-    // Set up global device connection callback
-    httpSunucu.setOnDeviceConnected((deviceInfo) {
-      print('🎉 GLOBAL: New device connected - ${deviceInfo['clientName']}');
-      print('📱 IP: ${deviceInfo['ip']}');
-      print('💻 Platform: ${deviceInfo['platform']}');
-    });
-
-    await httpSunucu.sunucuyuBaslat();
-    print('✅ HTTP server started successfully');
-
-    // 8. Notification Service
-    print('🔔 Initializing notification service...');
-    final notificationService = NotificationService.instance;
-    await notificationService.initialize();
-    await notificationService.requestPermissions();
-    print('✅ Notification service initialized');
-
-    // 8. Authentication Service
-    print('🔐 Initializing authentication service...');
-    final authServisi = AuthServisi.instance;
-    // Auth service is ready to use (singleton pattern)
-    print('✅ Authentication service initialized');
-
-    // 9. Start Network Monitoring
-    print('📡 Starting network monitoring...');
-    // Bu kısım da başlangıçta gecikmeye neden olabilir.
-    /*
-    await networkOptimizer.startNetworkMonitoring(
-      interval: const Duration(minutes: 3),
-      testServers: ['http://8.8.8.8', 'http://1.1.1.1'],
-    );
-    */
-    print('✅ Network monitoring started');
-
-    // 10. Synchronization Manager Service
-    print('🔄 Initializing synchronization manager...');
-    final senkronYonetici = SenkronizasyonYoneticiServisi.instance;
-    // Synchronization manager is ready to use (singleton pattern)
-    print('✅ Synchronization manager initialized');
-
-    print('🎉 All services initialized successfully!');
-  } catch (e, stackTrace) {
-    print('❌ Service initialization failed: $e');
-    print('📍 Stack: $stackTrace');
-    rethrow;
+  // 8080 yalnızca senkronizasyon bağlantısı açıldığında dinlenir.
+  if (Platform.isAndroid || Platform.isIOS) {
+    final notifications = NotificationService.instance;
+    if (await notifications.initialize()) {
+      await notifications.requestPermissions();
+    }
   }
 }
 

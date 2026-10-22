@@ -6,7 +6,7 @@ import 'package:path/path.dart' as path;
 import 'veritabani_servisi.dart';
 import 'http_sunucu_servisi.dart';
 import '../utils/timestamp_manager.dart';
-import '../utils/network_optimizer.dart';
+import '../models/connection_qr.dart';
 import '../models/belge_modeli.dart';
 import '../models/kisi_modeli.dart';
 import '../models/kategori_modeli.dart';
@@ -22,6 +22,7 @@ import 'aktarim_envanter_servisi.dart';
 import '../models/sync_comparison.dart';
 import 'guvenilir_cihaz_servisi.dart';
 import 'baglanti_tanisi.dart';
+import 'yerel_ag_servisi.dart';
 
 class SenkronizasyonYoneticiServisi {
   static final SenkronizasyonYoneticiServisi _instance =
@@ -32,7 +33,6 @@ class SenkronizasyonYoneticiServisi {
   final VeriTabaniServisi _veriTabani = VeriTabaniServisi();
   final HttpSunucuServisi _httpSunucu = HttpSunucuServisi.instance;
   final LogServisi _logServisi = LogServisi.instance;
-  final NetworkOptimizer _networkOptimizer = NetworkOptimizer.instance;
   bool _baglantiSuruyor = false;
   String? sonBaglantiHatasi;
 
@@ -154,8 +154,6 @@ class SenkronizasyonYoneticiServisi {
   void _httpSunucuCallbackleriKur() {
     _httpSunucu.baglantiCallbackleri(
       onDeviceConnected: (deviceInfo) {
-        print('📱 PC\'ye yeni cihaz bağlandı: ${deviceInfo['device_name']}');
-
         // Cihaz bilgilerini düzgün format'a getir
         final formattedDeviceInfo = {
           'name': deviceInfo['device_name'] ?? 'Bilinmeyen Cihaz',
@@ -169,8 +167,6 @@ class SenkronizasyonYoneticiServisi {
           'timestamp': DateTime.now().toIso8601String(),
         };
 
-        print('📋 Formatlanmış cihaz bilgisi: $formattedDeviceInfo');
-
         // Cihazı listeye ekle
         final existingIndex = _bagliCihazlar.indexWhere(
           (device) => device['device_id'] == formattedDeviceInfo['device_id'],
@@ -179,11 +175,9 @@ class SenkronizasyonYoneticiServisi {
         if (existingIndex != -1) {
           // Mevcut cihazı güncelle
           _bagliCihazlar[existingIndex] = formattedDeviceInfo;
-          print('🔄 Mevcut cihaz güncellendi: ${formattedDeviceInfo['name']}');
         } else {
           // Yeni cihaz ekle
           _bagliCihazlar.add(formattedDeviceInfo);
-          print('➕ Yeni cihaz eklendi: ${formattedDeviceInfo['name']}');
 
           // Mobilde cache limitini aş
           _temizleCacheMemory();
@@ -216,8 +210,6 @@ class SenkronizasyonYoneticiServisi {
         );
       },
       onDeviceDisconnected: (deviceId, disconnectionInfo) {
-        print('📱 Cihaz ayrıldı: $deviceId');
-
         // Cihazı listeden çıkar
         final removedDevice = _bagliCihazlar.firstWhere(
           (device) => device['device_id'] == deviceId,
@@ -315,8 +307,13 @@ class SenkronizasyonYoneticiServisi {
     final bilet = await _httpSunucu.hesapEslesmesi.biletOlustur();
     if (!_httpSunucu.calisiyorMu) await _httpSunucu.sunucuyuBaslat();
     _httpSunucu.aktarimAnahtari = GuvenliAktarimServisi.kimlik();
-    final ip = await _getRealIPAddress();
-    print('📱 Connection data IP adresi: $ip');
+    final ips = await _httpSunucu.getLocalIPAddresses();
+    if (ips.isEmpty)
+      throw AktarimHatasi(
+        'AG',
+        'Wi-Fi veya hotspot yerel ağ adresi bulunamadı.',
+      );
+    final ip = ips.first;
 
     final connectionInfo = {
       ...bilet,
@@ -332,21 +329,14 @@ class SenkronizasyonYoneticiServisi {
               ? 'PC-Arşivim'
               : 'Mobile-Arşivim',
       'ip': ip,
+      'ips': ips,
       'port': 8080,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
       'platform': Platform.operatingSystem,
-      'server_status': _sunucuCalisiyorMu,
+      'server_status': _httpSunucu.calisiyorMu,
     };
 
     return json.encode(connectionInfo);
-  }
-
-  Future<String> _getRealIPAddress() async {
-    // HTTP sunucu servisinden gerçek IP adresini al
-    final realIP = await _httpSunucu.getRealIPAddress();
-    if (realIP == null)
-      throw AktarimHatasi('AG', 'Yerel ag adresi bulunamadi.');
-    return realIP;
   }
 
   Future<bool> yeniCihazBagla(Map<String, dynamic> connectionInfo) async {
@@ -355,6 +345,9 @@ class SenkronizasyonYoneticiServisi {
     _baglantiSuruyor = true;
     try {
       return await _yeniCihazBagla(connectionInfo);
+    } catch (error) {
+      _baglantiHatasi(error, 'QR bağlantısı');
+      return false;
     } finally {
       _baglantiSuruyor = false;
     }
@@ -378,7 +371,7 @@ class SenkronizasyonYoneticiServisi {
         Map<String, dynamic>.from(connectionInfo['account'] as Map),
       );
     } catch (e) {
-      onError?.call(e.toString());
+      _baglantiHatasi(e, 'Hesap eşleştirme');
       return false;
     }
     final token = connectionInfo['transfer_token'];
@@ -386,121 +379,97 @@ class SenkronizasyonYoneticiServisi {
         connectionInfo['transfer_version'] != GuvenliAktarimServisi.surum ||
         token is! String ||
         !RegExp(r'^[a-f0-9]{48}$').hasMatch(token)) {
-      onError?.call('Iki cihazi da guncelleyip yeni QR koduyla eslestirin.');
+      _baglantiHatasi(
+        HesapHatasi('İki cihazı da güncelleyip yeni QR koduyla eşleştirin.'),
+        'Sürüm kontrolü',
+      );
       return false;
     }
-    final ip = connectionInfo['ip'];
-    if (ip is! String ||
-        InternetAddress.tryParse(ip)?.type != InternetAddressType.IPv4 ||
+    if (!YerelAgServisi.gecerliAdres(connectionInfo['ip']) ||
         connectionInfo['port'] != 8080) {
-      onError?.call('QR kodundaki ag adresi veya port gecersiz.');
+      _baglantiHatasi(
+        HesapHatasi('QR kodundaki ağ adresi veya port geçersiz.'),
+        'QR adresi',
+      );
       return false;
     }
+    final deviceId = connectionInfo['device_id'];
+    if (deviceId is! String || deviceId.isEmpty)
+      throw const FormatException('Cihaz kimliği eksik.');
+    if (await etkinBaglantiyiDogrula(deviceId)) return true;
+    final ip = await YerelAgServisi.ulasilanAdres(connectionInfo);
     if (!_httpSunucu.calisiyorMu) await _httpSunucu.sunucuyuBaslat();
+    if (await etkinBaglantiyiDogrula(deviceId)) return true;
     _httpSunucu.eslesmisAnahtarlar[ip] = token;
     final deviceName = connectionInfo['device_name'] ?? 'Bilinmeyen Cihaz';
-    final deviceId = connectionInfo['device_id'];
-    final deviceIP = connectionInfo['ip'];
+    final deviceIP = ip;
     final devicePort = connectionInfo['port'] ?? 8080;
     final pcPlatform =
         Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-    print('🔗 Yeni cihaz bağlantısı başlatılıyor:');
-    print('  Device Name: $deviceName');
-    print('  Device ID: $deviceId');
-    print('  Device IP: $deviceIP');
-    print('  Device Port: $devicePort');
-    print('  PC Platform: $pcPlatform');
-
-    // Aynı cihaz zaten bağlı mı kontrol et
-    bool alreadyConnected = _bagliCihazlar.any(
-      (cihaz) => cihaz['device_id'] == deviceId,
-    );
-
-    if (!alreadyConnected) {
-      try {
-        // Gerçek bağlantı testi yap
-        bool connectionSuccessful = await _testConnection(deviceIP, devicePort);
-
-        if (connectionSuccessful) {
-          // Karşı tarafa bağlantı bildirimini gönder
-          await _notifyConnection(deviceIP, devicePort, connectionInfo);
-
-          // Yerel listeye ekle
-          final newDevice = {
-            'name': deviceName,
-            'ip': deviceIP,
-            'platform': connectionInfo['platform'] ?? 'Unknown',
-            'connected_at': DateTime.now(),
-            'device_id': deviceId,
-            'connection_type': pcPlatform ? 'incoming' : 'outgoing',
-            'status': 'connected',
-            'online': true,
-          };
-
-          _bagliCihazlar.add(newDevice);
-
-          _changed();
-          onDeviceListChanged?.call();
-          onDeviceConnected?.call(deviceName, newDevice);
-          verileriYukle();
-
-          return true;
-        } else {
-          _httpSunucu.eslesmisAnahtarlar.remove(ip);
-          onError?.call('$deviceName cihazına bağlanılamadı');
-          return false;
-        }
-      } catch (e) {
-        _httpSunucu.eslesmisAnahtarlar.remove(ip);
-        _httpSunucu.gelenAnahtarlar.remove(ip);
-        _httpSunucu.guvenBaglantilari.remove(ip);
-        _httpSunucu.hesapEslesmesi.baglantiKes(ip);
-        _baglantiHatasi(e, 'İlk eşleştirme');
-        return false;
-      }
-    } else {
-      onError?.call('Bu cihaz zaten bağlı: $deviceName');
+    try {
+      await _notifyConnection(deviceIP, devicePort, connectionInfo);
+      final newDevice = {
+        'name': deviceName,
+        'ip': deviceIP,
+        'platform': connectionInfo['platform'] ?? 'Unknown',
+        'connected_at': DateTime.now(),
+        'device_id': deviceId,
+        'connection_type': pcPlatform ? 'incoming' : 'outgoing',
+        'status': 'connected',
+        'online': true,
+      };
+      _bagliCihazlar.removeWhere(
+        (d) => d['ip'] == ip || d['device_id'] == deviceId,
+      );
+      _bagliCihazlar.add(newDevice);
+      _changed();
+      onDeviceListChanged?.call();
+      onDeviceConnected?.call(deviceName, newDevice);
+      verileriYukle();
+      return true;
+    } catch (e) {
+      _httpSunucu.eslesmisAnahtarlar.remove(ip);
+      _httpSunucu.gelenAnahtarlar.remove(ip);
+      _httpSunucu.guvenBaglantilari.remove(ip);
+      _httpSunucu.hesapEslesmesi.baglantiKes(ip);
+      _baglantiHatasi(e, 'İlk eşleştirme');
       return false;
     }
   }
 
-  Future<bool> _testConnection(String ip, int port) async {
+  Future<bool> etkinBaglantiyiDogrula(String deviceId) async {
+    final device =
+        _bagliCihazlar.where((d) => d['device_id'] == deviceId).firstOrNull;
+    if (device == null) return false;
+    final ip = device['ip'] as String;
+    final token = _httpSunucu.eslesmisAnahtarlar[ip];
     try {
-      _logServisi.info('🔍 Bağlantı testi başlatılıyor: http://$ip:$port/ping');
-
-      // Network optimizer ile connection test
-      final networkTestResult = await _networkOptimizer.testConnection(
-        ip,
-        port: port,
+      if (token == null) throw HesapHatasi('Etkin cihaz anahtarı yok.');
+      await _httpSunucu.hesapEslesmesi.yetkiKontrol(ip);
+      final result = await AktarimHttp.jsonIstek(
+        Uri.parse('http://$ip:8080/sync/v2/capabilities'),
+        token,
       );
-
-      if (networkTestResult) {
-        _logServisi.info('✅ Bağlantı testi başarılı: $ip:$port');
+      if (result['success'] == true &&
+          result['surum'] == GuvenliAktarimServisi.surum &&
+          _httpSunucu.eslesmisAnahtarlar[ip] == token)
         return true;
-      }
-
-      // Fallback: Manual resilient request
-      final response = await _networkOptimizer.resilientRequest(
-        method: 'GET',
-        url: 'http://$ip:$port/ping',
-        headers: {'Connection': 'keep-alive'},
-        maxRetries: 2,
-        timeout: const Duration(seconds: 10),
-      );
-
-      final success = response.statusCode == 200;
-      _logServisi.info(
-        success
-            ? '✅ Bağlantı testi sonucu: ${response.statusCode}'
-            : '❌ Bağlantı testi başarısız: ${response.statusCode}',
-      );
-
-      return success;
-    } catch (e) {
-      _logServisi.error('❌ Bağlantı testi başarısız: $e');
-      return false;
+    } catch (_) {
+      // Stale UI entries are not authenticated sessions. Keep persisted trust.
     }
+    if (_httpSunucu.eslesmisAnahtarlar[ip] == token) {
+      _httpSunucu.eslesmisAnahtarlar.remove(ip);
+      _httpSunucu.gelenAnahtarlar.remove(ip);
+      _httpSunucu.guvenBaglantilari.remove(ip);
+      _httpSunucu.hesapEslesmesi.baglantiKes(ip);
+      _bagliCihazlar.removeWhere(
+        (d) => d['device_id'] == deviceId && d['ip'] == ip,
+      );
+      _changed();
+      onDeviceListChanged?.call();
+    }
+    return false;
   }
 
   Future<void> _notifyConnection(
@@ -575,10 +544,12 @@ class SenkronizasyonYoneticiServisi {
       final ready = await AktarimHttp.jsonIstek(
         Uri.parse('http://$ip:8080/sync/v2/ready'),
         _httpSunucu.eslesmisAnahtarlar[ip]!,
-        body: {},
+        body: {'reverse_check': 1},
       );
       if (ready['success'] != true)
-        throw HesapHatasi('Cihaz bağlantısı tamamlanamadı.');
+        throw HesapHatasi(
+          ready['error'] as String? ?? 'Cihaz bağlantısı tamamlanamadı.',
+        );
     }
   }
 
@@ -638,8 +609,7 @@ class SenkronizasyonYoneticiServisi {
           InternetAddress.tryParse(ip)?.type != InternetAddressType.IPv4) {
         throw HesapHatasi('Karşı cihazın güncel yerel IP adresini girin.');
       }
-      if (_bagliCihazlar.any((d) => d['device_id'] == trust.cihazId))
-        return true;
+      if (await etkinBaglantiyiDogrula(trust.cihazId)) return true;
       if (!_httpSunucu.calisiyorMu) await _httpSunucu.sunucuyuBaslat();
       final identity = {
         'trust_version': 1,
@@ -648,6 +618,8 @@ class SenkronizasyonYoneticiServisi {
         'owner_id': trust.yoneticiId,
       };
       final reverseToken = GuvenliAktarimServisi.kimlik();
+      asama = 'Karşı cihazın ağ bağlantısı ($ip:8080)';
+      await YerelAgServisi.ping(ip, trust.cihazId);
       asama = 'Karşı cihazın kimlik doğrulaması';
       final challenge = await AktarimHttp.jsonIstek(
         Uri.parse('http://$ip:8080/sync/v2/trust-challenge'),
@@ -710,10 +682,12 @@ class SenkronizasyonYoneticiServisi {
       final ready = await AktarimHttp.jsonIstek(
         Uri.parse('http://$ip:8080/sync/v2/ready'),
         token,
-        body: {},
+        body: {'reverse_check': 1},
       );
       if (ready['success'] != true)
-        throw HesapHatasi('Cihaz bağlantısı tamamlanamadı.');
+        throw HesapHatasi(
+          ready['error'] as String? ?? 'Cihaz bağlantısı tamamlanamadı.',
+        );
       final device = <String, dynamic>{
         ...trust.toMap(),
         'name': trust.cihazAdi,
@@ -829,38 +803,38 @@ class SenkronizasyonYoneticiServisi {
   }
 
   Future<bool> qrKoduTarandi(String qrData) async {
+    sonBaglantiHatasi = null;
     try {
+      ConnectionQr.parse(qrData);
       final connectionInfo = json.decode(qrData);
 
       if (connectionInfo['type'] == 'arsivim_connection') {
-        print('✅ Geçerli Arşivim QR kodu, bağlantı başlatılıyor...');
-        print(
-          '📋 Bağlantı bilgileri: ${connectionInfo['device_name']} - ${connectionInfo['ip']}:${connectionInfo['port']}',
-        );
-
         final success = await yeniCihazBagla(connectionInfo);
 
         if (success) {
-          print('✅ Cihaz başarıyla bağlandı!');
-          print('📊 Toplam bağlı cihaz sayısı: ${_bagliCihazlar.length}');
-
           onSuccess?.call(
             'Cihaz başarıyla bağlandı: ${connectionInfo['device_name']}',
           );
           return true;
         } else {
-          print('❌ Cihaz bağlantısı başarısız!');
-          onError?.call('Cihaz bağlantısı başarısız');
+          LogServisi.instance.error('❌ Cihaz bağlantısı başarısız!');
+          if (sonBaglantiHatasi == null) {
+            _baglantiHatasi(
+              HesapHatasi('Cihaz bağlantısı kurulamadı.'),
+              'QR bağlantısı',
+            );
+          }
           return false;
         }
       } else {
-        print('❌ Geçersiz QR kod formatı: ${connectionInfo['type']}');
         onError?.call('Geçersiz QR kod formatı');
         return false;
       }
     } catch (e) {
-      print('❌ QR kod okunamadı: $e');
-      onError?.call('QR kod okunamadı: $e');
+      _baglantiHatasi(
+        e is QrReadException ? HesapHatasi(e.message) : e,
+        'QR doğrulama',
+      );
       return false;
     }
   }
@@ -1412,8 +1386,6 @@ class SenkronizasyonYoneticiServisi {
   /// Otomatik bağlantı kesme işlemi
   Future<void> _otomatikBaglantiKes_Func(String hedefIP) async {
     try {
-      print('🔌 Otomatik bağlantı kesme başlatılıyor...');
-
       // Bağlı cihazlardan IP'si eşleşen cihazı bul
       final cihaz = _bagliCihazlar.firstWhere(
         (device) => device['ip'] == hedefIP,
@@ -1425,15 +1397,13 @@ class SenkronizasyonYoneticiServisi {
         onSuccess?.call('✅ Bağlantı otomatik olarak kesildi');
       }
     } catch (e) {
-      print('❌ Otomatik bağlantı kesme hatası: $e');
+      LogServisi.instance.error('❌ Otomatik bağlantı kesme hatası: $e');
     }
   }
 
   /// Manuel bağlantı kesme
   Future<bool> cihazBaglantiKes(String deviceId) async {
     try {
-      print('🔌 Cihaz bağlantısı kesiliyor: $deviceId');
-
       // Cihazı bağlı cihazlar listesinden çıkar
       final removedDevice = _bagliCihazlar.firstWhere(
         (device) => device['device_id'] == deviceId,
@@ -1468,7 +1438,7 @@ class SenkronizasyonYoneticiServisi {
       onSuccess?.call('👋 ${removedDevice['name']} bağlantısı kesildi');
       return true;
     } catch (e) {
-      print('❌ Cihaz bağlantısı kesme hatası: $e');
+      LogServisi.instance.error('❌ Cihaz bağlantısı kesme hatası: $e');
       onError?.call('Bağlantı kesme hatası: $e');
       return false;
     }
@@ -1477,8 +1447,6 @@ class SenkronizasyonYoneticiServisi {
   /// Tüm bağlantıları kes
   Future<bool> tumBaglantilarinKes() async {
     try {
-      print('🔌 Tüm bağlantılar kesiliyor...');
-
       final bagliBaglantiSayisi = _bagliCihazlar.length;
 
       if (bagliBaglantiSayisi == 0) {
@@ -1509,7 +1477,7 @@ class SenkronizasyonYoneticiServisi {
       onSuccess?.call('🔌 $bagliBaglantiSayisi cihazın bağlantısı kesildi');
       return true;
     } catch (e) {
-      print('❌ Tüm bağlantıları kesme hatası: $e');
+      LogServisi.instance.error('❌ Tüm bağlantıları kesme hatası: $e');
       onError?.call('Bağlantı kesme hatası: $e');
       return false;
     }
@@ -1526,7 +1494,6 @@ class SenkronizasyonYoneticiServisi {
         return false;
       }
 
-      print('🔄 $cihazAdi ile senkronizasyon başlatılıyor...');
       onSuccess?.call('$cihazAdi ile senkronizasyon başlatıldı...');
 
       final basarili = await tumSenkronizasyonuBaslat(cihazIP);
@@ -1539,7 +1506,7 @@ class SenkronizasyonYoneticiServisi {
 
       return basarili;
     } catch (e) {
-      print('❌ Cihaz senkronizasyonu hatası: $e');
+      LogServisi.instance.error('❌ Cihaz senkronizasyonu hatası: $e');
       onError?.call('Cihaz senkronizasyonu hatası: $e');
       return false;
     }

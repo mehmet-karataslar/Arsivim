@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import '../utils/sabitler.dart';
 import 'depolama_konumu_servisi.dart';
@@ -11,8 +12,13 @@ class LogServisi {
   static LogServisi get instance => _instance;
   LogServisi._internal();
 
+  @visibleForTesting
+  LogServisi.test({required File logFile}) : _logFile = logFile;
+
   late Logger _logger;
   File? _logFile;
+  StreamSubscription<LogRecord>? _subscription;
+  Future<void> _pendingWrites = Future<void>.value();
   bool _initialized = false;
   final List<LogEntry> _memoryLogs = [];
 
@@ -27,14 +33,14 @@ class LogServisi {
     if (_initialized) return;
 
     // Logger setup
-    Logger.root.level = Level.ALL;
+    Logger.root.level = Level.INFO;
     _logger = Logger('ArsivApp');
 
     // Log file setup
     await _setupLogFile();
 
     // Listen to all log records
-    Logger.root.onRecord.listen(_handleLogRecord);
+    _subscription = Logger.root.onRecord.listen(_handleLogRecord);
 
     _initialized = true;
 
@@ -44,10 +50,12 @@ class LogServisi {
   /// Log dosyası ayarla
   Future<void> _setupLogFile() async {
     try {
-      final logDir = await DepolamaKonumuServisi.instance.logKlasoru();
-      _logFile = File(
-        '${logDir.path}${Platform.pathSeparator}${Sabitler.LOG_DOSYASI}',
-      );
+      if (_logFile == null) {
+        final logDir = await DepolamaKonumuServisi.instance.logKlasoru();
+        _logFile = File(
+          '${logDir.path}${Platform.pathSeparator}${Sabitler.LOG_DOSYASI}',
+        );
+      }
 
       // Check file size and rotate if necessary
       if (_logFile != null && await _logFile!.exists()) {
@@ -56,8 +64,8 @@ class LogServisi {
           await _rotateLogFile();
         }
       }
-    } catch (e) {
-      print('❌ Log dosyası ayarlanırken hata: $e');
+    } catch (e, stack) {
+      _recordStorageError('Log dosyası ayarlanamadı', e, stack);
     }
   }
 
@@ -76,17 +84,14 @@ class LogServisi {
       _logFile = File(logFile.path);
 
       info('📁 Log dosyası döndürüldü: $backupPath');
-    } catch (e) {
-      print('❌ Log dosyası döndürülürken hata: $e');
+    } catch (e, stack) {
+      _recordStorageError('Log dosyası döndürülemedi', e, stack);
     }
   }
 
   /// Log kaydını işle
   void _handleLogRecord(LogRecord record) {
     final formattedMessage = _formatLogMessage(record);
-
-    // Console output
-    print(formattedMessage);
 
     // Memory storage
     _addToMemoryLogs(
@@ -101,8 +106,10 @@ class LogServisi {
     );
 
     // File storage
-    _writeToFile(formattedMessage);
+    _pendingWrites = _pendingWrites.then((_) => _writeToFile(formattedMessage));
   }
+
+  Future<void> flush() => _pendingWrites;
 
   /// Log mesajını formatla
   String _formatLogMessage(LogRecord record) {
@@ -169,9 +176,23 @@ class LogServisi {
           flush: true,
         );
       }
-    } catch (e) {
-      print('❌ Log dosyasına yazma hatası: $e');
+    } catch (e, stack) {
+      _recordStorageError('Log dosyasına yazılamadı', e, stack);
     }
+  }
+
+  // Dosya hatasını tekrar dosyaya yazmaya çalışmak sonsuz döngü oluşturur.
+  void _recordStorageError(String message, Object error, StackTrace stack) {
+    _addToMemoryLogs(
+      LogEntry(
+        timestamp: DateTime.now(),
+        level: Level.SEVERE,
+        message: message,
+        loggerName: 'ArsivApp',
+        error: error,
+        stackTrace: stack,
+      ),
+    );
   }
 
   /// Debug log
@@ -194,7 +215,13 @@ class LogServisi {
 
   /// Error log
   void error(String message, [Object? error, StackTrace? stackTrace]) {
-    if (!_initialized || !_isLoggingEnabled) return;
+    if (!_isLoggingEnabled) return;
+    if (!_initialized) {
+      _handleLogRecord(
+        LogRecord(Level.SEVERE, message, 'ArsivApp', error, stackTrace),
+      );
+      return;
+    }
     _logger.severe(message, error, stackTrace);
   }
 
@@ -269,6 +296,7 @@ class LogServisi {
     }
 
     try {
+      await flush();
       return await _logFile!.readAsString();
     } catch (e) {
       error('Log dosyası okunamadı', e);
@@ -279,6 +307,7 @@ class LogServisi {
   /// Log dosyalarını temizle
   Future<void> clearLogs() async {
     try {
+      await flush();
       // Clear memory logs
       _memoryLogs.clear();
 
@@ -355,8 +384,8 @@ class LogServisi {
             },
           )
           .toList();
-    } catch (e) {
-      print('❌ Sync loglar alinirken hata: $e');
+    } catch (e, stack) {
+      error('Sync logları alınamadı', e, stack);
       return [];
     }
   }
@@ -366,6 +395,9 @@ class LogServisi {
     if (!_initialized) return;
 
     info('📁 Log servisi kapatılıyor');
+    await _subscription?.cancel();
+    _subscription = null;
+    await flush();
     _memoryLogs.clear();
     _logFile = null;
     _initialized = false;

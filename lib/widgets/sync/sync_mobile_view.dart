@@ -74,6 +74,18 @@ class SyncMobileView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
+            SwitchListTile(
+              key: const ValueKey('sync-mobile-listener'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Bu telefonu bağlantılara aç'),
+              subtitle: Text(
+                data.gateway.running
+                    ? 'Bağlantıya hazır · ${data.ip}:8080'
+                    : 'Bilgisayardan gelen bağlantılara kapalı',
+              ),
+              value: data.gateway.running,
+              onChanged: unavailable ? null : (_) => data.server(),
+            ),
             Wrap(
               spacing: 32,
               runSpacing: 12,
@@ -239,12 +251,6 @@ class SyncMobileView extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: SelectableText('IP: ${data.ip}\nPort: 8080'),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Bu telefonu bağlantılara aç'),
-                  value: data.gateway.running,
-                  onChanged: unavailable ? null : (_) => data.server(),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,

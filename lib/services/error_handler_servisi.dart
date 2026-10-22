@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'log_servisi.dart';
@@ -69,8 +68,7 @@ class ErrorHandlerServisi {
     _logError(error);
     _trackError(error);
 
-    // Original Flutter error handling
-    FlutterError.presentError(details);
+    // Hata bellekte ve dosyada saklanır; konsola tekrar yazılmaz.
   }
 
   /// Platform hatasını işle

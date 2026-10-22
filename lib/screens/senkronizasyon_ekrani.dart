@@ -248,7 +248,9 @@ class _SenkronizasyonEkraniState extends State<SenkronizasyonEkrani>
     setState(() => _pairing = true);
     try {
       var code = _qr;
-      if (code == null || !_data.gateway.isQrValid(code)) {
+      final reusable = code != null && await _data.gateway.canReuseQr(code);
+      if (!mounted) return;
+      if (!reusable) {
         setState(() => _qr = null);
         final verify = widget.verifyPairing ?? yoneticiDogrulamaDialog;
         if (!await verify(context) || !mounted) return;

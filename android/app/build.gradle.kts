@@ -52,6 +52,8 @@ android {
 
     buildTypes {
         release {
+            isDebuggable = false
+            isJniDebuggable = false
             signingConfig = signingConfigs.getByName(if (updateKeyFile.exists()) "existingInstall" else "debug")
         }
         debug {

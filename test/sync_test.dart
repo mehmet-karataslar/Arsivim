@@ -81,6 +81,16 @@ class FakeSyncGateway extends SyncGateway {
   ];
   @override
   Future<String> address() async => '192.168.1.100';
+  bool connectionAlive = true;
+  int connectionChecks = 0;
+  @override
+  Future<bool> verifyConnection(SyncDevice device) async {
+    connectionChecks++;
+    if (!connectionAlive)
+      devices = devices.where((d) => d.id != device.id).toList();
+    return connectionAlive;
+  }
+
   int toggles = 0;
   @override
   Future<void> setServer(bool value) async {
@@ -128,12 +138,17 @@ class PairingGateway extends FakeSyncGateway {
   int created = 0;
   String? current;
   bool valid = true;
+  bool networkChanged = false;
+  @override
+  Future<bool> canReuseQr(String code) async =>
+      isQrValid(code) && !networkChanged;
   @override
   bool isQrValid(String code) => running && valid && code == current;
   @override
   Future<String> createQr() async {
     created++;
     valid = true;
+    networkChanged = false;
     running = true;
     return current = jsonEncode({
       'pair_ticket': 'ticket-$created',
@@ -418,6 +433,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(verified, 3);
       expect(gateway.created, 3);
+      await tester.tap(find.text('Kapat'));
+      await tester.pumpAndSettle();
+      gateway.networkChanged = true;
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(gateway.created, 4);
+      expect(verified, 4);
       await tester.tap(find.text('Kapat'));
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());

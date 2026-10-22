@@ -6,6 +6,7 @@ import '../models/sync_comparison.dart';
 import '../widgets/senkronizasyon_progress_dialog.dart';
 import 'http_sunucu_servisi.dart';
 import 'senkronizasyon_yonetici_servisi.dart';
+import 'yerel_ag_servisi.dart';
 
 /// Ağ işlemleri sunumdan ayrıdır; mevcut hesap ve aktarım doğrulaması korunur.
 class SyncGateway {
@@ -27,6 +28,21 @@ class SyncGateway {
   Future<void> setServer(bool value) => manager.setServerRunning(value);
   Future<bool> disconnect(String id) => manager.cihazBaglantiKes(id);
   Future<String> createQr() => manager.connectionDataOlustur();
+  Future<bool> canReuseQr(String code) async {
+    if (!isQrValid(code)) return false;
+    try {
+      final saved =
+          YerelAgServisi.qrAdresleri(
+            jsonDecode(code) as Map<String, dynamic>,
+          ).toSet();
+      final current =
+          (await HttpSunucuServisi.instance.getLocalIPAddresses()).toSet();
+      return saved.length == current.length && saved.containsAll(current);
+    } catch (_) {
+      return false;
+    }
+  }
+
   bool isQrValid(String code) {
     if (!running) return false;
     try {
@@ -46,6 +62,8 @@ class SyncGateway {
           .toList();
   Future<bool> reconnect(String trustId, String address) =>
       manager.taninanCihazaBaglan(trustId, adres: address);
+  Future<bool> verifyConnection(SyncDevice device) =>
+      manager.etkinBaglantiyiDogrula(device.id);
 
   Future<List<SyncComparisonTarget>> comparisonTargets() async {
     final saved = await trustedDevices();
@@ -85,7 +103,9 @@ class SyncGateway {
             .where((device) => device.id == target.device.id && device.canSend)
             .firstOrNull;
     final connected = current();
-    if (connected != null) return connected;
+    if (connected != null && await verifyConnection(connected)) {
+      return connected;
+    }
     final trustId = target.trustId;
     if (trustId == null) {
       throw StateError(

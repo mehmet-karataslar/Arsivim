@@ -53,6 +53,24 @@ class DocumentRepository {
     LEFT JOIN kisiler p ON p.id=b.kisi_id AND p.aktif=1''';
   static const _select = '''SELECT b.*, k.kategori_adi,
     p.ad AS kisi_ad, p.soyad AS kisi_soyad''';
+  // Türkçe I/İ/ı/i ve Almanca umlaut/ß yazımları iki tarafta da eşlenir.
+  // Sıra önemlidir: önce büyük harf, ardından ae/oe/ue/ss dönüşümü.
+  static const _searchReplacements = {
+    'İ': 'i',
+    'I': 'i',
+    'ı': 'i',
+    'Ş': 'ş',
+    'Ğ': 'ğ',
+    'Ü': 'ü',
+    'Ö': 'ö',
+    'Ç': 'ç',
+    'Ä': 'ä',
+    'ẞ': 'ß',
+    'ä': 'ae',
+    'ö': 'oe',
+    'ü': 'ue',
+    'ß': 'ss',
+  };
 
   Future<DocumentPage> fetch(
     DocumentFilters filters, {
@@ -65,20 +83,30 @@ class DocumentRepository {
     final where = <String>['b.aktif=1'];
     final args = <Object?>[];
     if (filters.query.trim().isNotEmpty) {
-      // SQLite LOWER yalnızca ASCII'yi dönüştürür; Türkçe harfleri de eşleştir.
-      final columns =
-          "COALESCE(b.baslik,'') || ' ' || b.orijinal_dosya_adi || ' ' || COALESCE(b.aciklama,'') || ' ' || COALESCE(b.etiketler,'') || ' ' || COALESCE(k.kategori_adi,'') || ' ' || COALESCE(p.ad,'') || ' ' || COALESCE(p.soyad,'') || ' ' || COALESCE(p.kullanici_adi,'') || ' ' || COALESCE((SELECT GROUP_CONCAT(lp.ad || ' ' || lp.soyad || ' ' || COALESCE(lp.kullanici_adi,''), ' ') FROM kisiler lp WHERE lp.aktif=1 AND ${DocumentLinks.contains('kisi', 'lp.id')}),'') || ' ' || COALESCE((SELECT GROUP_CONCAT(lk.kategori_adi,' ') FROM kategoriler lk WHERE lk.aktif=1 AND ${DocumentLinks.contains('kategori', 'lk.id')}),'')";
-      var normalized = columns;
-      const upper = ['İ', 'I', 'Ş', 'Ğ', 'Ü', 'Ö', 'Ç'];
-      const lower = ['i', 'ı', 'ş', 'ğ', 'ü', 'ö', 'ç'];
-      for (var i = 0; i < upper.length; i++) {
-        normalized = "REPLACE($normalized,'${upper[i]}','${lower[i]}')";
+      // SQLite LOWER yalnızca ASCII'yi dönüştürür; Türkçe ve Almancayı da eşleştir.
+      final fields = [
+        "COALESCE(b.baslik,'')",
+        "COALESCE(b.orijinal_dosya_adi,'')",
+        "COALESCE(b.dosya_adi,'')",
+        "'.' || LTRIM(COALESCE(b.dosya_tipi,''),'.')",
+        "COALESCE(b.aciklama,'')",
+        "COALESCE(b.etiketler,'')",
+        "COALESCE(k.kategori_adi,'')",
+        "COALESCE(p.ad,'')",
+        "COALESCE(p.soyad,'')",
+        "COALESCE(p.kullanici_adi,'')",
+        "COALESCE((SELECT GROUP_CONCAT(COALESCE(lp.ad,'') || ' ' || COALESCE(lp.soyad,'') || ' ' || COALESCE(lp.kullanici_adi,''), ' ') FROM kisiler lp WHERE lp.aktif=1 AND ${DocumentLinks.contains('kisi', 'lp.id')}),'')",
+        "COALESCE((SELECT GROUP_CONCAT(lk.kategori_adi,' ') FROM kategoriler lk WHERE lk.aktif=1 AND ${DocumentLinks.contains('kategori', 'lk.id')}),'')",
+      ];
+      var normalized = fields.join(" || ' ' || ");
+      var query = filters.query.trim();
+      for (final replacement in _searchReplacements.entries) {
+        normalized =
+            "REPLACE($normalized,'${replacement.key}','${replacement.value}')";
+        query = query.replaceAll(replacement.key, replacement.value);
       }
       where.add("LOWER($normalized) LIKE ? ESCAPE '\\'");
-      final query = filters.query
-          .trim()
-          .replaceAll('İ', 'i')
-          .replaceAll('I', 'ı')
+      query = query
           .toLowerCase()
           .replaceAll('\\', '\\\\')
           .replaceAll('%', '\\%')
