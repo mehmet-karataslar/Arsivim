@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'sabitler.dart';
@@ -305,9 +307,24 @@ class YardimciFonksiyonlar {
 
   // Benzersiz dosya adı oluşturma
   static String benzersizDosyaAdi(String temelAd, String uzanti) {
-    DateTime simdi = DateTime.now();
-    String timestamp = '${simdi.millisecondsSinceEpoch}';
-    return '${temelAd}_$timestamp.$uzanti';
+    final random = Random.secure();
+    final suffix =
+        List.generate(
+          16,
+          (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+        ).join();
+    final ending = '_$suffix${uzanti.isEmpty ? '' : '.$uzanti'}';
+    var bytes = utf8.encode(ending).length;
+    if (bytes > 240) throw ArgumentError('Dosya uzantisi cok uzun.');
+    final base = StringBuffer();
+    // Bound the physical name in UTF-8 bytes; keep the original display name.
+    for (final rune in temelAd.runes) {
+      final character = String.fromCharCode(rune);
+      bytes += utf8.encode(character).length;
+      if (bytes > 240) break;
+      base.write(character);
+    }
+    return '$base$ending';
   }
 
   // Dosya tipi simgesi

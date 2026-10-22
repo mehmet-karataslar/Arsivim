@@ -135,7 +135,7 @@ class BelgeModeli extends BaseModel {
     if (value == null || value == '') return [];
     if (value is List) return value.cast<String>();
     if (value is! String) throw const FormatException('Etiket yapisi gecersiz');
-    if (value.startsWith('[')) {
+    if (value.trimLeft().startsWith('[')) {
       try {
         final decoded = jsonDecode(value);
         if (decoded is List && decoded.every((v) => v is String)) {

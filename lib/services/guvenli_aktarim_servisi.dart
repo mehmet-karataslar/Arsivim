@@ -510,12 +510,14 @@ class GuvenliAktarimServisi {
       throw AktarimHatasi('HASH', 'SHA-256 dosya ozeti gecersiz.');
     }
     _metin(b['dosya_tipi'], 'dosya_tipi', bos: true, max: 32);
-    if (p.extension(b['dosya_adi']).replaceFirst('.', '').toLowerCase() !=
-        (b['dosya_tipi'] as String).toLowerCase()) {
-      throw AktarimHatasi(
-        'DOSYA_TIPI',
-        'Dosya uzantisi ile tur bilgisi uyusmuyor.',
-      );
+    for (final alan in ['dosya_adi', 'orijinal_dosya_adi']) {
+      if (p.extension(b[alan]).replaceFirst('.', '').toLowerCase() !=
+          (b['dosya_tipi'] as String).toLowerCase()) {
+        throw AktarimHatasi(
+          'DOSYA_TIPI',
+          '$alan uzantisi ile tur bilgisi uyusmuyor. Mevcut belge korundu.',
+        );
+      }
     }
     for (final k in ['olusturma_tarihi', 'guncelleme_tarihi']) {
       _tarih(b[k], k);
@@ -562,10 +564,14 @@ class GuvenliAktarimServisi {
         final refs = links[kind];
         if (refs is! List || refs.length > 100)
           throw AktarimHatasi('SEMA', 'Bağlantı listesi geçersiz.');
+        if (refs.isNotEmpty && paket[kind] == null) {
+          throw AktarimHatasi('SEMA', 'Ek bağlantıların ana bağlantısı eksik.');
+        }
         final seen = <String>{
           if (paket[kind] != null) paket[kind]['evrensel_id'] as String,
         };
         for (final ref in refs) {
+          _map(ref, kind);
           final copy = Map<String, dynamic>.from(paket)..remove('baglantilar');
           copy[kind] = ref;
           copy['metadata_hash'] = metadataHash(copy);
@@ -767,7 +773,17 @@ class GuvenliAktarimServisi {
               kind == 'kisi'
                   ? await _kisi(tx, single, yaz: yaz)
                   : await _kategori(tx, single, yaz: yaz);
-          if (id != null) result[kind]!.add(id);
+          if (id != null) {
+            // Negative IDs only mark not-yet-created references during preview.
+            if (id > 0 && result[kind]!.contains(id)) {
+              throw AktarimHatasi(
+                'BAGLANTI_CAKISMASI',
+                'Farklı $kind bağlantıları hedefte aynı kayda eşleşiyor. '
+                    'Bağlantılar birleştirilmedi; eşleştirmeyi kontrol edin.',
+              );
+            }
+            result[kind]!.add(id);
+          }
         } on AktarimHatasi catch (error) {
           if (kind == 'kisi')
             error.kisiEvrenselId = ref['evrensel_id'] as String;
@@ -819,8 +835,8 @@ class GuvenliAktarimServisi {
         a.toSet().length == b.toSet().length && a.toSet().containsAll(b);
     if (!same(model.tumKisiIds, links['kisi']!) ||
         !same(model.tumKategoriIds, links['kategori']!) ||
-        row['kisi_id'] != kisi ||
-        row['kategori_id'] != kategori ||
+        model.tumKisiIds.firstOrNull != kisi ||
+        model.tumKategoriIds.firstOrNull != kategori ||
         _json(local) != _json(remote)) {
       throw AktarimHatasi(
         'BELGE_CAKISMASI',
@@ -910,11 +926,12 @@ class GuvenliAktarimServisi {
             'kategori_ids': jsonEncode(links['kategori']),
             'senkron_durumu': SenkronDurumu.SENKRONIZE.index,
           });
-          if (kategori != null)
+          for (final categoryId in links['kategori']!) {
             await tx.rawUpdate(
-              'UPDATE kategoriler SET belge_sayisi = (SELECT COUNT(*) FROM belgeler WHERE kategori_id = ? AND aktif = 1) WHERE id = ?',
-              [kategori, kategori],
+              'UPDATE kategoriler SET belge_sayisi = (SELECT COUNT(*) FROM belgeler b WHERE ${DocumentLinks.contains('kategori', '?')} AND b.aktif = 1) WHERE id = ?',
+              [categoryId, categoryId],
             );
+          }
         }
         final kimlikler = await tx.query(
           'aktarim_kimlikleri',

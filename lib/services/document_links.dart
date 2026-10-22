@@ -26,6 +26,6 @@ class DocumentLinks {
 
   static String contains(String kind, String value, [String alias = 'b']) {
     final prefix = alias.isEmpty ? '' : '$alias.';
-    return '($value IN (SELECT value FROM json_each(COALESCE($prefix${kind}_ids, json_array($prefix${kind}_id)))))';
+    return "($value IN (SELECT $prefix${kind}_id UNION SELECT value FROM json_each(COALESCE($prefix${kind}_ids, '[]'))))";
   }
 }

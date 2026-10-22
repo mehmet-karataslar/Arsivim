@@ -42,8 +42,11 @@ class DosyaServisi {
 
   // Dosya kopyalama ve hash hesaplama
   Future<BelgeModeli> dosyaKopyalaVeHashHesapla(
-    PlatformFile platformFile,
-  ) async {
+    PlatformFile platformFile, {
+    Directory? outputDirectory,
+  }) async {
+    Directory? yeniKlasor;
+    var tamamlandi = false;
     try {
       if (platformFile.path == null) {
         throw Exception('Dosya yolu bulunamadı');
@@ -55,7 +58,9 @@ class DosyaServisi {
       }
 
       // Hedef klasörü oluştur
-      Directory belgelerKlasoru = await _belgelerKlasorunu();
+      Directory belgelerKlasoru = outputDirectory ?? await _belgelerKlasorunu();
+      await belgelerKlasoru.create(recursive: true);
+      yeniKlasor = await belgelerKlasoru.createTemp('eklenen-');
 
       // Benzersiz dosya adı oluştur
       String dosyaUzantisi = path.extension(platformFile.name);
@@ -66,7 +71,7 @@ class DosyaServisi {
         dosyaUzantisi.isEmpty ? '' : dosyaUzantisi.substring(1),
       );
 
-      String hedefYol = path.join(belgelerKlasoru.path, yeniDosyaAdi);
+      String hedefYol = path.join(yeniKlasor.path, yeniDosyaAdi);
 
       // Dosyayı kopyala
       File hedefDosya = await kaynak.copy(hedefYol);
@@ -74,6 +79,12 @@ class DosyaServisi {
       // Hash hesapla
       String dosyaHash =
           (await sha256.bind(hedefDosya.openRead()).first).toString();
+      if (await kaynak.length() != await hedefDosya.length() ||
+          await dosyaHashiHesapla(kaynak.path) != dosyaHash) {
+        throw StateError(
+          'Kaynak dosya kopyalama sırasında değişti. Yeniden deneyin.',
+        );
+      }
 
       // Belge modeli oluştur
       DateTime simdi = DateTime.now();
@@ -92,9 +103,14 @@ class DosyaServisi {
         senkronDurumu: SenkronDurumu.YEREL_DEGISIM,
       );
 
+      tamamlandi = true;
       return belge;
     } catch (e) {
       throw Exception('Dosya işlenirken hata oluştu: $e');
+    } finally {
+      if (!tamamlandi && yeniKlasor != null && await yeniKlasor.exists()) {
+        await yeniKlasor.delete(recursive: true);
+      }
     }
   }
 
@@ -127,9 +143,10 @@ class DosyaServisi {
   Future<String?> hashtenDosyaBul(String hash) async {
     try {
       Directory belgelerDir = await _belgelerKlasorunu();
-      List<FileSystemEntity> dosyalar = await belgelerDir.list().toList();
-
-      for (FileSystemEntity entity in dosyalar) {
+      await for (final entity in belgelerDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is File) {
           String dosyaHash =
               (await sha256.bind(entity.openRead()).first).toString();

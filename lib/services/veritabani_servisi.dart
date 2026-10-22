@@ -1,3 +1,4 @@
+import 'database_upgrade_guard.dart';
 import 'person_contact_schema.dart';
 import 'document_links.dart';
 import 'dart:async';
@@ -14,12 +15,20 @@ import '../utils/sabitler.dart';
 
 // SQLite veritabanı operasyonları
 class VeriTabaniServisi {
-  static Database? _database;
-  static Future<Database>? _aciliyor;
+  Database? _database;
+  Future<Database>? _aciliyor;
   static final VeriTabaniServisi _instance = VeriTabaniServisi._internal();
 
   factory VeriTabaniServisi() => _instance;
   VeriTabaniServisi._internal();
+
+  VeriTabaniServisi.test({
+    required String databasePath,
+    required DatabaseFactory factory,
+  }) : _testPath = databasePath,
+       _testFactory = factory;
+  String? _testPath;
+  DatabaseFactory? _testFactory;
 
   /// Veritabanını manuel olarak başlat (uygulama başlangıcında kullanılabilir)
   Future<void> baslat() async {
@@ -46,7 +55,9 @@ class VeriTabaniServisi {
   }
 
   Future<Database> _initDatabase() async {
-    String path = await DepolamaKonumuServisi.instance.veritabaniYoluHazirla();
+    String path =
+        _testPath ??
+        await DepolamaKonumuServisi.instance.veritabaniYoluHazirla();
 
     // Veritabanı dosyasının varlığını kontrol et
     bool databaseExists = await File(path).exists();
@@ -60,26 +71,33 @@ class VeriTabaniServisi {
     }
 
     try {
-      final database = await openDatabase(
+      final factory = _testFactory ?? databaseFactory;
+      final database = await factory.openDatabase(
         path,
-        version: Sabitler.VERITABANI_VERSIYONU,
-        onCreate: (db, version) async {
-          print('🎯 Yeni veritabanı oluşturuluyor (versiyon: $version)');
-          await _onCreate(db, version);
-          print('✅ Veritabanı başarıyla oluşturuldu!');
-        },
-        onUpgrade: (db, oldVersion, newVersion) async {
-          print('🔄 Veritabanı güncelleniyor ($oldVersion -> $newVersion)');
-          await _onUpgrade(db, oldVersion, newVersion);
-          print('✅ Veritabanı başarıyla güncellendi!');
-        },
-        onOpen: (db) async {
-          print('🔓 Veritabanı açıldı: $path');
-          // Veritabanı bütünlüğünü kontrol et
-          await _checkDatabaseIntegrity(db);
-          await DocumentLinks.prepare(db);
-          await PersonContactSchema.prepare(db);
-        },
+        options: OpenDatabaseOptions(
+          onConfigure:
+              (db) => DatabaseUpgradeGuard.beforeOpen(
+                db,
+                factory,
+                Sabitler.VERITABANI_VERSIYONU,
+              ),
+          version: Sabitler.VERITABANI_VERSIYONU,
+          onCreate: (db, version) async {
+            print('🎯 Yeni veritabanı oluşturuluyor (versiyon: $version)');
+            await _onCreate(db, version);
+            print('✅ Veritabanı başarıyla oluşturuldu!');
+          },
+          onUpgrade: (db, oldVersion, newVersion) async {
+            print('🔄 Veritabanı güncelleniyor ($oldVersion -> $newVersion)');
+            await _onUpgrade(db, oldVersion, newVersion);
+            print('✅ Veritabanı başarıyla güncellendi!');
+          },
+          onOpen: (db) async {
+            print('🔓 Veritabanı açıldı: $path');
+            // Veritabanı bütünlüğünü kontrol et
+            await _checkDatabaseIntegrity(db);
+          },
+        ),
       );
 
       return database;
@@ -150,9 +168,21 @@ class VeriTabaniServisi {
       )
     ''');
 
+    await _createAuxiliaryTables(db);
+
+    // İndeksler
+    await _createIndexes(db);
+    await DocumentLinks.prepare(db);
+    await PersonContactSchema.prepare(db);
+
+    // Varsayılan kategorileri ekle
+    await _insertDefaultCategories(db);
+  }
+
+  Future<void> _createAuxiliaryTables(Database db) async {
     // Senkron logları tablosu
     await db.execute('''
-      CREATE TABLE senkron_logları (
+      CREATE TABLE IF NOT EXISTS senkron_logları (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         belge_id INTEGER,
         islem_tipi TEXT NOT NULL,
@@ -167,7 +197,7 @@ class VeriTabaniServisi {
 
     // Senkronizasyon durumu tablosu (raporda belirtilen)
     await db.execute('''
-      CREATE TABLE senkron_state (
+      CREATE TABLE IF NOT EXISTS senkron_state (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         dosya_hash TEXT NOT NULL UNIQUE,
         son_sync_zamani TEXT NOT NULL,
@@ -180,7 +210,7 @@ class VeriTabaniServisi {
 
     // Belge versiyonları tablosu (raporda belirtilen)
     await db.execute('''
-      CREATE TABLE belge_versiyonlari (
+      CREATE TABLE IF NOT EXISTS belge_versiyonlari (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         belge_id INTEGER NOT NULL,
         versiyon_numarasi INTEGER NOT NULL,
@@ -195,7 +225,7 @@ class VeriTabaniServisi {
 
     // Metadata değişiklikleri tablosu (raporda belirtilen)
     await db.execute('''
-      CREATE TABLE metadata_degisiklikleri (
+      CREATE TABLE IF NOT EXISTS metadata_degisiklikleri (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         entity_type TEXT NOT NULL,
         entity_id INTEGER NOT NULL,
@@ -207,652 +237,162 @@ class VeriTabaniServisi {
         sync_edildi INTEGER DEFAULT 0
       )
     ''');
-
-    // İndeksler
-    await _createIndexes(db);
-    await DocumentLinks.prepare(db);
-    await PersonContactSchema.prepare(db);
-
-    // Varsayılan kategorileri ekle
-    await _insertDefaultCategories(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    print('🔄 Database upgrade: $oldVersion -> $newVersion');
-    print('⚠️  VERİ KORUMA MODU: Mevcut veriler korunacak');
-
-    // Önce mevcut verileri backup'la
-    await _createBackup(db, oldVersion);
-
-    // Migration işlemini veri koruyarak yap
-    await _performSafeMigration(db, oldVersion, newVersion);
-
-    // Migration sonrası veritabanı bütünlüğünü kontrol et
-    await _verifyDataIntegrity(db);
-
-    print('✅ Database upgrade tamamlandı, veriler korundu');
-  }
-
-  /// Veritabanı bütünlüğünü kontrol et ve eksik tabloları oluştur
-  Future<void> _checkDatabaseIntegrity(Database db) async {
-    try {
-      print('🔍 VERİ KORUMA MODU: Veritabanı bütünlüğü kontrol ediliyor...');
-
-      // Kullanıcı verilerini sayarak koruma kontrolü yap
-      await _verifyUserDataExists(db);
-
-      // Temel tabloların varlığını kontrol et
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table'",
-      );
-
-      final requiredTables = ['kisiler', 'kategoriler', 'belgeler'];
-      final existingTables = tables.map((t) => t['name'] as String).toSet();
-
-      bool hasCreatedTables = false;
-
-      for (final table in requiredTables) {
-        if (!existingTables.contains(table)) {
-          print(
-            '⚠️ Eksik tablo tespit edildi: $table - Güvenli oluşturuluyor...',
-          );
-
-          // Eksik tabloları güvenli şekilde oluştur
-          if (table == 'kisiler') {
-            await _createKisilerTableSafe(db);
-            print('✅ Kişiler tablosu güvenli şekilde oluşturuldu');
-            hasCreatedTables = true;
-          } else if (table == 'kategoriler') {
-            await _createKategorilerTableSafe(db);
-            print('✅ Kategoriler tablosu güvenli şekilde oluşturuldu');
-            hasCreatedTables = true;
-          } else if (table == 'belgeler') {
-            await _createBelgelerTableSafe(db);
-            print('✅ Belgeler tablosu güvenli şekilde oluşturuldu');
-            hasCreatedTables = true;
-          }
-        }
-      }
-
-      // Kullanıcı kolonlarının varlığını garanti et
-      await _ensureUserColumns(db);
-
-      // Kategori kolonlarının varlığını garanti et
-      await _ensureCategoryColumns(db);
-
-      if (hasCreatedTables) {
-        print('📝 Eksik tablolar güvenli şekilde oluşturuldu');
-        await _createIndexes(db);
-      }
-
-      // Güvenli sorgu testleri
-      await _performSafeQueries(db);
-
-      print('✅ Veritabanı bütünlük kontrolü başarılı - VERİLER KORUNDU');
-    } catch (e) {
-      print('❌ Veritabanı bütünlük kontrolü başarısız: $e');
-      throw e;
+    // sqflite owns this transaction, including user_version. Never swallow errors
+    // or delete/reinsert rows to recover a failed schema change.
+    final original = await DatabaseUpgradeGuard.capture(db);
+    if (oldVersion < 2) {
+      await db.execute('''CREATE TABLE IF NOT EXISTS kisiler (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ad TEXT NOT NULL, soyad TEXT NOT NULL,
+        olusturma_tarihi TEXT NOT NULL, guncelleme_tarihi TEXT NOT NULL,
+        aktif INTEGER DEFAULT 1)''');
     }
-  }
-
-  /// Kullanıcı verilerinin varlığını kontrol et
-  Future<void> _verifyUserDataExists(Database db) async {
-    try {
-      // Temel tabloların varlığını kontrol et
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table'",
+    await _requireCoreTables(db);
+    await _addColumns(db, 'kisiler', {
+      'kullanici_adi': 'TEXT',
+      'sifre': 'TEXT',
+      'kullanici_tipi': "TEXT DEFAULT 'NORMAL'",
+      'profil_fotografi': 'TEXT',
+    });
+    // SQLite cannot ADD COLUMN ... UNIQUE. Enforce it with an index instead.
+    // Duplicate legacy usernames are deliberately retained for the account
+    // selection flow; never merge or delete those people here.
+    final duplicates = await db.rawQuery('''
+      SELECT kullanici_adi FROM kisiler WHERE kullanici_adi IS NOT NULL
+      GROUP BY kullanici_adi HAVING COUNT(*) > 1 LIMIT 1''');
+    if (duplicates.isEmpty) {
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_kisiler_kullanici_adi ON kisiler(kullanici_adi)',
       );
-      final existingTables = tables.map((t) => t['name'] as String).toSet();
-
-      if (existingTables.contains('kisiler')) {
-        final userCount = await db.rawQuery(
-          'SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1',
-        );
-        final users = Sqflite.firstIntValue(userCount) ?? 0;
-        print('👥 Mevcut kullanıcı sayısı: $users');
-      }
-
-      if (existingTables.contains('belgeler')) {
-        final docCount = await db.rawQuery(
-          'SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1',
-        );
-        final docs = Sqflite.firstIntValue(docCount) ?? 0;
-        print('📄 Mevcut belge sayısı: $docs');
-      }
-
-      if (existingTables.contains('kategoriler')) {
-        final catCount = await db.rawQuery(
-          'SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1',
-        );
-        final cats = Sqflite.firstIntValue(catCount) ?? 0;
-        print('📁 Mevcut kategori sayısı: $cats');
-      }
-    } catch (e) {
-      print('⚠️ Kullanıcı verisi kontrolü hatası: $e');
     }
+    await _addColumns(db, 'kategoriler', {'belge_sayisi': 'INTEGER DEFAULT 0'});
+    await _addColumns(db, 'belgeler', {
+      'kisi_id': 'INTEGER',
+      'versiyon_numarasi': 'INTEGER DEFAULT 1',
+      'metadata_hash': 'TEXT',
+      'son_metadata_guncelleme': 'TEXT',
+    });
+    await _createAuxiliaryTables(db);
+    await _addColumns(db, 'metadata_degisiklikleri', {
+      'sync_edildi': 'INTEGER DEFAULT 0',
+      'cihaz_id': 'TEXT',
+    });
+    await DocumentLinks.prepare(db);
+    await PersonContactSchema.prepare(db);
+    await _createIndexes(db);
+    await _checkDatabaseIntegrity(db);
+    await DatabaseUpgradeGuard.verifyPreserved(db, original);
   }
 
-  /// Güvenli sorgu testleri
-  Future<void> _performSafeQueries(Database db) async {
-    try {
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table'",
-      );
-      final existingTables = tables.map((t) => t['name'] as String).toSet();
-
-      // Sadece var olan tabloları test et
-      for (final tableName in existingTables) {
-        if (['kisiler', 'kategoriler', 'belgeler'].contains(tableName)) {
-          await db.rawQuery('SELECT COUNT(*) FROM $tableName');
-        }
-      }
-
-      print('✅ Tüm güvenli sorgular başarılı');
-    } catch (e) {
-      print('❌ Güvenli sorgu testi başarısız: $e');
-      throw e;
-    }
-  }
-
-  /// Backup oluştur (veri koruma için)
-  Future<void> _createBackup(Database db, int oldVersion) async {
-    try {
-      print('📂 Backup oluşturuluyor... (versiyon: $oldVersion)');
-
-      // Önemli tabloların verilerini geçici tablolara kaydet
-      final importantTables = ['kisiler', 'kategoriler', 'belgeler'];
-
-      for (final tableName in importantTables) {
-        try {
-          // Tablo mevcutsa backup oluştur
-          final tableExists = await _tableExists(db, tableName);
-          if (tableExists) {
-            await db.execute('DROP TABLE IF EXISTS ${tableName}_backup');
-            await db.execute(
-              'CREATE TABLE ${tableName}_backup AS SELECT * FROM $tableName',
-            );
-            print('✅ $tableName tablosu backup alındı');
-          }
-        } catch (e) {
-          print('⚠️ $tableName backup hatası: $e');
-        }
-      }
-
-      print('✅ Backup işlemi tamamlandı');
-    } catch (e) {
-      print('❌ Backup oluşturma hatası: $e');
-    }
-  }
-
-  /// Tablo varlığını kontrol et
-  Future<bool> _tableExists(Database db, String tableName) async {
-    try {
-      final result = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        [tableName],
-      );
-      return result.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Veri bütünlüğünü doğrula
-  Future<void> _verifyDataIntegrity(Database db) async {
-    try {
-      print('🔍 Veri bütünlüğü kontrol ediliyor...');
-
-      // Kullanıcı sayısını kontrol et
-      final userCount = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM kisiler WHERE aktif = 1',
-      );
-      final users = Sqflite.firstIntValue(userCount) ?? 0;
-
-      // Belge sayısını kontrol et
-      final docCount = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM belgeler WHERE aktif = 1',
-      );
-      final docs = Sqflite.firstIntValue(docCount) ?? 0;
-
-      // Kategori sayısını kontrol et
-      final catCount = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM kategoriler WHERE aktif = 1',
-      );
-      final cats = Sqflite.firstIntValue(catCount) ?? 0;
-
-      print('✅ Veri bütünlüğü: $users kullanıcı, $docs belge, $cats kategori');
-
-      // Backup tablolarını temizle
-      await _cleanupBackupTables(db);
-    } catch (e) {
-      print('❌ Veri bütünlüğü kontrolü hatası: $e');
-    }
-  }
-
-  /// Backup tablolarını temizle
-  Future<void> _cleanupBackupTables(Database db) async {
-    try {
-      final backupTables = [
-        'kisiler_backup',
-        'kategoriler_backup',
-        'belgeler_backup',
-      ];
-      for (final table in backupTables) {
-        await db.execute('DROP TABLE IF EXISTS $table');
-      }
-      print('🗑️ Backup tabloları temizlendi');
-    } catch (e) {
-      print('⚠️ Backup temizleme hatası: $e');
-    }
-  }
-
-  /// Metadata tablosunu güvenli şekilde güncelle
-  Future<void> _safeUpdateMetadataTable(Database db) async {
-    try {
-      // Önce tablo var mı kontrol et
-      final tableExists = await _tableExists(db, 'metadata_degisiklikleri');
-
-      if (!tableExists) {
-        // Tablo yoksa yeni oluştur
-        await db.execute('''
-          CREATE TABLE metadata_degisiklikleri (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entity_type TEXT NOT NULL,
-            entity_id INTEGER NOT NULL,
-            degisiklik_tipi TEXT NOT NULL,
-            eski_deger TEXT,
-            yeni_deger TEXT,
-            degisiklik_zamani TEXT NOT NULL,
-            cihaz_id TEXT,
-            sync_edildi INTEGER DEFAULT 0
-          )
-        ''');
-        print('✅ metadata_degisiklikleri tablosu oluşturuldu');
-        return;
-      }
-
-      // Mevcut kolonları kontrol et
-      final columns = await db.rawQuery(
-        "PRAGMA table_info(metadata_degisiklikleri)",
-      );
-      final columnNames = columns.map((col) => col['name'] as String).toSet();
-
-      // sync_edildi kolonu yoksa ekle
-      if (!columnNames.contains('sync_edildi')) {
-        await db.execute(
-          'ALTER TABLE metadata_degisiklikleri ADD COLUMN sync_edildi INTEGER DEFAULT 0',
-        );
-        print('✅ sync_edildi kolonu eklendi');
-      }
-
-      // cihaz_id kolonu yoksa ekle
-      if (!columnNames.contains('cihaz_id')) {
-        await db.execute(
-          'ALTER TABLE metadata_degisiklikleri ADD COLUMN cihaz_id TEXT',
-        );
-        print('✅ cihaz_id kolonu eklendi');
-      }
-
-      print('✅ metadata_degisiklikleri tablosu güvenli şekilde güncellendi');
-    } catch (e) {
-      print('❌ Metadata tablo güncelleme hatası: $e');
-    }
-  }
-
-  Future<void> _performSafeMigration(
-    Database db,
-    int oldVersion,
-    int newVersion,
+  Future<void> _addColumns(
+    DatabaseExecutor db,
+    String table,
+    Map<String, String> definitions,
   ) async {
-    print('🔒 Güvenli migration başlatılıyor - VERİLER KORUNACAK');
-
-    try {
-      if (oldVersion < 2) {
-        print('🔄 V2 Migration: Kişiler tablosu ekleniyor...');
-        // Kişiler tablosunu güvenli şekilde ekle
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS kisiler (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ad TEXT NOT NULL,
-            soyad TEXT NOT NULL,
-            olusturma_tarihi TEXT NOT NULL,
-            guncelleme_tarihi TEXT NOT NULL,
-            aktif INTEGER DEFAULT 1
-          )
-        ''');
-
-        // Belgeler tablosuna kisi_id sütunu güvenli şekilde ekle
-        try {
-          await db.execute('ALTER TABLE belgeler ADD COLUMN kisi_id INTEGER');
-        } catch (e) {
-          print('⚠️ kisi_id kolonu zaten mevcut: $e');
-        }
-        print('✅ V2 Migration tamamlandı');
-      }
-
-      if (oldVersion < 3) {
-        print('🔄 V3 Migration: metadata tablosu güncelleniyor...');
-        // metadata_degisiklikleri tablosunu VERİ KAYBETMEDEN güncelle
-        await _safeUpdateMetadataTable(db);
-        print('✅ V3 Migration tamamlandı');
-      }
-
-      if (oldVersion < 4) {
-        print('🔄 V4 Migration: İndeksler ekleniyor...');
-        // V4'te sadece eksik indeksleri ekle, tablo silme!
-        try {
-          await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_metadata_entity ON metadata_degisiklikleri(entity_type, entity_id)',
-          );
-          await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_metadata_zaman ON metadata_degisiklikleri(degisiklik_zamani)',
-          );
-          await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
-          );
-          print('✅ V4 Migration tamamlandı');
-        } catch (e) {
-          print('⚠️ V4 migration hatası: $e');
-        }
-      }
-
-      if (oldVersion < 5) {
-        print('🔄 V5 Migration: belge_sayisi kolonu ekleniyor...');
-        try {
-          await db.execute(
-            'ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0',
-          );
-          print('✅ V5 Migration tamamlandı');
-        } catch (e) {
-          print('⚠️ belge_sayisi kolonu zaten mevcut: $e');
-        }
-      }
-
-      if (oldVersion < 6) {
-        print('🔄 V6 Migration: Kullanıcı sistemi ekleniyor...');
-        await _safeAddUserColumns(db);
-        print('✅ V6 Migration tamamlandı');
-      }
-
-      if (oldVersion < 7) {
-        print('🔄 V7 Migration: Profil fotoğrafı ekleniyor...');
-        try {
-          await db.execute(
-            'ALTER TABLE kisiler ADD COLUMN profil_fotografi TEXT',
-          );
-          print('✅ V7 Migration tamamlandı');
-        } catch (e) {
-          print('⚠️ profil_fotografi kolonu zaten mevcut: $e');
-        }
-      }
-
-      print('🎉 Tüm migration\'lar güvenli şekilde tamamlandı!');
-    } catch (e) {
-      print('❌ Migration hatası: $e');
-      print('🔄 Backup verilerden kurtarma deneniyor...');
-      await _restoreFromBackup(db);
-      rethrow;
-    }
-  }
-
-  /// Kullanıcı kolonlarını güvenli şekilde ekle
-  Future<void> _safeAddUserColumns(Database db) async {
-    try {
-      final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
-      final existingColumns =
-          columns.map((col) => col['name'] as String).toSet();
-
-      if (!existingColumns.contains('kullanici_adi')) {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final names = columns.map((r) => r['name']).toSet();
+    for (final entry in definitions.entries) {
+      if (!names.contains(entry.key)) {
         await db.execute(
-          'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
+          'ALTER TABLE $table ADD COLUMN ${entry.key} ${entry.value}',
         );
-        print('✅ kullanici_adi kolonu eklendi');
       }
+    }
+  }
 
-      if (!existingColumns.contains('sifre')) {
-        await db.execute('ALTER TABLE kisiler ADD COLUMN sifre TEXT');
-        print('✅ sifre kolonu eklendi');
-      }
-
-      if (!existingColumns.contains('kullanici_tipi')) {
-        await db.execute(
-          'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
+  Future<void> _requireCoreTables(DatabaseExecutor db) async {
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table'",
+    );
+    final names = tables.map((r) => r['name']).toSet();
+    for (final table in ['kisiler', 'kategoriler', 'belgeler']) {
+      if (!names.contains(table)) {
+        throw StateError(
+          '$table tablosu eksik. Bos arsiv olusturulmadi; mevcut veritabani korunuyor.',
         );
-        print('✅ kullanici_tipi kolonu eklendi');
       }
-    } catch (e) {
-      print('❌ Kullanıcı kolonları ekleme hatası: $e');
     }
   }
 
-  /// Güvenli tablo oluşturma metodları
-  Future<void> _createKisilerTableSafe(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS kisiler (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ad TEXT NOT NULL,
-        soyad TEXT NOT NULL,
-        kullanici_adi TEXT UNIQUE,
-        sifre TEXT,
-        kullanici_tipi TEXT DEFAULT 'NORMAL',
-        profil_fotografi TEXT,
-        olusturma_tarihi TEXT NOT NULL,
-        guncelleme_tarihi TEXT NOT NULL,
-        aktif INTEGER DEFAULT 1
-      )
-    ''');
-  }
-
-  Future<void> _createKategorilerTableSafe(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS kategoriler (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        kategori_adi TEXT NOT NULL UNIQUE,
-        renk_kodu TEXT DEFAULT '#2196F3',
-        simge_kodu TEXT DEFAULT 'folder',
-        aciklama TEXT,
-        olusturma_tarihi TEXT NOT NULL,
-        aktif INTEGER DEFAULT 1,
-        belge_sayisi INTEGER DEFAULT 0
-      )
-    ''');
-  }
-
-  Future<void> _createBelgelerTableSafe(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS belgeler (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        dosya_adi TEXT NOT NULL,
-        orijinal_dosya_adi TEXT NOT NULL,
-        dosya_yolu TEXT NOT NULL,
-        dosya_boyutu INTEGER NOT NULL,
-        dosya_tipi TEXT NOT NULL,
-        dosya_hash TEXT UNIQUE NOT NULL,
-        kategori_id INTEGER,
-        kategori_ids TEXT,
-        kisi_ids TEXT,
-        kisi_id INTEGER,
-        baslik TEXT,
-        aciklama TEXT,
-        etiketler TEXT,
-        olusturma_tarihi TEXT NOT NULL,
-        guncelleme_tarihi TEXT NOT NULL,
-        son_erisim_tarihi TEXT,
-        aktif INTEGER DEFAULT 1,
-        senkron_durumu INTEGER DEFAULT 0,
-        versiyon_numarasi INTEGER DEFAULT 1,
-        metadata_hash TEXT,
-        son_metadata_guncelleme TEXT,
-        FOREIGN KEY (kategori_id) REFERENCES kategoriler(id),
-        FOREIGN KEY (kisi_id) REFERENCES kisiler(id)
-      )
-    ''');
-  }
-
-  /// Kullanıcı kolonlarının varlığını garanti et
-  Future<void> _ensureUserColumns(Database db) async {
-    try {
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table'",
-      );
-      final existingTables = tables.map((t) => t['name'] as String).toSet();
-
-      if (!existingTables.contains('kisiler')) {
-        return; // Tablo yoksa column eklenecek bir şey yok
-      }
-
-      final columns = await db.rawQuery("PRAGMA table_info(kisiler)");
-      final existingColumns =
-          columns.map((col) => col['name'] as String).toSet();
-
-      final requiredColumns = {
-        'kullanici_adi':
-            'ALTER TABLE kisiler ADD COLUMN kullanici_adi TEXT UNIQUE',
-        'sifre': 'ALTER TABLE kisiler ADD COLUMN sifre TEXT',
-        'kullanici_tipi':
-            'ALTER TABLE kisiler ADD COLUMN kullanici_tipi TEXT DEFAULT "NORMAL"',
-        'profil_fotografi':
-            'ALTER TABLE kisiler ADD COLUMN profil_fotografi TEXT',
-      };
-
-      for (final columnName in requiredColumns.keys) {
-        if (!existingColumns.contains(columnName)) {
-          try {
-            await db.execute(requiredColumns[columnName]!);
-            print('✅ $columnName kolonu güvenli şekilde eklendi');
-          } catch (e) {
-            print('⚠️ $columnName kolonu zaten mevcut: $e');
-          }
-        }
-      }
-    } catch (e) {
-      print('❌ Kullanıcı kolonları kontrolü hatası: $e');
-    }
-  }
-
-  /// Kategori kolonlarının varlığını garanti et
-  Future<void> _ensureCategoryColumns(Database db) async {
-    try {
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table'",
-      );
-      final existingTables = tables.map((t) => t['name'] as String).toSet();
-
-      if (!existingTables.contains('kategoriler')) {
-        return; // Tablo yoksa column eklenecek bir şey yok
-      }
-
-      final columns = await db.rawQuery("PRAGMA table_info(kategoriler)");
-      final existingColumns =
-          columns.map((col) => col['name'] as String).toSet();
-
-      if (!existingColumns.contains('belge_sayisi')) {
-        try {
-          await db.execute(
-            'ALTER TABLE kategoriler ADD COLUMN belge_sayisi INTEGER DEFAULT 0',
-          );
-          print('✅ belge_sayisi kolonu güvenli şekilde eklendi');
-        } catch (e) {
-          print('⚠️ belge_sayisi kolonu zaten mevcut: $e');
-        }
-      }
-    } catch (e) {
-      print('❌ Kategori kolonları kontrolü hatası: $e');
-    }
-  }
-
-  /// Backup'tan verileri geri yükle
-  Future<void> _restoreFromBackup(Database db) async {
-    try {
-      print('🔄 Backup verilerden geri yükleme başlatılıyor...');
-
-      final backupTables = [
-        'kisiler_backup',
-        'kategoriler_backup',
-        'belgeler_backup',
-      ];
-      final targetTables = ['kisiler', 'kategoriler', 'belgeler'];
-
-      for (int i = 0; i < backupTables.length; i++) {
-        final backupTable = backupTables[i];
-        final targetTable = targetTables[i];
-
-        final backupExists = await _tableExists(db, backupTable);
-        if (backupExists) {
-          // Backup'tan verileri geri yükle
-          await db.execute('DELETE FROM $targetTable');
-          await db.execute(
-            'INSERT INTO $targetTable SELECT * FROM $backupTable',
-          );
-          print('✅ $targetTable tablosu backup\'tan geri yüklendi');
-        }
-      }
-
-      print('✅ Backup\'tan geri yükleme tamamlandı');
-    } catch (e) {
-      print('❌ Backup geri yükleme hatası: $e');
-    }
+  Future<void> _checkDatabaseIntegrity(Database db) async {
+    await _requireCoreTables(db);
+    await DatabaseUpgradeGuard.checkIntegrity(db);
+    // Opening an existing version must not silently repair it outside the schema
+    // transaction. Missing columns stop startup instead of faking success.
+    await db.rawQuery(
+      'SELECT id, kullanici_adi, sifre, kullanici_tipi, profil_fotografi, eposta, telefon, adres FROM kisiler LIMIT 0',
+    );
+    await db.rawQuery('SELECT id, belge_sayisi FROM kategoriler LIMIT 0');
+    await db.rawQuery(
+      'SELECT id, kisi_id, kisi_ids, kategori_ids, metadata_hash, versiyon_numarasi, son_metadata_guncelleme FROM belgeler LIMIT 0',
+    );
   }
 
   Future<void> _createIndexes(Database db) async {
     // Belgeler tablosu indeksleri
-    await db.execute('CREATE INDEX idx_belgeler_hash ON belgeler(dosya_hash)');
     await db.execute(
-      'CREATE INDEX idx_belgeler_kategori ON belgeler(kategori_id)',
+      'CREATE INDEX IF NOT EXISTS idx_belgeler_hash ON belgeler(dosya_hash)',
     );
     await db.execute(
-      'CREATE INDEX idx_belgeler_tarih ON belgeler(olusturma_tarihi)',
-    );
-    await db.execute('CREATE INDEX idx_belgeler_aktif ON belgeler(aktif)');
-    await db.execute(
-      'CREATE INDEX idx_senkron_durum ON belgeler(senkron_durumu)',
+      'CREATE INDEX IF NOT EXISTS idx_belgeler_kategori ON belgeler(kategori_id)',
     );
     await db.execute(
-      'CREATE INDEX idx_belgeler_metadata_hash ON belgeler(metadata_hash)',
+      'CREATE INDEX IF NOT EXISTS idx_belgeler_tarih ON belgeler(olusturma_tarihi)',
     );
     await db.execute(
-      'CREATE INDEX idx_belgeler_versiyon ON belgeler(versiyon_numarasi)',
+      'CREATE INDEX IF NOT EXISTS idx_belgeler_aktif ON belgeler(aktif)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_senkron_durum ON belgeler(senkron_durumu)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_belgeler_metadata_hash ON belgeler(metadata_hash)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_belgeler_versiyon ON belgeler(versiyon_numarasi)',
     );
 
     // Senkron logları indeksleri
     await db.execute(
-      'CREATE INDEX idx_senkron_tarih ON senkron_logları(islem_tarihi)',
+      'CREATE INDEX IF NOT EXISTS idx_senkron_tarih ON senkron_logları(islem_tarihi)',
     );
     await db.execute(
-      'CREATE INDEX idx_senkron_durum_log ON senkron_logları(durum)',
+      'CREATE INDEX IF NOT EXISTS idx_senkron_durum_log ON senkron_logları(durum)',
     );
 
     // Senkron state indeksleri
     await db.execute(
-      'CREATE INDEX idx_sync_state_hash ON senkron_state(dosya_hash)',
+      'CREATE INDEX IF NOT EXISTS idx_sync_state_hash ON senkron_state(dosya_hash)',
     );
     await db.execute(
-      'CREATE INDEX idx_sync_state_durum ON senkron_state(sync_durumu)',
+      'CREATE INDEX IF NOT EXISTS idx_sync_state_durum ON senkron_state(sync_durumu)',
     );
     await db.execute(
-      'CREATE INDEX idx_sync_state_zaman ON senkron_state(son_sync_zamani)',
+      'CREATE INDEX IF NOT EXISTS idx_sync_state_zaman ON senkron_state(son_sync_zamani)',
     );
 
     // Belge versiyonları indeksleri
     await db.execute(
-      'CREATE INDEX idx_versiyon_belge ON belge_versiyonlari(belge_id)',
+      'CREATE INDEX IF NOT EXISTS idx_versiyon_belge ON belge_versiyonlari(belge_id)',
     );
     await db.execute(
-      'CREATE INDEX idx_versiyon_hash ON belge_versiyonlari(dosya_hash)',
+      'CREATE INDEX IF NOT EXISTS idx_versiyon_hash ON belge_versiyonlari(dosya_hash)',
     );
     await db.execute(
-      'CREATE INDEX idx_versiyon_tarih ON belge_versiyonlari(olusturma_tarihi)',
+      'CREATE INDEX IF NOT EXISTS idx_versiyon_tarih ON belge_versiyonlari(olusturma_tarihi)',
     );
 
     // Metadata değişiklikleri indeksleri
     await db.execute(
-      'CREATE INDEX idx_metadata_entity ON metadata_degisiklikleri(entity_type, entity_id)',
+      'CREATE INDEX IF NOT EXISTS idx_metadata_entity ON metadata_degisiklikleri(entity_type, entity_id)',
     );
     await db.execute(
-      'CREATE INDEX idx_metadata_zaman ON metadata_degisiklikleri(degisiklik_zamani)',
+      'CREATE INDEX IF NOT EXISTS idx_metadata_zaman ON metadata_degisiklikleri(degisiklik_zamani)',
     );
     await db.execute(
-      'CREATE INDEX idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
+      'CREATE INDEX IF NOT EXISTS idx_metadata_sync ON metadata_degisiklikleri(sync_edildi)',
     );
   }
 
