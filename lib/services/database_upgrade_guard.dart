@@ -30,8 +30,11 @@ abstract final class DatabaseUpgradeGuard {
         'Guncel uygulamayi acin; veriler degistirilmedi.',
       );
     }
+    // Android creates its locale table before sqflite calls onConfigure, even
+    // for a brand-new database with user_version = 0. It is not archive data.
     final tables = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+      "SELECT name FROM sqlite_master WHERE type='table' "
+      "AND name NOT LIKE 'sqlite_%' AND name <> 'android_metadata'",
     );
     if (version == 0 && tables.isNotEmpty) {
       throw StateError('Surumu belirsiz veritabani otomatik degistirilemez.');

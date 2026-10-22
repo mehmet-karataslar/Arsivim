@@ -1,5 +1,11 @@
 # 📁 Arşivim - Kişisel Belge Arşiv Uygulaması
 
+## 2.6.1 — Android ilk açılış düzeltmesi
+
+[Güncel Android APK](https://github.com/mehmet-karataslar/Arsivim/releases/tag/v2.6.1) · [Güncelleme rehberi](docs/YAYIN_2_6_1.md)
+
+2.6.0 Android paketindeki “Surumu belirsiz veritabani otomatik degistirilemez” ilk açılış hatası düzeltildi. 2.6.1, aynı kalıcı imzayla **Arşivim Yeni 2.6.0 üzerine** kurulur; uygulamayı kaldırmayın veya verilerini temizlemeyin. Windows için aşağıdaki 2.6.0 paketi kullanılmaya devam eder.
+
 ## 2.6.0 — yeni Android kimliği ve Windows paketi
 
 [APK ve Windows ZIP indirmeleri](https://github.com/mehmet-karataslar/Arsivim/releases/tag/v2.6.0) · [Kurulum ve geçiş rehberi](docs/YAYIN_2_6_0.md)

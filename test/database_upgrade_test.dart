@@ -241,6 +241,45 @@ void main() {
     expect(await db.query('kategoriler'), isNotEmpty);
   });
 
+  test('Fresh Android database with locale metadata can initialize', () async {
+    final initial = await databaseFactoryFfi.openDatabase(dbPath);
+    await initial.execute('CREATE TABLE android_metadata (locale TEXT)');
+    await initial.insert('android_metadata', {'locale': 'tr_TR'});
+    expect(await initial.getVersion(), 0);
+    await initial.close();
+
+    final db = await service.database;
+    expect(await db.getVersion(), Sabitler.VERITABANI_VERSIYONU);
+    expect(await db.query('belgeler'), isEmpty);
+    expect(await db.query('kisiler'), isEmpty);
+    expect(await db.query('kategoriler'), isNotEmpty);
+    expect(await db.query('android_metadata'), [
+      {'locale': 'tr_TR'},
+    ]);
+    await service.kapat();
+    expect(
+      await (await service.database).getVersion(),
+      Sabitler.VERITABANI_VERSIYONU,
+    );
+  });
+
+  test(
+    'Android metadata does not bypass protection for unversioned user data',
+    () async {
+      final initial = await legacy(version: 0);
+      await initial.execute('CREATE TABLE android_metadata (locale TEXT)');
+      await initial.insert('android_metadata', {'locale': 'tr_TR'});
+      final documents = await initial.query('belgeler');
+      await initial.close();
+
+      await expectLater(service.database, throwsA(isA<StateError>()));
+      final original = await databaseFactoryFfi.openDatabase(dbPath);
+      expect(await original.getVersion(), 0);
+      expect(await original.query('belgeler'), documents);
+      await original.close();
+    },
+  );
+
   test(
     'Already-used v11 schema retains account, multi-links and trust records',
     () async {
