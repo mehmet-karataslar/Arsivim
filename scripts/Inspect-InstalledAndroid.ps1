@@ -1,7 +1,9 @@
 param(
     [string]$Serial,
     [string]$AdbPath,
-    [string]$CandidateApk
+    [string]$CandidateApk,
+    [ValidatePattern('^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$')]
+    [string]$PackageName = 'com.mehmetkarataslar.arsivim'
 )
 $ErrorActionPreference = 'Stop'
 if (-not $AdbPath) {
@@ -16,7 +18,7 @@ if (-not $Serial) {
     $Serial = $ready[0]
 }
 if ($Serial -notin $ready) { throw 'The selected Android device is not connected and authorized.' }
-$paths = & $AdbPath -s $Serial shell pm path com.example.arsiv_uygulamasi
+$paths = & $AdbPath -s $Serial shell pm path $PackageName
 if ($LASTEXITCODE -ne 0) { throw 'Installed package could not be inspected.' }
 $base = @($paths | Where-Object { $_ -match '^package:.*base\.apk\s*$' })
 if ($base.Count -ne 1) { throw 'Exactly one installed Arsivim base APK was expected. No changes were made.' }

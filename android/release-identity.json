@@ -1,0 +1,9 @@
+{
+  "applicationId": "com.mehmetkarataslar.arsivim",
+  "certificateSha256": "fb49c724ca029a74e7e34e2ad027b90f4fb539059d09576b65d8d0cc282cc5c8",
+  "alias": "arsivim-android",
+  "keyAlgorithm": "RSA",
+  "keySize": 3072,
+  "createdDate": "2026-10-22",
+  "firstVersion": "2.6.0+26"
+}

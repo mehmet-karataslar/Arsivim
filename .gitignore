@@ -47,6 +47,7 @@ app.*.map.json
 # Local archives, backups, credentials, and generated distributions
 /code_backups/
 /artifacts/
+/private-signing/
 /.test_tmp/
 /releases/
 /android/build/

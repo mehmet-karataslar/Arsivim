@@ -4,6 +4,8 @@ Tarih: 22 Ekim 2026. Hedef geliştirme sürümü: **2.6.0+26**, SQLite şeması 
 
 ## Sonuç ve yayın kararı
 
+**Sonraki karar — 2.6.0 ayrı Android kurulumu:** Kullanıcı yeni uygulama kimliği, kalıcı yeni imza ve GitHub dağıtımı istedi. Yeni kimlik `com.mehmetkarataslar.arsivim`, görünen ad `Arşivim Yeni`; yayın sertifikası `android/release-identity.json` dosyasında kayıtlıdır. Bu paket eski `com.example.arsiv_uygulamasi` uygulamasının üzerine kurulum için değildir. Aşağıdaki eski anahtar uyuşmazlığı tespitleri eski kimliği koruyarak güncelleme seçeneği için geçerlidir. Yeni dağıtım ve geçiş adımları [2.6.0 yayın rehberinde](YAYIN_2_6_0.md). Özel anahtar proje içindeki Git dışı klasöre ve D: sürücüsündeki ikinci yerel kopyaya kaydedildi. Gerçek cihazlara kurulum ve veri aktarımı ayrı adım olarak bekliyor.
+
 Windows'ta mevcut arşivin aynı Windows kullanıcısı altında devam etmesi destekleniyor. Android'de ise **debug anahtarı kullanmak uygundur, fakat eski APK ile aynı anahtar gerekir**. Bu bilgisayarın mevcut debug anahtarı GitHub'daki son APK'nın anahtarıyla eşleşmiyor. Yeni APK derlenebiliyor; bu, telefondaki eski sürümün üzerine kurulabileceği anlamına gelmiyor. Şimdilik telefon güncellemesi yayıma hazır kabul edilmemeli.
 
 GitHub'a yeni kod/paket yüklemek cihazları kendiliğinden güncellemez. Projede otomatik güncelleme servisi veya Windows kurulum programı yok. APK elle güncellenir; Windows uygulaması bütün çalışma klasörüyle dağıtılır.
@@ -138,6 +140,8 @@ Kullanıcının isteğiyle proje kökünde `ARSIVIM_IMZA_BILGILERI.txt` oluştur
 `test/phone_export_compatibility_test.dart`, özel dışa aktarım dizini açıkça verildiğinde çalıştırıldı ve geçti. Test yeni şema 12 ile **ayrı geçici DB** oluşturdu; gerçek kişi ve belge kayıtlarının modellerde okunup yazılmasını, aktarılan alanların korunmasını, iki dosyanın hash/boyutunu, bir kişiyle iki belgenin bağlantısını, telefon kartlarında görülen 5/Arşiv ve 15/Seyahat kategori eşleşmelerini ve SQLite bütünlüğünü denetledi. Bu test telefondaki orijinal DB'nin şema geçişi veya gerçek cihazda geri yükleme testi değildir; diğer kategori bilgilerini yeniden elde ettiğini iddia etmez.
 
 Doğrulanmış kayıt ve dosyalar `artifacts/upgrade-audit/Arsivim-Telefon-Kurtarma-2026-10-22.zip` içinde toplandı. ZIP yeniden açılıp CRC, dosya boyutları ve SHA-256 değerleri denetlendi; yanındaki `.zip.sha256` dosyası arşivin özetini içeriyor. Paket özel kişi/giriş verisi içerir ve Git dışında tutulur. **Tam SQLite yedeği veya uygulamanın otomatik içe aktaracağı bir paket değildir.** Eski uygulama kaldırılmadı, yeni uygulama kurulmadı.
+
+**Bilgisayarı kaynak alarak yeni Android kimliğine geçiş önerisinin kontrolü:** Kullanıcı bilgisayardaki arşivi yeni telefon uygulamasına aktarmayı önerdi. Yerel `Documents/arsiv.db` salt okunur açılarak 68 belge kaydı sayıldı; telefondan kurtarılan JPG ve MP4'ün SHA-256 değerleriyle eşleşen bilgisayar kaydı bulunmadı. Dolayısıyla yalnızca bilgisayardaki mevcut arşivi aktarmak, telefondaki bu iki dosyanın birebir kopyasını içermez. Yeni kimlikle ayrı telefon kurulumu yapılırsa kurtarılan iki kayıt/dosya da ayrıca korunup aktarılmalı. Yeni imza anahtarı bundan sonraki sürümler için sabit tutulup yedeklenmeli; Windows ve Android aynı yeni aktarım protokolünde olmalı. Bu plan henüz gerçek cihazda uygulanmadı.
 
 ### Kalan uygulama adımları
 

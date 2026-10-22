@@ -1,0 +1,23 @@
+ARŞİVİM YENİ ANDROID YAYIN İMZASI — 22 EKİM 2026
+
+Uygulama kimliği: com.mehmetkarataslar.arsivim
+İlk sürüm: 2.6.0+26
+Telefonda görünen ad: Arşivim Yeni
+Anahtar dosyası: arsivim-android-2026.keystore
+Alias: arsivim-android
+Tür: PKCS12, RSA 3072 bit
+Sertifika SHA-256:
+fb49c724ca029a74e7e34e2ad027b90f4fb539059d09576b65d8d0cc282cc5c8
+
+Proje içindeki özel klasör: private-signing/android/
+İkinci yerel kopya: D:\Arsivim-Imza-Yedegi\android-2026
+Parolalar: Bu özel klasörlerdeki KEYSTORE-BILGILERI.txt içinde.
+Derleme ayarı: android/key.properties (Git dışında).
+Herkese açık sertifika: android/release-certificate.pem
+
+Bu yeni anahtar, eski 2.5.2 uygulamasının kayıp anahtarı DEĞİLDİR.
+Eski uygulamanın üzerine kurulmaz; yeni uygulama ayrı kurulur.
+Sonraki yeni kimlikli sürümlerde BU AYNI ANAHTAR kullanılmalıdır.
+Keystore dosyasını ve parolaları birlikte, bağımsız bir yedekte saklayın.
+Özel klasörleri veya parolaları GitHub'a yüklemeyin.
+Bu TXT dosyası yalnızca bilgilendirme kaydıdır; özel anahtar içermez.

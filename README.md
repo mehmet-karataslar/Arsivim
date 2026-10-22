@@ -1,10 +1,14 @@
 # 📁 Arşivim - Kişisel Belge Arşiv Uygulaması
 
-> **22 Ekim 2026 — güncelleme denetimi:** Geliştirme sürümü `2.6.0+26`, veritabanı şeması `12`.
-> Aşağıdaki eski indirme açıklamaları tarihsel bilgilerdir; bütün APK'lar birbiriyle güncelleme uyumlu değildir.
-> Debug anahtarı kullanılabilir, ancak telefondaki sürümle aynı anahtar olmalıdır.
-> Kurulum öncesi [geçiş incelemesini ve uygulanacak sırayı](docs/SURUM_GECIS_DENETIMI.md) okuyun.
-> Eski uygulamayı kaldırmayın. Yeni paket henüz yayımlanmadı.
+## 2.6.0 — yeni Android kimliği ve Windows paketi
+
+[APK ve Windows ZIP indirmeleri](https://github.com/mehmet-karataslar/Arsivim/releases/tag/v2.6.0) · [Kurulum ve geçiş rehberi](docs/YAYIN_2_6_0.md)
+
+Android paketi **Arşivim Yeni** adı ve `com.mehmetkarataslar.arsivim` kimliğiyle eski uygulamanın yanında ayrı kurulur. Eski arşiv otomatik taşınmaz; yeni Windows sürümüyle eşleştirme ve doğrulanmış veri aktarımı gerekir. Aktarım bitmeden eski uygulamayı kaldırmayın.
+
+Windows ZIP'ini bütünüyle çıkarın; EXE, DLL'ler ve `data/` birlikte kullanılmalıdır. Aynı Windows kullanıcısının mevcut arşivi şema 12'ye yükseltilir. Önce veritabanını ve belge dosyalarını yedekleyin, eski uygulamayı kapatın.
+
+Her dağıtımın SHA-256 özeti yayın sayfasındadır. Android'in kalıcı imzası [yayın kimliği](android/release-identity.json) dosyasında kayıtlıdır. Özel anahtar ve parolalar depoya dahil değildir. [Ayrıntılı sürüm geçişi denetimi](docs/SURUM_GECIS_DENETIMI.md).
 
 
 ## 📦 Arşivlenmiş son paketler (v2.5.2-debug)

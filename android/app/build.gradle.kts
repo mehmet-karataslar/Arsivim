@@ -6,8 +6,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// An old debug key is a valid update key too. When supplied, use that exact
-// keystore for both build modes; never replace it with a newly generated key.
+// This application ID starts a new installation alongside the legacy app.
+// Keep its private signing key unchanged for all subsequent updates.
 val updateKeyFile = rootProject.file("key.properties")
 val updateKey = Properties()
 if (updateKeyFile.exists()) {
@@ -16,9 +16,12 @@ if (updateKeyFile.exists()) {
         require(!updateKey.getProperty(it).isNullOrBlank()) { "key.properties: missing $it" }
     }
 }
+require(updateKeyFile.exists() || gradle.startParameter.taskNames.none {
+    it.contains("release", ignoreCase = true)
+}) { "Release signing requires android/key.properties and the backed-up Arsivim key." }
 
 android {
-    namespace = "com.example.arsiv_uygulamasi"
+    namespace = "com.mehmetkarataslar.arsivim"
     compileSdk = 36
 
     compileOptions {
@@ -28,7 +31,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.arsiv_uygulamasi"
+        applicationId = "com.mehmetkarataslar.arsivim"
         minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode
