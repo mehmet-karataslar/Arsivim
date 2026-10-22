@@ -1,0 +1,82 @@
+ARŞİVİM — ESKİ SÜRÜM İMZA VE GÜNCELLEME BİLGİLERİ
+Kayıt tarihi: 22 Ekim 2026
+
+ARANAN ANAHTAR DOSYASI
+Dosya adı: arsivim-release-key.keystore
+Kaynak: Eski v2.5.2 yayın notlarında belirtilen dosya adı.
+Durum: Gerçek keystore dosyası henüz bulunamadı.
+Bu TXT, anahtar dosyasının kendisi veya onun yedeği değildir.
+Keystore parolası, anahtar parolası ve alias bilgisi doğrulanmış değil.
+Yeni bir dosyaya aynı adı vermek eski imza anahtarını oluşturmaz.
+
+TELEFONDA DOĞRULANAN KURULU UYGULAMA
+Uygulama kimliği: com.example.arsiv_uygulamasi
+Sürüm adı (versionName): 2.5.2
+Sürüm kodu (versionCode): 12
+Paket debug erişimine kapalı: run-as, "package not debuggable" döndürdü.
+Sertifika sahibi (DN):
+CN=Arsivim App, OU=Development, O=Arsivim, L=Istanbul, ST=Istanbul, C=TR
+İmza sertifikası SHA-256 (rapordaki B sertifikası):
+dbf4aef381eeeed9e284fc534cc109e1ef529ad58b53ffba79bd5ab59852f381
+
+KURULU APK KOPYASI
+Proje içindeki konum:
+artifacts/upgrade-audit/device-66eb1f09616742fa86450d83982bfd1b/installed-base.apk
+APK dosyasının SHA-256 özeti (sertifika özetinden farklıdır):
+da0f977dad977605ee3a4d2829081a1b32e32e8f81bad7a8ae091070a990f288
+Aynı APK ayrıca şu konumda bulundu:
+C:\Users\mehme\Downloads\Arsivim-2.5.2\Arsivim-2.5.2\arsiv_uygulamasi\releases\v2.5.2\Arsivcim-v2.5.2-android.apk
+APK kopyası uygulama kodunu içerir; kişi ve belge verilerinin yedeği değildir.
+
+YENİ DERLEMEYLE KARŞILAŞTIRMA
+Denetlenen yeni sürüm: 2.6.0+26
+Yeni yerel debug sertifikası SHA-256 (rapordaki C sertifikası):
+c3cdbc9c12db990e06d78ff5f8688c2332f17e07397f446d3181f6e48aff8f9b
+Eski B sertifikası ile yeni C sertifikası eşleşmiyor.
+Debug paket kullanılabilir; mevcut kurulumun üzerine güncellemek için
+aynı uygulama kimliği, eski kurulumla uyumlu imza ve artan sürüm kodu gerekir.
+Bu denetlenen yeni APK şu anda mevcut uygulamanın üzerine kurulmaya uygun değil.
+
+CİHAZ VE VERİ DURUMU
+Telefon modeli: 23117RA68G
+Android: 16 / API 36
+Desteklenen ABI: arm64-v8a, armeabi-v7a, armeabi
+Yeni APK'nın minimum API ve işlemci koşulları bu telefonla uyumlu.
+Kullanıcının bildirdiği mevcut kayıtlar: 2 belge, 1 kişi.
+Bu TXT oluşturulurken telefonun tam veri yedeği henüz alınmamıştı.
+Telefon verileri ve geri yükleme doğrulanmadan uygulamayı kaldırmayın
+veya uygulama verilerini temizlemeyin.
+
+ANAHTAR BULUNURSA
+Dosyayı koruyun; parola ve anahtar içeriğini GitHub'a yüklemeyin.
+Önce sertifikasının yukarıdaki B özetiyle eşleştiğini doğrulayın.
+Proje, Git dışında tutulan android/key.properties üzerinden mevcut
+anahtarla derlemeyi destekler. Gerçek keystore bulunmadan bu ayar tamamlanamaz.
+Paket kontrolü: scripts/Test-ApkUpgrade.ps1
+Cihaz incelemesi: scripts/Inspect-InstalledAndroid.ps1
+Ayrıntılı rapor: docs/SURUM_GECIS_DENETIMI.md
+
+SONRAKİ OKUMA SONUCU — 22 EKİM 2026
+Uygulama açıkken salt okunur eski aktarım uçlarından 1 kişi ve 2 belge
+kaydı alındı. İşlem öncesi ve sonrası bildirilen belge sayısı 2 idi.
+Kısmi dışa aktarım klasörü:
+artifacts/upgrade-audit/phone-export-5cf4d899b351416ebe3f547e3907a323/
+Fotoğraf dosyası: 961411 bayt; kaynak boyut ve SHA-256 ile eşleşti.
+Video kaydı: 31717976 bayt; ilk okumada eski servisin 10 MB sınırı
+nedeniyle dosya içeriği gönderilmedi. Sonraki işlemde uygulamanın
+Paylaş > İndir seçeneğiyle dışarı alındı ve USB üzerinden kopyalandı.
+Videonun boyutu ve aşağıdaki SHA-256 özeti eski kayıtla eşleşti:
+d21c6c274430f2ff25d95b74ad4d20b784c51bd1eef327f3013ab323bc777e55
+Kategori uç noktası 0 kayıt döndürdü; yalnızca o gün oluşturulan
+kategorileri seçtiğinden bu sonuç telefonda kategori yok demek değildir.
+İki belgenin içeriği artık doğrulandı. Kişi ve belge kayıtları yeni
+şema 12 ile ayrı geçici veritabanında okunup yazılarak test edildi;
+kimlikler, kişi/kategori bağlantıları ve aktarılan alanlar korundu.
+Test dosyası: test/phone_export_compatibility_test.dart
+Kurtarma ZIP'i:
+artifacts/upgrade-audit/Arsivim-Telefon-Kurtarma-2026-10-22.zip
+ZIP içindeki iki dosyanın boyutu ve SHA-256 özeti tekrar doğrulandı.
+Bu kopya TAM VERİTABANI YEDEĞİ DEĞİLDİR ve uygulamada otomatik
+geri yüklenebilir paket değildir. Tam kategori kayıtları, geçmiş ve
+oturum tercihleri alınamadı. Telefonda gerçek geri yükleme ve yeni
+kurulum doğrulanmadan kaldırma/yeniden kurulum yapılmamalı.
