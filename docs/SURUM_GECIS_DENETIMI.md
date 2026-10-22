@@ -8,7 +8,7 @@ Windows'ta mevcut arşivin aynı Windows kullanıcısı altında devam etmesi de
 
 GitHub'a yeni kod/paket yüklemek cihazları kendiliğinden güncellemez. Projede otomatik güncelleme servisi veya Windows kurulum programı yok. APK elle güncellenir; Windows uygulaması bütün çalışma klasörüyle dağıtılır.
 
-Kullanıcının verdiği bilgi: tek kullanıcı var, telefonda GitHub'daki son paket kullanılıyor. Referans olarak `v2.5.2-debug/Arsivcim-v2.5.2-DEBUG-COMPATIBLE.apk` alındı. Telefonda kurulu paketin sertifikası henüz cihazdan okunmadı; bu eşleştirme çıkarımdır.
+Kullanıcının doğruladığı bilgi: tek kullanıcı var, telefonda GitHub'dan indirilmiş **2.5.2** kullanılıyor. Telefon bağlandıktan sonra kurulu APK doğrudan okunarak **2.5.2 / versionCode 12 / sertifika B** olduğu doğrulandı. Bu paket, önce referans alınan `DEBUG-COMPATIBLE` (25/A) veya `UPDATE` (20/B) paketiyle aynı sürüm kodunda değildir. Güncellemede cihazdan alınan gerçek APK esas alınmalı.
 
 ## 1. İncelenen GitHub paketleri
 
@@ -27,6 +27,7 @@ Tüm APK'larda uygulama kimliği `com.example.arsiv_uygulamasi`.
 | `v2.5.1/Arsivcim-v2.5.1-android.apk` | 2.5.1 | 10 | B |
 | `v2.5.2/Arsivcim-v2.5.2-UPDATE.apk` | 2.5.2 | 20 | B |
 | `v2.5.2-debug/Arsivcim-v2.5.2-DEBUG-COMPATIBLE.apk` | 2.5.2 | 25 | A |
+| Bağlı telefondan alınan gerçek kurulu APK | 2.5.2 | **12** | **B** |
 | Bu bilgisayardaki yeni debug derlemesi | 2.6.0 | 26 | **C** |
 
 Sertifikaların SHA-256 özetleri (bunlar herkese açık sertifika bilgileridir, özel anahtar değildir):
@@ -78,11 +79,13 @@ Eski ve yeni sürümü aynı arşiv üzerinde dönüşümlü kullanmayın. Eski 
 | Sütun ekleme `onOpen` sırasında işlem dışında yapılıyordu | Yarım geçiş kalabiliyordu | Şema 12 geçişine alındı; mevcut şema açılırken yalnızca doğrulanıyor |
 | Eksik ana tablo otomatik boş oluşturuluyordu | Hasarlı arşiv boşmuş gibi görünebiliyordu | Başlangıç duruyor, mevcut dosya korunuyor |
 | `VACUUM INTO` eski Android SQLite sürümlerinde yok | Yedekleme/geçiş açılamıyordu | SQLite 3.27 öncesi için tutarlı okuma işlemiyle tablo, indeks, trigger ve sıra değerlerini koruyan alternatif |
+| Çoklu bağlantı sorguları isteğe bağlı JSON1 uzantısına bağlıydı | Bazı eski Android SQLite motorlarında belge listeleme/sayım hatası | Tamsayı kimlik listeleri temel SQLite metin işlevleriyle sorgulanıyor; birincil bağlantı, tam kimlik eşleşmesi ve tek belge sayımı korunuyor |
 | Yeni açık konum işareti DB oluşmadan yazılıyordu | Yarım ilk açılıştan sonra kalıcı erişim hatası | Yeni kurulum işareti DB açıldıktan sonra kaydediliyor |
 | Konum hazırlama hatası Future içinde kalıyordu | Aynı süreçte izin düzeldikten sonra tekrar denenemiyordu | Başarısız hazırlık temizleniyor; yeniden deneme mümkün |
 | Açık arşiv var, işaret yok ve yazma izni yok | Boş özel arşive geçme riski | Mevcut açık arşiv tespit edildiğinde işlem duruyor |
 | Birden fazla Windows kopyası aynı DB'ye erişebiliyordu | Eski/yeni süreçler aynı anda çalışabiliyordu | Yeni runner oturum mutex'i kullanıyor; eski runner'ın açık penceresi de başlangıçta tanınıyor |
 | Paket dosya adı güvenilir uyumluluk kanıtı sayılıyordu | Yanlış imzalı APK yayımlanabiliyordu | İmza doğrulayan, uygulama kimliğini ve artan kodu karşılaştıran komut eklendi |
+| Paket kontrolü telefonun API/ABI bilgilerini değerlendirmiyordu | İmza doğru olsa bile cihazda kurulamayacak paket onaylanabiliyordu | İsteğe bağlı cihaz API/ABI denetimi eklendi; telefon inceleme komutu ikisini de okuyup denetime aktarır. Eksik cihaz bilgisiyle cihaz kontrolü başarılı sayılmaz |
 
 Windows kilidinin sınırı: yeni sürümler birbirini engeller ve yeni sürüm açılırken görünen eski pencereyi tanır. Zaten dağıtılmış eski EXE, yeni sürümden sonra tekrar başlatılırsa eski kod yeni mutex'i tanımaz. Güncellemede bütün eski kopyalar kapatılmalıdır.
 
@@ -97,15 +100,46 @@ Windows kilidinin sınırı: yeni sürümler birbirini engeller ve yeni sürüm 
 - Android izin reddi, konum işareti ve yeniden deneme senaryoları dosya sistemi testleriyle denetlendi.
 - Hesap/parola geçişi ve güvenli aktarım dahil odak test grubu: **75 test geçti**.
 - Tam test paketi (`flutter test --no-pub`): **477 test geçti**. Geçiş dışındaki ekran, belge düzenleme, tarama, yedekleme ve aktarım regresyonları da bu çalıştırmaya dahil.
+- Ardından yapılan JSON1 bağımlılığını kaldırma değişikliği için bağlantı, belge, kişi, düzenleme, senkronizasyon ve aktarım odak grubunda **35 test geçti**. 477 testlik önceki tam çalıştırma bu son değişiklikten önceydi.
+- Üretilen gerçek sorgular resmi Windows SQLite **3.9.2** motorunda ayrıca denendi: 150 örnek belge için 33 kimlik filtresi ve 33 ilişkili sayım doğru sonuç verdi. Bu DLL JSON1 içerdiğinden test sırasında SQLite authorizer ile JSON erişimi engellendi ve eski `json_each` sorgusunun reddedildiği doğrulandı. Bu, gerçek Android cihaz testi değildir. Sonuç: `artifacts/upgrade-audit/sqlite-legacy-link-result.json`.
 - Yerel gerçek Windows arşivi salt okunur denetlendi: **68 belge, 4 kişi, 16 kategori**, `integrity_check=ok`; aktif belgelerde **0 eksik dosya, 0 boyut/özet uyuşmazlığı**, birincil bağlantılarda **0 sahipsiz referans**.
 - Gerçek DB'nin ayrı SQLite yedeği üzerinde v11 → v12 provası yapıldı; tüm mevcut tablo kayıtları aynı kaldı. Bu provayı da içeren geçiş grubu: **13 test geçti**. Kullanılan özel kopya `artifacts/upgrade-audit/` altında, Git dışında tutuluyor. Asıl DB yükseltilmedi.
 - Android debug ve Windows release derlemeleri başarılı. Android paketi `2.6.0 / 26`, sertifika C olarak okundu.
 - Yeni Windows EXE'sinde oturum mutex'i varken ikinci süreç başarı koduyla DB açmadan çıktı; asıl DB'nin dosya özeti değişmedi. Eski runner sınıf/adıyla oluşturulan gizli test penceresinde de aynı sonuç alındı. Gerçek arşivle normal ilk açılış yapılmadı.
-- APK kontrolü A → A ve artan kod örneğini kabul etti; A → C örneğini reddetti. Telefona kurulum yapılmadı.
+- APK kontrolü A → A ve artan kod örneğini kabul etti. Son derleme, GitHub'daki **her iki 2.5.2 paketiyle** karşılaştırıldı; A → C ve B → C imza uyuşmazlıkları reddedildi. Telefona kurulum yapılmadı.
+- `scripts/Test-ApkUpgradeRegression.ps1`: gerçek arşiv APK'larıyla **9 senaryo geçti**. Paket kontrolü ile cihaz kontrolünün ayrı raporlanması, minimum API sınırı, birden fazla cihaz ABI'sinden birinin eşleşmesi, uyumsuz ABI, eksik/geçersiz cihaz bilgisi ve aynı sürüm kodunun reddi denetlendi. Telefon özellikleri bu testte örnek girdilerdir; gerçek telefon bağlı değildir.
 
-Bu sonuçlar gerçek telefondaki kurulum denemesinin, eski Android çalışma zamanı denetiminin veya donanım kamera testinin yerine geçmez. Flutter hedefinin mevcut alt sınırı API 24'tür; tarihsel pakette API 23 vardı. Telefon API/ABI uyumluluğu da cihazda kontrol edilmelidir. Çoklu bağlantı sorguları SQLite JSON işlevleri kullanıyor; telefon motorunda bunların varlığı ayrıca doğrulanmalıdır.
+Bu sonuçlar gerçek telefondaki kurulum denemesinin, eski Android çalışma zamanı denetiminin veya donanım kamera testinin yerine geçmez. Flutter hedefinin mevcut alt sınırı API 24'tür; tarihsel pakette API 23 vardı. Telefon API/ABI uyumluluğu da cihazda kontrol edilmelidir. Çoklu bağlantı sorguları artık JSON1 gerektirmiyor; saklanan biçim uygulamanın ürettiği JSON tamsayı listeleridir.
 
 ## 5. Uygulanacak sıra
+
+### Bağlı telefonda yapılan salt okunur inceleme
+
+22 Ekim 2026'da ADB üzerinden model `23117RA68G`, Android **16 / API 36**, desteklenen ABI'ler `arm64-v8a, armeabi-v7a, armeabi` olarak okundu. Kurulu paketin uygulama kimliği değişmemiş. Yeni APK'nın minimum API 24 ve işlemci koşulları bu cihazla uyumlu; kontrolün tek ret nedeni **B → C imza uyuşmazlığı**.
+
+Kurulu APK'nın SHA-256 dosya özeti: `da0f977dad977605ee3a4d2829081a1b32e32e8f81bad7a8ae091070a990f288`. Paket ve cihaz bilgileri `artifacts/upgrade-audit/device-66eb1f09616742fa86450d83982bfd1b/` altında saklandı; bu klasör Git dışında. APK kopyası veri yedeği değildir.
+
+Telefondaki APK, İndirilenler'deki `Arsivim-2.5.2/Arsivim-2.5.2/arsiv_uygulamasi/releases/v2.5.2/Arsivcim-v2.5.2-android.apk` dosyasıyla SHA-256 düzeyinde birebir eşleşti. Aynı kaynak arşivindeki şema sabiti 10; bu kaynak bilgisi, telefondaki DB'nin doğrudan okunması anlamına gelmez.
+
+Kullanıcı telefonda **2 belge ve 1 kişi** bulunduğunu, APK'yı bu bilgisayarda ürettiğini belirtti. Kurulu sertifikanın DN alanı `CN=Arsivim App, OU=Development, O=Arsivim, L=Istanbul, ST=Istanbul, C=TR`; eski yayın notlarında anahtar adı `arsivim-release-key.keystore`. Kullanıcı klasöründe ve D: sürücüsünde anahtar dosyası araması ile Masaüstü/Belgeler/İndirilenler altındaki 30 ZIP'in dosya listesi incelendi; bu anahtar bulunamadı. Parolalar veya anahtar içerikleri rapora alınmadı. Bu arama silinmiş dosyaları, erişilemeyen konumları ve tüm olası yedek ortamlarını kapsamaz.
+
+`run-as` isteği Android tarafından **package not debuggable** hatasıyla reddedildi. Dolayısıyla özel uygulama veritabanı bu yolla okunamadı. Kontrol edilen `/sdcard/Documents/Arsiv`, `/sdcard/Arsiv`, `/sdcard/Arsivcim`, uygulamaya ait harici `Android/data/.../files`, `/sdcard/Download/Arsiv` ve `/sdcard/Documents/arsiv.db` yolları bulunmadı. Bu, telefonda belge olmadığı veya başka bir konumda yedek bulunmadığı anlamına gelmez.
+
+Telefona paket kurulmadı; uygulama kaldırılmadı, durdurulmadı, veri temizlenmedi veya değiştirilmedi. Telefonun gerçek kayıtları ve DB şeması henüz doğrulanmadı. Aynı B sertifikasının özel anahtarı veya mevcut uygulamanın desteklediği, ayrıca doğrulanacak tam dışa aktarım yolu gerekiyor. Yerel Git geçmişinde `.keystore`, `.jks` ve `key.properties` dosya adlarıyla bir anahtar kaydı bulunmadı.
+
+Eski uygulamanın kaynak kodundaki GET aktarım uçları ayrıca incelendi: belge uç noktası en fazla 50 kayıt arasından bekleyen/değişmiş belgeleri, kişi uç noktası son 6 saatte oluşturulan kişileri, kategori uç noktası bugünkü kategorileri seçiyor. Bu nedenle bu uçlar genel bir tam yedek mekanizması sayılamaz. USB üzerinden geçici port yönlendirmesiyle `/sync/status` okuma denemesi 30 saniyede zaman aşımına uğradı; veri alınamadı ve yönlendirme kaldırıldı. Arşivim o sırada ön planda değildi. Uygulama açıkken yeniden okuma, alınan kayıt ve dosyaların ayrıca doğrulanması bekleniyor.
+
+**Sonraki deneme başarılı, fakat kopya eksik:** Uygulama açıkken yapılan salt okunur GET istekleriyle 1 kişi ve 2 belge kaydı alındı; durum uç noktası hem önce hem sonra 2 belge bildirdi. `phone-export-5cf4d899b351416ebe3f547e3907a323/` altında JSON kayıtları ve bir fotoğrafın 961411 baytlık içeriği saklandı. Fotoğrafın boyutu ve SHA-256 özeti kaynak kayıtla eşleşti. İkinci belge 31717976 baytlık MP4; eski mobil aktarım kodu 10 MB üzerindeki içeriği göndermediği için yalnızca kayıt bilgisi alındı. Kategori uç noktası zaman filtresi nedeniyle 0 kayıt döndürdü. Kullanıcıdan Yedekleme ekranıyla belge dosyalarını dışarı alması istendi; video ve kategori bilgileri henüz doğrulanmış değil. Bu sonuç tam DB yedeği veya güvenli kaldırma izni değildir. Geçici USB port yönlendirmesi işlem sonunda kaldırıldı.
+
+Kullanıcının isteğiyle proje kökünde `ARSIVIM_IMZA_BILGILERI.txt` oluşturuldu. Bu dosya eski keystore adını, sertifika bilgilerini, paket kimliğini ve mevcut kopyalama durumunu içerir; gerçek keystore veya parola içermez.
+
+**Video kurtarma ve gerçek kayıt provası tamamlandı:** Kullanıcı, kurulu sürümde Yedekleme sayfasının görünmediğini bildirdi; bu, eski kaynak dosyasında bir sayfa bulunmasının kurulu APK'da erişilebilir olduğunu kanıtlamadığını gösterdi. Telefonun gerçek ekranından video kartındaki **Paylaş → İndir** kullanıldı. Video `/sdcard/Download/` altında oluşturulan kopyadan USB ile alındı; 31717976 bayt ve `d21c6c274430f2ff25d95b74ad4d20b784c51bd1eef327f3013ab323bc777e55` SHA-256 değeri eski kayıtla eşleşti. Her iki belgenin dosyası artık doğrulanmış kopyada mevcut.
+
+`test/phone_export_compatibility_test.dart`, özel dışa aktarım dizini açıkça verildiğinde çalıştırıldı ve geçti. Test yeni şema 12 ile **ayrı geçici DB** oluşturdu; gerçek kişi ve belge kayıtlarının modellerde okunup yazılmasını, aktarılan alanların korunmasını, iki dosyanın hash/boyutunu, bir kişiyle iki belgenin bağlantısını, telefon kartlarında görülen 5/Arşiv ve 15/Seyahat kategori eşleşmelerini ve SQLite bütünlüğünü denetledi. Bu test telefondaki orijinal DB'nin şema geçişi veya gerçek cihazda geri yükleme testi değildir; diğer kategori bilgilerini yeniden elde ettiğini iddia etmez.
+
+Doğrulanmış kayıt ve dosyalar `artifacts/upgrade-audit/Arsivim-Telefon-Kurtarma-2026-10-22.zip` içinde toplandı. ZIP yeniden açılıp CRC, dosya boyutları ve SHA-256 değerleri denetlendi; yanındaki `.zip.sha256` dosyası arşivin özetini içeriyor. Paket özel kişi/giriş verisi içerir ve Git dışında tutulur. **Tam SQLite yedeği veya uygulamanın otomatik içe aktaracağı bir paket değildir.** Eski uygulama kaldırılmadı, yeni uygulama kurulmadı.
+
+### Kalan uygulama adımları
 
 1. **Telefonu tanı:** USB hata ayıklama yetkisi verilmiş telefon bağlanınca aşağıdaki inceleme komutuyla kurulu APK'yı oku. Komut uygulamayı/verileri değiştirmez. Çıkan APK sadece uygulama kodudur, veri yedeği değildir.
 
@@ -113,7 +147,9 @@ Bu sonuçlar gerçek telefondaki kurulum denemesinin, eski Android çalışma za
    ./scripts/Inspect-InstalledAndroid.ps1 -CandidateApk build/app/outputs/flutter-apk/app-debug.apk
    ```
 
-2. **Aynı anahtarı bul:** Eski bilgisayardaki `.android/debug.keystore` veya eski APK'yı imzalayan diğer keystore kullanılmalı. Sertifika A hedefleniyor; telefondaki çıktı farklıysa o sertifika esas alınır. Yeni anahtar üretmek bu sorunu çözmez. Anahtarı Git'e koyma. Projedeki `android/key.properties` üzerinden `storeFile`, `storePassword`, `keyAlias`, `keyPassword` tanımlanabilir; dosya yolu Android proje köküne göre çözülür. Anahtar tanımlandığında debug ve release aynı mevcut-kurulum anahtarını kullanır. Dosya yoksa yerel debug anahtarıyla geliştirme yapılabilir; yayın kontrolü bunun eski kuruluma uyup uymadığını ayrıca reddeder.
+   Komut kurulu APK'nın yanında `device-platform.json` dosyasına Android API ve ABI listesini kaydeder; aday paketin minimum API ve işlemci listesiyle karşılaştırır. Tek başına `Test-ApkUpgrade.ps1` cihaz bilgisi verilmeden çalıştırılırsa çıktıda `checkedScope=package-only` yazar. Cihaz denetimi için `-DeviceSdk` ve `-DeviceAbis` birlikte gereklidir. Bu kontroller kurulum/ilk açılış ve gerçek veri geçişi provasının yerine geçmez.
+
+2. **Aynı anahtarı bul:** Eski bilgisayardaki `.android/debug.keystore` veya eski APK'yı imzalayan diğer keystore kullanılmalı. Telefonda okunan sertifika esas alınır; yalnızca 2.5.2 sürüm adına bakarak A veya B seçilemez. Yeni anahtar üretmek bu sorunu çözmez. Anahtarı Git'e koyma. Projedeki `android/key.properties` üzerinden `storeFile`, `storePassword`, `keyAlias`, `keyPassword` tanımlanabilir; dosya yolu Android proje köküne göre çözülür. Anahtar tanımlandığında debug ve release aynı mevcut-kurulum anahtarını kullanır. Dosya yoksa yerel debug anahtarıyla geliştirme yapılabilir; yayın kontrolü bunun eski kuruluma uyup uymadığını ayrıca reddeder.
 
 3. **Tam veri yedeği al:** Güncellemeden önce DB'nin tutarlı SQLite yedeğini ve referans verdiği bütün belge/fotoğraf dosyalarını ayrı hedefe al; kayıt sayıları ve dosya hash'lerini doğrula. Uygulamadaki kategori/kişi yedeği seçilmiş dosyalar ve manifest üretir; tam hesap/uygulama geri yükleme sistemi değildir. Genel geri yükleme arayüzü henüz yoktur. Telefonun verilerine erişmeden tam telefon yedeği alındığı söylenemez.
 
@@ -139,7 +175,7 @@ Bu sonuçlar gerçek telefondaki kurulum denemesinin, eski Android çalışma za
 
 ## 6. Kalan yayın koşulları
 
-- Kurulu telefon paketinin kesin sürüm/sertifika/API/ABI bilgisi.
+- Kurulu telefon paketinin kesin sürüm/sertifika/API/ABI bilgisi **doğrulandı: 2.5.2+12, B, API 36, ARM desteği**. Bu aşama tamam; aşağıdaki veri ve kurulum koşulları devam ediyor.
 - Eski anahtarın bulunması **veya** verileri doğrulanmış alternatif dışa aktarım/geri yükleme yolu.
 - Telefona ait tam yedek ve bu DB üzerinde yükseltme provası.
 - Gerçek cihazda kaldırmadan kurulum, ilk giriş, izinler, dosya açma ve iki yönlü aktarım kontrolü.
@@ -148,4 +184,4 @@ Bu sonuçlar gerçek telefondaki kurulum denemesinin, eski Android çalışma za
 
 Bu koşullar karşılanmadan “tüm eski sürümler sorunsuz güncellenir, veri kaybı olmaz” garantisi verilmez.
 
-Teknik dayanaklar: [Android uygulama imzalama ve güncelleme](https://developer.android.com/studio/publish/app-signing), [sqflite transaction davranışı](https://pub.dev/packages/sqflite), [SQLite ALTER TABLE kısıtları](https://www.sqlite.org/lang_altertable.html), [Android SQLite sürümleri](https://developer.android.com/reference/android/database/sqlite/package-summary).
+Teknik dayanaklar: [Android uygulama imzalama ve güncelleme](https://developer.android.com/studio/publish/app-signing), [sqflite transaction davranışı](https://pub.dev/packages/sqflite), [SQLite ALTER TABLE kısıtları](https://www.sqlite.org/lang_altertable.html), [Android SQLite sürümleri](https://developer.android.com/reference/android/database/sqlite/package-summary), [SQLite JSON desteği](https://www.sqlite.org/json1.html), [SQLite 3.9.2](https://www.sqlite.org/releaselog/3_9_2.html).

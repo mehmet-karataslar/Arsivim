@@ -27,9 +27,19 @@ New-Item -ItemType Directory -Path $output | Out-Null
 $installedApk = Join-Path $output 'installed-base.apk'
 & $AdbPath -s $Serial pull $remote $installedApk
 if ($LASTEXITCODE -ne 0) { throw 'Installed APK could not be copied for inspection.' }
-$deviceSdk = (& $AdbPath -s $Serial shell getprop ro.build.version.sdk).Trim()
-Write-Output "Installed APK copied for inspection: $installedApk (Android API $deviceSdk)"
+$sdkOutput = & $AdbPath -s $Serial shell getprop ro.build.version.sdk
+if ($LASTEXITCODE -ne 0) { throw 'Device API level could not be read.' }
+$deviceSdk = ($sdkOutput -join '').Trim()
+if ($deviceSdk -notmatch '^\d+$' -or [int]$deviceSdk -lt 1) { throw 'Device API level is missing or invalid.' }
+$abiOutput = & $AdbPath -s $Serial shell getprop ro.product.cpu.abilist
+if ($LASTEXITCODE -ne 0) { throw 'Device ABI list could not be read.' }
+$deviceAbis = @(($abiOutput -join '').Trim() -split ',' | ForEach-Object { $_.Trim() })
+if (@($deviceAbis | Where-Object { $_ -notmatch '^[A-Za-z0-9_-]+$' }).Count -gt 0) {
+    throw 'Device ABI list is missing or invalid; platform compatibility was not checked.'
+}
+[pscustomobject]@{ sdk=[int]$deviceSdk; abis=$deviceAbis } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'device-platform.json') -Encoding utf8
+Write-Output "Installed APK copied for inspection: $installedApk (Android API $deviceSdk; ABIs: $($deviceAbis -join ', '))"
 Write-Output 'The phone application and its data were not changed. This file contains application code, not an archive backup.'
 if ($CandidateApk) {
-    & (Join-Path $PSScriptRoot 'Test-ApkUpgrade.ps1') -PreviousApk $installedApk -CandidateApk $CandidateApk
+    & (Join-Path $PSScriptRoot 'Test-ApkUpgrade.ps1') -PreviousApk $installedApk -CandidateApk $CandidateApk -DeviceSdk ([int]$deviceSdk) -DeviceAbis $deviceAbis
 }
