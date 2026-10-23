@@ -1,5 +1,14 @@
 # 📁 Arşivim - Kişisel Belge Arşiv Uygulaması
 
+## 2.6.3 — Profil'den güncelleme ve Windows kurulum paketi
+
+[Android APK ve Windows kurulum EXE'si](https://github.com/mehmet-karataslar/Arsivim/releases/tag/v2.6.3)
+
+Profil'de sürüm kontrolü, GitHub'dan indirme, paket doğrulama ve Android/Windows
+kurulumunu başlatma akışı eklendi. Windows için gerekli çalışma dosyalarını içeren
+tek kurulum EXE'si üretilir. İlk geçiş bir kez elle yapılır; sonraki sürümler
+Profil'den alınır. [Kullanım ve yayın rehberi](docs/UYGULAMA_GUNCELLEME.md).
+
 ## 2.6.2 — güncel Android ve Windows paketleri
 
 [APK ve Windows ZIP indirmeleri](https://github.com/mehmet-karataslar/Arsivim/releases/tag/v2.6.2) · [Güncelleme rehberi](docs/YAYIN_2_6_2.md)
